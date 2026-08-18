@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.3.0
+// @version      1.3.1
 // @description  A Lint button next to the article title: takes you to the editor, brings back the radiopaedia.work linter findings highlighted on the text, and walks you through them one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -391,6 +391,13 @@
       margin-left:.6em; padding:.25em .7em; border:1px solid currentColor;
       border-radius:999px; background:transparent; color:#2563eb;
       font:600 13px/1.4 system-ui,-apple-system,sans-serif; cursor:pointer;
+      /* The title is a flex container, and it deforms the button twice over.
+         A long title squeezes it until "Lint" wraps to "Lin/t", because
+         flex-shrink defaults to 1 and the button gets treated as spare room;
+         and align-self defaults to stretch, so on a title running to two lines
+         the button is pulled into a tall oval. Pinned here: never wrap, never
+         give up width, keep your own height. */
+      white-space:nowrap; flex:0 0 auto; align-self:center;
     }
     .rlx-btn:hover { background:#2563eb; color:#fff; }
     .rlx-btn[disabled] { opacity:.55; cursor:progress; }
