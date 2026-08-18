@@ -10,7 +10,7 @@ the message alongside, and keys to walk through them one at a time.
 
 [![Install](https://img.shields.io/badge/Install-userscript-2ea44f?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js)
 
-[![Version](https://img.shields.io/badge/version-1.3.1-blue)](radiopaedia-lint.user.js)
+[![Version](https://img.shields.io/github/v/release/gmadevs/radiopaedia-lint-userscript?color=blue)](https://github.com/gmadevs/radiopaedia-lint-userscript/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
 [![Userscript](https://img.shields.io/badge/userscript-Tampermonkey-00485B?logo=tampermonkey&logoColor=white)](https://www.tampermonkey.net/)
 [![No build step](https://img.shields.io/badge/dependencies-none-lightgrey)](radiopaedia-lint.user.js)
