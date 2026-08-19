@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.4.1
+// @version      1.4.2
 // @description  A Lint button next to the article title: asks the radiopaedia.work linter first, says so when there is nothing to fix, and otherwise takes you to the editor with the findings highlighted on the text, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -296,9 +296,19 @@
     });
   }
 
+  /* What counts as one piece of text on its own: a heading, a paragraph, a
+   * list item. Ranges never care about these — the index does, to be able to
+   * say "this match IS that heading" rather than "this match is somewhere in
+   * the article". */
+  const BLOCKS = 'p,li,h1,h2,h3,h4,h5,h6,dd,dt,td,th,caption,figcaption,blockquote,pre,div';
+
   /* The index of a root: the flattened string of all its text, plus the node
    * and offset each character came from. A Range over any substring can be
-   * rebuilt from that, even one crossing several tags. */
+   * rebuilt from that, even one crossing several tags.
+   *
+   * Every character also remembers the block it belongs to, and every block
+   * the stretch of characters that is its whole text. That is what lets a
+   * match be recognised as filling a block exactly — see `pick`. */
   function buildIndex(root) {
     const doc = root.ownerDocument;
     const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
@@ -310,30 +320,66 @@
       },
     });
     let s = '';
-    const nodes = [], offsets = [];
+    const nodes = [], offsets = [], owners = [];
+    const blocks = new Map();
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
       const raw = n.nodeValue || '';
+      const owner = n.parentElement.closest(BLOCKS) || root;
       for (let i = 0; i < raw.length; i++) {
         const c = flat(raw[i]);
         if (!c) continue;              // whitespace: out of the index by construction
+        const at = s.length;
         s += c;
         nodes.push(n);
         offsets.push(i);
+        owners.push(owner);
+        const b = blocks.get(owner);
+        if (b) b.to = at; else blocks.set(owner, { from: at, to: at });
       }
     }
-    return { root, s, nodes, offsets };
+    return { root, s, nodes, offsets, owners, blocks };
   }
 
-  /* Where the nth occurrence of the needle falls: {from, to} in flat indices. */
-  function locate(index, needle, occurrence) {
-    if (!needle) return null;
-    let from = -1;
-    for (let k = 0; k < occurrence; k++) {
-      from = index.s.indexOf(needle, from + 1);
-      if (from < 0) return null;
+  /* Every place the needle falls, in document order. Capped, because a very
+   * short snippet can occur a hundred times over and nothing past the first
+   * few is ever asked for. */
+  function locateAll(index, needle, cap = 200) {
+    const hits = [];
+    if (!needle) return hits;
+    for (let from = index.s.indexOf(needle); from >= 0 && hits.length < cap;
+         from = index.s.indexOf(needle, from + 1)) {
+      const to = from + needle.length - 1;
+      if (to < index.nodes.length) hits.push({ from, to });
     }
-    const to = from + needle.length - 1;
-    return to < index.nodes.length ? { from, to } : null;
+    return hits;
+  }
+
+  /* True when the match is not merely inside a block but IS one: the heading
+   * "Toxic", not the word toxic in a sentence. */
+  function fillsBlock(index, { from, to }) {
+    const b = index.blocks.get(index.owners[from]);
+    return !!b && b.from === from && b.to === to;
+  }
+
+  /* Which occurrence of the needle this finding gets.
+   *
+   * Occurrences that fill a block exactly are offered first. The linter quotes
+   * a heading as just its words — "Toxic" for `HEADINGS VALID` — and an
+   * article that says "in most cases, toxic and metabolic disease…" in a
+   * paragraph above the heading would otherwise have that sentence lit
+   * instead: first in the text, and the wrong place by any reading.
+   *
+   * The preference only decides *among* matches, never invents one: with no
+   * block-filling match, or fewer of them than the occurrence asked for, the
+   * plain document order is used exactly as before. That is what keeps a
+   * one-word snippet the linter really did mean in prose from being dragged
+   * onto a heading that happens to repeat the word. */
+  function pick(index, needle, occurrence) {
+    const hits = locateAll(index, needle);
+    if (!hits.length) return null;
+    const exact = hits.filter((h) => fillsBlock(index, h));
+    const list = exact.length >= occurrence ? exact : hits;
+    return list[occurrence - 1] || null;
   }
 
   function rangeFrom(index, { from, to }) {
@@ -367,7 +413,7 @@
       const needle = flat(unquote(f.snippet));
       if (!needle) continue;
       for (let i = 0; i < indices.length; i++) {
-        const wide = locate(indices[i], needle, f.occurrence || 1);
+        const wide = pick(indices[i], needle, f.occurrence || 1);
         if (!wide) continue;
 
         let spot = wide;
