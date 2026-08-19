@@ -231,6 +231,12 @@ the ranges and redrawn on every scroll. **Not a single tag goes into the editor 
 Wrapping the snippets in `<mark>` would have been simpler and would have published those `<mark>`
 elements inside the article the first time you hit save.
 
+One box per line of text, though, not one per rectangle: a range is cut wherever it crosses a
+tag, so a phrase with a link in the middle comes back in three pieces, and three outlined boxes
+side by side read as three findings with borders running through the words. Rectangles sharing a
+line are merged into one; a phrase that wraps keeps one box per line, which is what it looks
+like.
+
 </details>
 
 <details>

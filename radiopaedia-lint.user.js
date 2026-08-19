@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.8.0
+// @version      1.8.1
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -793,6 +793,35 @@
     drawPending = requestAnimationFrame(() => { drawPending = null; draw(); });
   }
 
+  /* One box per line of text, not one per tag.
+   *
+   * `getClientRects()` cuts a Range wherever it crosses an element boundary,
+   * so "patchy, reticulonodular or mixed" with a link in the middle of it
+   * comes back as three rectangles. Drawn as three, with an outline each, they
+   * read as three findings and put borders through the middle of the words —
+   * on the one finding whose whole point is that the phrase is hard to read.
+   *
+   * Rectangles that share a line become the single box that line deserves.
+   * Sharing a line is judged by overlap rather than by equal tops: a
+   * superscript sits higher and is shorter than the text around it, and it
+   * belongs to the same line all the same. A phrase that wraps still gets one
+   * box per line, which is the honest picture. */
+  function mergeLines(spans) {
+    const lines = [];
+    for (const s of spans) {
+      const line = lines.find((l) =>
+        Math.min(l.y + l.h, s.y + s.h) - Math.max(l.y, s.y) > Math.min(l.h, s.h) / 2);
+      if (!line) { lines.push({ ...s }); continue; }
+      const right = Math.max(line.x + line.w, s.x + s.w);
+      const bottom = Math.max(line.y + line.h, s.y + s.h);
+      line.x = Math.min(line.x, s.x);
+      line.y = Math.min(line.y, s.y);
+      line.w = right - line.x;
+      line.h = bottom - line.y;
+    }
+    return lines;
+  }
+
   function draw() {
     if (!stage.live) return;
     stage.layer.textContent = '';
@@ -803,6 +832,8 @@
       const box = f.frame ? f.frame.getBoundingClientRect() : null;
       let rects;
       try { rects = f.range.getClientRects(); } catch { continue; }
+
+      const spans = [];
       for (const r of rects) {
         if (!r.width || !r.height) continue;
         let x = r.left, y = r.top, w = r.width, h = r.height;
@@ -815,9 +846,13 @@
           if (x2 <= x1 || y2 <= y1) continue;
           x = x1; y = y1; w = x2 - x1; h = y2 - y1;
         }
+        spans.push({ x, y, w, h });
+      }
+
+      for (const s of mergeLines(spans)) {
         const mark = document.createElement('div');
         mark.className = 'rlx-mark' + (k === stage.i ? ' rlx-current' : '');
-        mark.style.cssText = `left:${x}px; top:${y}px; width:${w}px; height:${h}px;` +
+        mark.style.cssText = `left:${s.x}px; top:${s.y}px; width:${s.w}px; height:${s.h}px;` +
                              `background:${c.wash}; outline-color:${c.ink};`;
         stage.layer.appendChild(mark);
       }
