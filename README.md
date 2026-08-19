@@ -173,8 +173,11 @@ the button before you ever click it.
 ### The note stays out of the way
 
 It goes below the highlighted words, or above, or to the side — whichever lands clear — and it
-never repeats the snippet, because you are already looking at it. When a finding is so tall that
-nothing fits beside it, hovering the note fades it out of the way.
+never repeats the snippet, because you are already looking at it.
+
+When a finding is so tall that nothing fits beside it, reach the note with the pointer: it fades
+**and stops catching the mouse**, so you can select the text underneath as if it were not there.
+Its own message is a keystroke away either way — <kbd>c</kbd>, or **Copy** on the bar.
 
 ---
 

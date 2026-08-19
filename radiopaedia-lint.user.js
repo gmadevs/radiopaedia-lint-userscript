@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.8.1
+// @version      1.8.2
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -614,11 +614,18 @@
       background:#fff; color:#111; box-shadow:0 6px 24px rgba(0,0,0,.22);
       font:14px/1.45 system-ui,-apple-system,sans-serif;
     }
-    /* Last resort when the highlight is too tall to sit beside: hover the note
-       and it gets out of the way. Pointer events stay on, so the message can
-       still be selected and copied. */
+    /* Reach the note with the pointer and it gets out of the way: faded, and
+       click-through, so the words underneath can be selected with the mouse
+       like any other text. The message itself is still one keystroke away —
+       c, or Copy on the bar — which is the better trade than a box you cannot
+       select through.
+
+       The class comes from a mousemove rather than from :hover, and it has to:
+       an element that turns pointer-events off while hovered stops being
+       hovered, which restores it, which hovers it again. That flickers at the
+       refresh rate. */
     #rlx-note { transition: opacity .12s ease; }
-    #rlx-note:hover { opacity:.12; }
+    #rlx-note.rlx-ghost { opacity:.12; pointer-events:none; }
     #rlx-note .rlx-head { display:flex; gap:.5em; align-items:baseline;
       font-size:12px; text-transform:uppercase; letter-spacing:.04em; opacity:.8; }
     #rlx-note .rlx-msg { margin-top:.35em; }
@@ -715,6 +722,7 @@
     addEventListener('scroll', scheduleDraw, true);
     addEventListener('resize', scheduleDraw);
     document.addEventListener('keydown', onKey, true);
+    document.addEventListener('mousemove', onMove, true);
   }
 
   /* Scrolling and keystrokes inside an iframe never reach the document above:
@@ -727,6 +735,7 @@
         w.addEventListener('scroll', scheduleDraw, true);
         w.document.addEventListener('keydown', onKey, true);
         w.document.addEventListener('input', reanchorSoon, true);
+        w.document.addEventListener('mousemove', (e) => ghostNote(e, frame), true);
       }
       if (!frame && !root.__rlxListening) {
         root.__rlxListening = true;
@@ -742,6 +751,7 @@
     removeEventListener('scroll', scheduleDraw, true);
     removeEventListener('resize', scheduleDraw);
     document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('mousemove', onMove, true);
     stage.findings = []; stage.i = -1; stage.history = [];
   }
 
@@ -891,12 +901,31 @@
   /* The note of the current finding — including one that has just closed
    * itself under your hands. It stays where the words were, says what became
    * of them, and says which key moves on: nothing about typing moves you. */
+  /* Out of the way while the pointer is on it, back the moment it leaves.
+   * Events keep coming while it is click-through — they are simply arriving
+   * from the text below instead of from the note — so leaving is noticed as
+   * reliably as arriving. Iframe coordinates are relative to the iframe: its
+   * own offset has to go back in before comparing with a `position:fixed`
+   * box in the page above. */
+  function ghostNote(e, frame) {
+    const note = stage.note;
+    if (!stage.live || !note || note.hidden) return;
+    const off = frame ? frame.getBoundingClientRect() : { left: 0, top: 0 };
+    const x = e.clientX + off.left, y = e.clientY + off.top;
+    const r = note.getBoundingClientRect();
+    note.classList.toggle('rlx-ghost',
+      x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+  }
+
+  const onMove = (e) => ghostNote(e, null);
+
   function placeNote() {
     const f = stage.findings[stage.i];
     if (!f || !stage.live) { if (stage.note) stage.note.hidden = true; return; }
     const settled = f.state !== 'open';
     const c = settled ? SETTLED : paint(f.severity);
     stage.note.hidden = false;
+    stage.note.classList.remove('rlx-ghost');   // a new place, a fresh start
     stage.note.style.borderLeftColor = c.ink;
     stage.note.innerHTML = '';
 
