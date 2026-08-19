@@ -131,6 +131,49 @@ nothing fits beside it, hovering the note fades it out of the way.
 ## How it works
 
 <details>
+<summary><strong>Where the findings come from</strong></summary>
+
+<br>
+
+One `GET`, no key, JSON back. The `article` parameter takes a slug, an rID, or a whole
+Radiopaedia URL:
+
+```text
+GET https://radiopaedia.work/api/v1/lint?article=pneumothorax
+```
+
+```jsonc
+{
+  "slug": "pneumothorax",
+  "article_type": "general",
+  "counts": { "error": 3, "warning": 12, "suggestion": 5 },
+  "lints": [
+    {
+      "condition": "Radiopaedia.OxfordComma",   // the check → "Oxford Comma"
+      "severity":  "suggestion",                // the colour
+      "message":   "Use the Oxford comma in …", // the note beside the highlight
+      "trimmed":   "Presentation is variable…", // the line as plain text → what is searched for
+      "matched":   "deterioration, hypoxaemia and circulatory",   // → what is lit
+      "line": 12,
+      "position": 276                           // → which copy of it along that line
+    }
+  ]
+}
+```
+
+`fromApi()` turns one entry into one finding, and that is the whole reading of the answer: seven
+fields, named. Up to v1.4.2 there was no API and the findings had to be scraped out of the
+linter's [rendered page](https://radiopaedia.work/lint/linter?slug=pneumothorax) — same findings,
+but read through Tailwind classes that were never meant as an interface, at 400 kB and ~1.9 s a
+click instead of 14 kB and ~0.6 s.
+
+The page is still the better thing to *read*: it groups findings by check and explains them. The
+script wants them one at a time, in article order, with the offending words marked — which is
+what the API gives.
+
+</details>
+
+<details>
 <summary><strong>The text is never touched</strong></summary>
 
 <br>
@@ -186,12 +229,15 @@ it"* — and a second memory of verdicts that never talks to the first one is wo
 
 <br>
 
-The linter reads the article from Radiopaedia on your behalf, so a request to it is a request to
-them. The API is unauthenticated and rate-limited at 60 requests a minute, which a person
-pressing a button will never come near. This is a human pressing a button on one article at a time, which is fine — and it is why
-there is no prefetching, no automatic retry, and why the answer is kept in `sessionStorage` so
-reloading the edit page does not ask twice. The check that happens before the jump to the editor
-reads the same cache: the article page asks, the edit page finds the answer already there.
+The linter reads the article from Radiopaedia on your behalf, so a request to the API is a
+request to them. This is a human pressing a button on one article at a time, which is fine — and
+it is why there is no prefetching, no automatic retry, and why the answer is kept in
+`sessionStorage` so reloading the edit page does not ask twice. The check that happens before the
+jump to the editor reads the same cache: the article page asks, the edit page finds the answer
+already there.
+
+The API itself is unauthenticated and rate-limited at 60 requests a minute — a number a person
+pressing a button will never come near, and a number a loop would reach in seconds.
 
 > [!WARNING]
 > Please do not wrap this in anything that clicks by itself.
@@ -207,6 +253,8 @@ reads the same cache: the article page asks, the edit page finds the answer alre
 | No button, and no `[Radiopaedia Lint] active` line in the console | The script is not running | Chrome/Edge: turn on **Allow user scripts** for Tampermonkey (step 3 above) |
 | Button is there, no findings come back | The API's field names changed, or it is answering an error | See *What can break it* below |
 | Findings come back, nothing is highlighted | A different editor, or a snippet that cannot be found in the text | See `EDITOR_SELECTORS` below |
+| *"Article not found"*, or *"nothing in it to lint"* | The API's own answer (404 / 422) for that article | Check the slug in the URL; a stub with no text has nothing to lint |
+| *"Cloudflare bot check"* | radiopaedia.work wants a human first | Open [radiopaedia.work](https://radiopaedia.work/) in a tab, clear the check, click again |
 
 <details>
 <summary><strong>What can break it</strong></summary>
