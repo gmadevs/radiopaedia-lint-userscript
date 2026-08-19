@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.6.0
+// @version      1.7.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -63,9 +63,11 @@
 (function () {
   'use strict';
 
-  /* The button says what the article is like before you click it, which means
-   * asking the linter as the page opens. Set to false and nothing leaves the
-   * browser until you press the button.
+  /* Automatic mode: the button says what the article is like before you click
+   * it, which means asking the linter as the page opens. This is only the
+   * DEFAULT — the switch beside the button decides, and remembers, and what it
+   * writes wins over this line. Set it to false and a browser that has never
+   * been told anything stays manual: nothing leaves it until you press Lint.
    *
    * Worth knowing what it costs: the linter reads the article from Radiopaedia
    * to answer, so this turns one request per CLICK into one request per
@@ -75,6 +77,7 @@
    * minute. Nothing here retries, and a failure is silent: the button simply
    * stays the colour it was. */
   const PREVIEW_ON_LOAD = true;
+  const AUTO_KEY = 'rlx-auto';      // the switch, remembered across sessions
 
   const API_URL = 'https://radiopaedia.work/api/v1/lint?article=';
   const LINTER_TIMEOUT = 60_000;    // the linter still reads the article from Radiopaedia, but a second or two does it
@@ -147,6 +150,24 @@
     return bare.replace(/([a-z0-9])([A-Z])/g, '$1 $2').trim() || 'Finding';
   }
 
+  /* A line with its citation markers taken out.
+   *
+   * `<sup>2,4,6,11,12</sup>` is a list of references, not a sentence, and the
+   * commas in it are not commas in the prose. They still have to come out of
+   * the *counting* even though they stay in the text — see `nthInLine`. The
+   * second pass catches a `<sup>` the slice cut in half, which is exactly what
+   * happens when the position we are counting up to is inside one. */
+  const CITATION = /<sup\b[^>]*>[\s\S]*?<\/sup>/gi;
+  const CITATION_OPEN = /<sup\b[^>]*>[\s\S]*$/i;
+  const unref = (html) => String(html ?? '').replace(CITATION, '').replace(CITATION_OPEN, '');
+
+  /* Is this offset inside a citation? An unclosed `<sup>` in everything before
+   * it is the whole test. */
+  function inCitation(html, upTo) {
+    const before = String(html ?? '').slice(0, upTo);
+    return (before.match(/<sup\b/gi) || []).length > (before.match(/<\/sup>/gi) || []).length;
+  }
+
   /* Which copy of the offending words, counted along the line they sit on.
    *
    * `matched` is often something the line holds several times over — a comma,
@@ -160,7 +181,18 @@
     const needle = flat(plain(lint.matched));
     const position = Number(lint.position);
     if (!needle || !lint.match || !(position > 1)) return 1;
-    const before = flat(plain(String(lint.match).slice(0, position - 1)));
+
+    /* Zero means "do not narrow at all", and that is the honest answer when
+     * the linter's own position lands inside a citation. "More than 5 commas
+     * in a single sentence" is reported against the comma of
+     * `<sup>2,4,6,11,12</sup>`: the finding is about the sentence, the
+     * position is about the reference list, and there is no way to tell which
+     * comma of the prose was meant — because none was. Lighting the whole
+     * sentence says what the message says; lighting a comma inside the
+     * superscript points at the one place the reader cannot act on. */
+    if (inCitation(lint.match, position - 1)) return 0;
+
+    const before = flat(plain(unref(String(lint.match).slice(0, position - 1))));
     let n = 1;
     for (let at = before.indexOf(needle); at >= 0; at = before.indexOf(needle, at + 1)) n++;
     return n;
@@ -335,11 +367,14 @@
       },
     });
     let s = '';
-    const nodes = [], offsets = [], owners = [];
+    const nodes = [], offsets = [], owners = [], cited = [];
     const blocks = new Map();
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
       const raw = n.nodeValue || '';
       const owner = n.parentElement.closest(BLOCKS) || root;
+      // Reference markers stay in the text — the snippet quotes them — but
+      // they are not prose, and nothing gets highlighted inside one.
+      const isCitation = !!n.parentElement.closest('sup');
       for (let i = 0; i < raw.length; i++) {
         const c = flat(raw[i]);
         if (!c) continue;              // whitespace: out of the index by construction
@@ -348,11 +383,12 @@
         nodes.push(n);
         offsets.push(i);
         owners.push(owner);
+        cited.push(isCitation);
         const b = blocks.get(owner);
         if (b) b.to = at; else blocks.set(owner, { from: at, to: at });
       }
     }
-    return { root, s, nodes, offsets, owners, blocks };
+    return { root, s, nodes, offsets, owners, cited, blocks };
   }
 
   /* Every place the needle falls, in document order. Capped, because a very
@@ -407,13 +443,24 @@
   /* Where the offending words sit inside the snippet: the copy `nthInLine`
    * counted if it is there, the first one otherwise. A count that has run out
    * is no reason to give up the narrowing — the line the linter counted along
-   * and the text sitting in the form are not always the same text any more. */
-  function within(hay, needle, nth) {
-    if (!needle) return -1;
+   * and the text sitting in the form are not always the same text any more.
+   *
+   * Nought is not a count, it is `nthInLine` saying the linter pointed into a
+   * citation: nothing to narrow onto, the whole snippet stays lit.
+   *
+   * Copies inside reference markers are set aside while there is one in the
+   * prose. The comma of `<sup>2,4,6,11,12</sup>` is a comma in the text of the
+   * page and nothing else — highlighting it for a finding about the sentence
+   * puts the reader's eye on the one thing they must not touch. */
+  function within(index, wide, needle, nth) {
+    if (!needle || nth === 0) return -1;
+    const hay = index.s.slice(wide.from, wide.to + 1);
     const hits = [];
     for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, at + 1)) hits.push(at);
     if (!hits.length) return -1;
-    return hits[Math.min(Math.max(nth || 1, 1), hits.length) - 1];
+    const prose = hits.filter((at) => !index.cited[wide.from + at]);
+    const list = prose.length ? prose : hits;
+    return list[Math.min(Math.max(nth || 1, 1), list.length) - 1];
   }
 
   /* Anchor every finding still open. Each root is indexed once, and which copy
@@ -445,7 +492,7 @@
         if (!wide) continue;
 
         let spot = wide;
-        const rel = within(indices[i].s.slice(wide.from, wide.to + 1), f.target, f.targetNth);
+        const rel = within(indices[i], wide, f.target, f.targetNth);
         if (rel >= 0) {
           spot = { from: wide.from + rel, to: wide.from + rel + f.target.length - 1 };
           f.narrowed = true;
@@ -464,9 +511,16 @@
   // ———————————————————————————————————————————————————————————— the stage
 
   GM_addStyle(`
+    /* The pair — the button and its switch — travel together: the title is a
+       flex container and would otherwise treat them as two things to squeeze
+       independently. */
+    .rlx-group {
+      display:inline-flex; align-items:center; gap:.4em; vertical-align:middle;
+      margin-left:.6em; white-space:nowrap; flex:0 0 auto; align-self:center;
+    }
     .rlx-btn {
       display:inline-flex; align-items:center; gap:.4em; vertical-align:middle;
-      margin-left:.6em; padding:.25em .7em; border:1px solid currentColor;
+      padding:.25em .7em; border:1px solid currentColor;
       border-radius:999px; background:transparent; color:var(--rlx-ink, #2563eb);
       font:600 13px/1.4 system-ui,-apple-system,sans-serif; cursor:pointer;
       /* The title is a flex container, and it deforms the button twice over.
@@ -481,8 +535,22 @@
     /* Asking. Not grey — grey is an answer here, and it would be the wrong one. */
     .rlx-btn-asking { opacity:.55; }
     .rlx-btn[disabled] { opacity:.55; cursor:progress; }
-    .rlx-btn-float { position:fixed; top:14px; right:14px; z-index:99999;
-      background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.18); margin:0; }
+
+    /* The switch. Filled in the colour of the verdict while it is on, so the
+       two read as one control; hollow and grey when nothing is being asked. */
+    .rlx-auto {
+      padding:.18em .5em; border:1px solid currentColor; border-radius:999px;
+      background:transparent; color:#9ca3af; cursor:pointer;
+      font:600 11px/1.35 system-ui,-apple-system,sans-serif; letter-spacing:.04em;
+      white-space:nowrap; flex:0 0 auto; align-self:center;
+    }
+    .rlx-auto:hover { color:#6b7280; }
+    .rlx-auto.rlx-on { background:var(--rlx-ink, #2563eb); border-color:transparent; color:#fff; }
+    .rlx-auto.rlx-on:hover { color:#fff; opacity:.85; }
+
+    .rlx-btn-float { position:fixed; top:14px; right:14px; z-index:99999; margin:0;
+      padding:4px 6px; border-radius:999px;
+      background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.18); }
 
     #rlx-layer { position:fixed; inset:0; pointer-events:none; z-index:99997; }
     .rlx-mark { position:fixed; border-radius:2px; }
@@ -973,7 +1041,7 @@
   }
   const inEditor = () => /\/edit\/?$/.test(location.pathname);
 
-  let button = null;
+  let group = null, button = null, toggle = null;
 
   /* What the last answer said about this article, in the colour of the boxes
    * it would draw on the text: red if anything is an error, amber if anything
@@ -987,14 +1055,51 @@
   let verdict = null;
   const SEVEREST = ['error', 'warning', 'suggestion'];
 
+  /* Automatic or manual, as last chosen here. `localStorage` and not the
+   * `sessionStorage` the answers live in: an answer is worth one visit, a
+   * preference is worth keeping — being asked again in every new tab is not a
+   * preference, it is a question. Unreadable storage (private mode, a browser
+   * with cookies walled off) falls back to the constant rather than throwing
+   * the button away. */
+  function auto() {
+    try {
+      const v = localStorage.getItem(AUTO_KEY);
+      if (v !== null) return v === '1';
+    } catch { /* fall through to the default */ }
+    return PREVIEW_ON_LOAD;
+  }
+
+  function setAuto(on) {
+    try { localStorage.setItem(AUTO_KEY, on ? '1' : '0'); } catch { /* this session only */ }
+    paintToggle();
+    if (on) return previewSoon();
+    // Manual again: the colour was an answer to a question nobody is asking
+    // any more, and a stale answer is worse than none.
+    verdict = null;
+    paintButton();
+  }
+
+  function paintToggle() {
+    if (!toggle) return;
+    const on = auto();
+    toggle.classList.toggle('rlx-on', on);
+    toggle.setAttribute('aria-pressed', String(on));
+    toggle.title = on
+      ? 'Automatic: every article you open is sent to the linter and the button ' +
+        'takes the colour of what it found. Click for manual.'
+      : 'Manual: nothing is asked until you press Lint. Click for automatic, ' +
+        'where the button colours itself as each article opens.';
+  }
+
   function paintButton() {
     if (!button) return;
     button.classList.toggle('rlx-btn-asking', verdict === 'asking');
     if (!verdict || verdict === 'asking') {
-      button.style.removeProperty('--rlx-ink');
+      group?.style.removeProperty('--rlx-ink');
       return;
     }
-    button.style.setProperty('--rlx-ink', verdict.ink);
+    // On the pair rather than the button: the switch inherits the same ink.
+    group?.style.setProperty('--rlx-ink', verdict.ink);
     button.title = verdict.title;
   }
 
@@ -1035,9 +1140,12 @@
     // `isConnected` rather than a query: the observer also fires for the marks
     // we redraw ourselves on every scroll frame, and searching the document
     // each time would be wasted work.
-    if (button?.isConnected) return;
+    if (group?.isConnected) return;
     const slug = currentSlug();
     if (!slug) return;
+
+    const g = document.createElement('span');
+    g.className = 'rlx-group';
 
     const b = document.createElement('button');
     b.className = 'rlx-btn';
@@ -1049,19 +1157,30 @@
       return preflight(slug);
     });
 
+    // The switch. A word rather than a symbol: this one decides whether every
+    // article you open becomes a request, and that deserves to be readable.
+    const t = document.createElement('button');
+    t.className = 'rlx-auto';
+    t.type = 'button';
+    t.textContent = 'auto';
+    t.addEventListener('click', () => setAuto(!auto()));
+
+    g.append(b, t);
+
     const title = inEditor() ? null : visibleTitle();
-    if (title) title.appendChild(b);
-    else pinToCorner(b);
+    if (title) title.appendChild(g);
+    else pinToCorner(g);
 
     // Attached does not mean visible. If the chosen title sits in a hidden
     // branch — and a page seen by a signed-in user has more than one `h1`,
     // menus and modals included — the button exists, `querySelector` finds it,
     // and there is nothing on screen. Better to notice here than later.
     const r = b.getBoundingClientRect();
-    if (!r.width || !r.height) pinToCorner(b);
+    if (!r.width || !r.height) pinToCorner(g);
 
-    button = b;
+    group = g; button = b; toggle = t;
     paintButton();
+    paintToggle();
   }
 
   /* The fallback spot: fixed at the top right, outside any branch of the site.
@@ -1203,8 +1322,9 @@
    * went. What decides where to mount it is `currentSlug()`. */
   console.info('[Radiopaedia Lint] active ·', location.pathname,
                '· slug:', currentSlug(),
-               '· button:', button
-                 ? (button.classList.contains('rlx-btn-float')
+               '· mode:', auto() ? 'automatic' : 'manual',
+               '· button:', group
+                 ? (group.classList.contains('rlx-btn-float')
                      ? 'floating, top right' : 'next to the title')
                  : (currentSlug() ? 'NOT MOUNTED' : 'not needed here'),
                button ? button.getBoundingClientRect() : '');
@@ -1225,14 +1345,17 @@
   function previewSoon() {
     const slug = currentSlug();
     if (!slug || !onArticlePage() || inEditor()) return;
-    if (document.visibilityState === 'visible') return void preview(slug);
+    /* Two ways of being looked at, and either will do. A page can hold the
+     * focus while `visibilityState` says otherwise — that is also what makes
+     * the switch work: clicking it IS somebody looking, and waiting for an
+     * event that has already happened would leave the button uncoloured until
+     * the next reload. */
+    if (document.visibilityState === 'visible' || document.hasFocus()) return void preview(slug);
 
-    /* A tab you cannot see may be one the browser opened on a guess and you
-     * will never look at — cmd-clicking a dozen links opens a dozen of them.
-     * Asking would be a request to Radiopaedia for an article nobody is
-     * reading, so it waits until somebody is: the tab becoming visible, or the
-     * window being given focus. Both, because a page can be looked at without
-     * either event on its own being the one that says so. */
+    /* Neither: a tab you cannot see may be one the browser opened on a guess
+     * and you will never look at — cmd-clicking a dozen links opens a dozen of
+     * them. Asking would be a request to Radiopaedia for an article nobody is
+     * reading, so it waits until somebody is. */
     const wake = () => {
       if (document.visibilityState !== 'visible' && !document.hasFocus()) return;
       document.removeEventListener('visibilitychange', wake);
@@ -1244,5 +1367,5 @@
     addEventListener('focus', wake);
   }
 
-  if (PREVIEW_ON_LOAD) previewSoon();
+  if (auto()) previewSoon();
 })();

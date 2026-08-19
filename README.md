@@ -74,8 +74,19 @@ not running at all, and nothing about where the button gets placed matters yet.
 
 ## The colour of the button
 
-Opening an article asks the linter about it, and the button says the answer in the colour of the
-worst thing in there — the same colours the highlights use in the editor, so it reads as the same
+Next to the button there is a switch:
+
+| | |
+| :-- | :-- |
+| **auto**, filled | every article you open is sent to the linter and the button colours itself |
+| **auto**, hollow | manual: nothing is asked until you press `Lint`, the way it worked before |
+
+The choice is remembered across sessions — one `rlx-auto` key in `localStorage`, nothing else
+persists — and switching back to automatic asks about the article you are on straight away
+rather than waiting for the next page.
+
+In automatic mode, opening an article asks the linter about it and the button says the answer in
+the colour of the worst thing in there — the same colours the highlights use in the editor, so it reads as the same
 thing seen from further away. Hovering it gives you the count.
 
 | | The button | The article |
@@ -90,12 +101,13 @@ The answer is kept for the session, so the click that follows costs no second re
 grey button it does not even need the editor: the *nothing to lint* banner comes back instantly.
 
 > [!IMPORTANT]
-> This is one request per article page you open, where it used to be one per click, and the
-> linter reads the article from Radiopaedia to answer it. It is kept to the article page itself
-> (not its revisions, not the editor), it waits for a tab you can actually see rather than one
-> the browser opened on a guess, it never retries, and it fails silently — a button that could
-> not ask looks exactly like one that has not been asked. If you would rather go back to asking
-> only when you click, set `PREVIEW_ON_LOAD = false` at the top of the script.
+> Automatic mode is one request per article page you open, where it used to be one per click,
+> and the linter reads the article from Radiopaedia to answer it. It is kept to the article page
+> itself (not its revisions, not the editor), it waits for a tab you are actually looking at
+> rather than one the browser opened on a guess, it never retries, and it fails silently — a
+> button that could not ask looks exactly like one that has not been asked. The switch turns it
+> off for good; `PREVIEW_ON_LOAD` at the top of the script decides what a browser that has never
+> touched the switch does.
 
 ---
 
@@ -233,7 +245,15 @@ in JavaScript does not cover that character: one invisible thing, and the snippe
 
 Once the snippet is located, the highlight tightens onto the offending words themselves — the API
 names them in `matched`, and `position` says which copy of them along the line, so on a sentence
-with six commas in it the sixth is the one that lights up. One lit acronym is worth more than a
+with six commas in it the sixth is the one that lights up.
+
+**Reference markers are not prose.** The commas inside `<sup>2,4,6,11,12</sup>` are commas on the
+page and nothing else, and they are skipped when counting and when choosing what to light. Where
+the linter's own position lands inside one — *"more than 5 commas in a single sentence"* is
+reported against a comma of the citation — nothing is narrowed at all and the whole sentence
+stays lit, which is what the message is about anyway. A rule that really is about citations, like
+the spacing before one, still gets its highlight: those are skipped only while there is prose to
+prefer. One lit acronym is worth more than a
 paragraph washed in colour. On the `epilepsy` article that is 11 findings out of 11 anchored, all
 11 narrowed to the exact words; across `pneumothorax`, `meningioma`, `appendicitis`,
 `glioblastoma-idh-wildtype` and `striatocapsular-infarct`, 148 out of 148 anchored and 146
