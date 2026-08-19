@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.4.2
-// @description  A Lint button next to the article title: asks the radiopaedia.work linter first, says so when there is nothing to fix, and otherwise takes you to the editor with the findings highlighted on the text, one at a time.
+// @version      1.5.0
+// @description  A Lint button next to the article title: asks the radiopaedia.work lint API first, says so when there is nothing to fix, and otherwise takes you to the editor with the findings highlighted on the text, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @grant        GM_xmlhttpRequest
@@ -19,14 +19,23 @@
 /*
  * How this hangs together
  * -----------------------
- * The radiopaedia.work linter renders a finished HTML page
- * (`/lint/linter?slug=…`): there is no API, so the findings have to be read
- * off the markup. That is what `extract()` below does — outer
- * `div[data-flux-card]` cards, `[data-flux-heading]` for the check,
- * `[data-flux-badge]` for the severity, one `div.pb-6` per finding holding the
- * quoted snippet in a `<p>` and `Line 49:21 · message` in a `div.ml-4`. If the
- * linter ever changes stylesheet, THIS function is what stops finding
- * anything: Tailwind classes are not an API.
+ * The radiopaedia.work linter has an API — `GET /api/v1/lint?article=…`,
+ * JSON, no key — and that is what this script asks. `fromApi()` below turns
+ * one entry of `lints[]` into one finding: `condition` gives the check
+ * ("Radiopaedia.OxfordComma" → "Oxford Comma", the same words the linter's own
+ * page prints), `trimmed` gives the line as plain text, `matched` gives the
+ * offending words inside it, `line`/`position` say where they were.
+ *
+ * Before this the findings were read off the linter's HTML page, through
+ * Tailwind classes that were not an API: a new stylesheet, and the button
+ * quietly stopped finding anything on every article. Now a field would have to
+ * be renamed for that to happen — and fourteen kilobytes of JSON arrive where
+ * four hundred of markup used to.
+ *
+ * `matched` is the part with the most in it. The old parser had to guess which
+ * words a finding was about by reading the quotes out of its prose; the API
+ * simply says. `position` says WHICH copy of them, counted along the line, so
+ * on a sentence with six commas in it the sixth is the one that lights up.
  *
  * The anchor is the SNIPPET, not `line:column`: add one paragraph above and
  * every number shifts, and the editor's lines are not the linter's lines to
@@ -54,8 +63,8 @@
 (function () {
   'use strict';
 
-  const LINTER_URL = 'https://radiopaedia.work/lint/linter?slug=';
-  const LINTER_TIMEOUT = 180_000;   // the linter has to read the article from Radiopaedia: it is slow
+  const API_URL = 'https://radiopaedia.work/api/v1/lint?article=';
+  const LINTER_TIMEOUT = 60_000;    // the linter still reads the article from Radiopaedia, but a second or two does it
   const EDITOR_TIMEOUT = 30_000;    // how long we wait for the WYSIWYG to initialise
   const PENDING_KEY = 'rlx-lint-pending';
   const CACHE_KEY = 'rlx-lint-cache:';
@@ -73,15 +82,23 @@
 
   // ————————————————————————————————————————————————————————————— text
 
-  /* An element's text with the spacing put back in order.
-   * Parsers that join nodes with a separator have to stitch the result back up
-   * afterwards, or every `<sup>` marker and quote drags a phantom space along.
-   * `textContent` already returns the text as you read it, so collapsing
-   * whitespace is enough here — and the comparison that matters (`flat`)
-   * ignores spacing altogether. */
-  function text(el) {
-    if (!el) return '';
-    return el.textContent.replace(/\s+/g, ' ').trim();
+  /* One line of it, whatever came in. */
+  function tidy(v) {
+    return String(v ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  /* The text of a piece of the article the API quotes back at us.
+   *
+   * `matched`, `display` and `match` carry the article's markup with them —
+   * `<strong> </strong>`, `<sup>24</sup>`, `<h6>Others</h6>` — and what has to
+   * be found in the editor is the text, not the tags. `DOMParser` rather than
+   * an `innerHTML` on a detached node: the document it builds is inert, so
+   * nothing in there runs, loads or fetches anything. Strings with no `<` in
+   * them skip it, which is most of them. */
+  function plain(html) {
+    const raw = String(html ?? '');
+    if (!raw.includes('<')) return tidy(raw);
+    return tidy(new DOMParser().parseFromString(raw, 'text/html').body.textContent);
   }
 
   /* The shape things get compared in: no spaces, no case, curly quotes and
@@ -104,141 +121,124 @@
       .toLowerCase();
   }
 
-  /* The linter quotes the snippet inside quotation marks: strip them, or it
-   * would never match the text. */
-  function unquote(snippet) {
-    return snippet.replace(/^["'“‘]+/, '').replace(/["'”’]+$/, '').trim();
+  // ————————————————————————————————————————————— the findings
+
+  /* The check's name, as the linter's own page prints it:
+   * "Radiopaedia.StrongListColonPosition" → "Strong List Colon Position". The
+   * API answers with the condition that fired, which is those same words run
+   * together — putting the spaces back is the whole translation. */
+  function checkName(condition) {
+    const bare = String(condition ?? '').replace(/^.*\./, '');
+    return bare.replace(/([a-z0-9])([A-Z])/g, '$1 $2').trim() || 'Finding';
   }
 
-  /* The piece to highlight *inside* the snippet, when the message names it.
+  /* Which copy of the offending words, counted along the line they sit on.
    *
-   * The snippet is often a whole paragraph while the finding is about three
-   * words: "'SUDEP' has no definition" quotes forty lines and talks about a
-   * single acronym. The message does carry the right words, in quotes —
-   * sometimes with the markup still in, as `'<strong>Drug resistant
-   * epilepsy</strong>'`.
-   *
-   * Word apostrophes have to go first, though: in "don't use bold in text:
-   * '<strong>…</strong>'" the one in *don't* pairs up with the quote that
-   * opens the real citation, and every pair after it is off by one — you end
-   * up extracting "t use bold in text: " and losing the citation entirely.
-   * Masking them is the only way to read quotes as delimiters.
-   *
-   * Even then the first candidate is not trusted: all of them are collected
-   * and only those that actually occur in the snippet are kept; among those
-   * the longest wins, being the hardest to hit by accident. If none survives —
-   * "Consider replacing a bracketed e.g.", which quotes nothing — the whole
-   * snippet is highlighted, which is the right answer there. */
-  function target(message, snippet) {
-    const within = flat(unquote(snippet));
-    if (!within) return null;
-    const MARKER = '\u0001';   // outside the alphabet of any message
-    // Letter before captured, letter after only looked at: a lookbehind would
-    // be shorter, but browsers that cannot compile one do not fail this line —
-    // they fail the whole file, and the button with it.
-    const clean = message.replace(/(\p{L})['’ʼ](?=\p{L})/gu, '$1' + MARKER);
-    let best = null;
-    for (const m of clean.matchAll(/'([^']{2,200})'|"([^"]{2,200})"|«([^»]{2,200})»/g)) {
-      const raw = (m[1] ?? m[2] ?? m[3])
-        .replace(/<[^>]+>/g, '')
-        .replaceAll(MARKER, "'");
-      const needle = flat(raw);
-      if (needle.length < 2 || !within.includes(needle)) continue;
-      if (!best || needle.length > best.length) best = needle;
-    }
-    return best;
+   * `matched` is often something the line holds several times over — a comma,
+   * a semicolon, an acronym used twice — and the finding is about exactly one
+   * of them. `position` says which: the offset of the match into `match`, the
+   * raw line. Counting the copies that come before it gives the occurrence to
+   * light up, and counting them in `flat()` shape is what keeps that number
+   * true in the editor, where the markup is gone and the spacing is not the
+   * linter's. */
+  function nthInLine(lint) {
+    const needle = flat(plain(lint.matched));
+    const position = Number(lint.position);
+    if (!needle || !lint.match || !(position > 1)) return 1;
+    const before = flat(plain(String(lint.match).slice(0, position - 1)));
+    let n = 1;
+    for (let at = before.indexOf(needle); at >= 0; at = before.indexOf(needle, at + 1)) n++;
+    return n;
   }
 
-  // ————————————————————————————————————————————— the findings parser
-
-  const LINE_RE = /^\s*Line\s+(\S+)\s*$/i;
-
-  /* (line, message) out of a `div.pb-6`. The line is `49:21`, without `Line`. */
-  function findingFromBlock(block) {
-    let line = null, message = '';
-    for (const meta of block.querySelectorAll('div.ml-4')) {
-      let parts = [...meta.querySelectorAll('span')].map(text).filter((p) => p && p !== '·');
-      if (!parts.length) continue;
-      const m = LINE_RE.exec(parts[0]);
-      if (m) { line = m[1]; parts = parts.slice(1); }
-      message = parts.join(' ').trim();
-      break;
-    }
-    return { line, message };
-  }
-
-  /* The findings of one run, in the order the linter presents them.
-   * The fingerprint counts repeats: that is what tells two identical findings
-   * on the same article apart, and it doubles as the occurrence to
-   * highlight. */
-  function extract(html) {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const seen = new Map();
+  /* One entry of `lints[]`, one finding — in the order they occur in the
+   * article rather than grouped by check, so that walking them with `j` walks
+   * the article from top to bottom.
+   *
+   * The snippet is `trimmed`, the line with the markup taken out of it: that
+   * is the shape the editor's text is in, and the one `anchor()` searches for.
+   * The message is left exactly as it came, markup and all — the linter's own
+   * page shows it that way, and `'<strong> </strong>'` tells you something
+   * that `' '` does not.
+   *
+   * `occurrence` is which COPY OF THE PARAGRAPH this finding is about, and
+   * that is counted per line, not per message. An article that says the same
+   * sentence twice comes back with findings on two different lines and the
+   * second one must walk to the second copy; four acronyms in one paragraph
+   * come back as four findings on one line quoting one snippet, and all four
+   * belong to the copy that is actually there. Counting identical messages
+   * instead — which is all the linter's page gave us to count — sent the
+   * second 'NOW' of a paragraph looking for a second paragraph, and it
+   * reported "snippet not found" for the rest of the run. Which of the four
+   * lights up is `targetNth`'s business, not this one's. */
+  function fromApi(data) {
+    const inOrder = [...(data.lints || [])].sort(
+      (a, b) => ((+a.line || 0) - (+b.line || 0)) || ((+a.position || 0) - (+b.position || 0)));
+    const copies = new Map();   // snippet → the copy of it we are on, and its line
     const out = [];
-    const bump = (k) => { const n = (seen.get(k) || 0) + 1; seen.set(k, n); return n; };
 
-    const cards = [...doc.querySelectorAll('div[data-flux-card]')]
-      // The cards of individual findings are `data-flux-card` too and sit
-      // inside their check's card: only the outer ones are looked at.
-      .filter((c) => !c.parentElement?.closest('div[data-flux-card]'));
+    for (const lint of inOrder) {
+      const message = tidy(lint.message);
+      if (!message) continue;
+      const check = checkName(lint.condition);
+      const severity = tidy(lint.severity).toLowerCase();
+      const snippet = plain(lint.trimmed || lint.display || lint.match);
+      const where = lint.line == null ? null
+        : (lint.position == null ? String(lint.line) : `${lint.line}:${lint.position}`);
 
-    for (const card of cards) {
-      const heading = card.querySelector(':scope > div > [data-flux-heading]');
-      const badge = card.querySelector(':scope > div > [data-flux-badge]');
-      if (!heading || !badge) continue;   // the search card, and the Links one
-      const check = text(heading);
-      const severity = text(badge).toLowerCase();
+      // `inOrder` is sorted by line, so a line that is not the one this snippet
+      // was last seen on is the next copy of it.
+      let copy = copies.get(snippet);
+      if (!copy) copies.set(snippet, copy = { line: lint.line, n: 1 });
+      else if (copy.line !== lint.line) { copy.line = lint.line; copy.n++; }
 
-      const blocks = [...card.querySelectorAll('div.pb-6')];
-      if (!blocks.length) {
-        // A check that speaks without quoting a specific place. None have
-        // turned up yet, but recording it roughly beats losing it silently.
-        let body = text(card);
-        if (body.startsWith(check)) body = body.slice(check.length).trimStart();
-        if (body.toLowerCase().startsWith(severity)) body = body.slice(severity.length).trimStart();
-        if (body) {
-          const n = bump(check + ' ' + body + ' ');
-          out.push({ check, severity, line: null, message: body, snippet: '',
-                     occurrence: n, fp: `${check}|${body}||${n}` });
-        }
-        continue;
-      }
-
-      for (const block of blocks) {
-        const snippet = text(block.querySelector('p'));
-        const { line, message } = findingFromBlock(block);
-        if (!message) continue;
-        const n = bump(check + ' ' + message + ' ' + snippet);
-        out.push({ check, severity, line, message, snippet,
-                   occurrence: n, fp: `${check}|${message}|${snippet}|${n}` });
-      }
+      out.push({ check, severity, line: where, message, snippet,
+                 target: flat(plain(lint.matched)), targetNth: nthInLine(lint),
+                 occurrence: copy.n, fp: `${check}|${message}|${snippet}|${where}` });
     }
     return out;
   }
 
   // ——————————————————————————————————————————————————— network
 
+  /* The one request in the file. `GM_xmlhttpRequest` rather than `fetch` even
+   * though the API sends `Access-Control-Allow-Origin: *`: a page's own
+   * `connect-src` can forbid a call the browser would otherwise allow, and
+   * `@connect radiopaedia.work` is also what states, in the header, the only
+   * host this script ever talks to.
+   *
+   * Nothing that is not a lint result gets out of here. That is what lets the
+   * rest of the file read an empty `lints[]` as an article with nothing wrong
+   * with it, rather than as an answer it failed to understand. */
   function askLinter(slug) {
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
         method: 'GET',
-        url: LINTER_URL + encodeURIComponent(slug),
+        url: API_URL + encodeURIComponent(slug),
+        headers: { Accept: 'application/json' },
         timeout: LINTER_TIMEOUT,
         onload: (r) => {
-          const html = r.responseText || '';
-          if (html.includes('article with the slug')) {
-            return reject(new Error(`The linter cannot find the article "${slug}" on Radiopaedia.`));
-          }
-          if (CHALLENGE.some((m) => html.includes(m))) {
+          const body = r.responseText || '';
+          if (CHALLENGE.some((m) => body.includes(m))) {
             return reject(new Error(
               'Cloudflare bot check. Open radiopaedia.work in a tab, clear the check, ' +
               'then try again.'));
           }
-          if (r.status >= 400) return reject(new Error(`The linter answered ${r.status}.`));
-          resolve(html);
+          let data = null;
+          try { data = JSON.parse(body); } catch { /* said below, with the status */ }
+          if (r.status >= 400) {
+            // 404 and 422 are the article: not found, or nothing in it to lint.
+            return reject(new Error(data?.error
+              ? `${data.error} (article "${slug}")`
+              : `The linter answered ${r.status}.`));
+          }
+          if (!data || !Array.isArray(data.lints)) {
+            return reject(new Error('The linter answered something that is not a lint result.'));
+          }
+          resolve(data);
         },
         onerror: () => reject(new Error('Request to the linter failed (network, or @connect).')),
-        ontimeout: () => reject(new Error('The linter did not answer within three minutes.')),
+        ontimeout: () => reject(new Error('The linter did not answer within a minute.')),
       });
     });
   }
@@ -389,41 +389,51 @@
     return r;
   }
 
+  /* Where the offending words sit inside the snippet: the copy `nthInLine`
+   * counted if it is there, the first one otherwise. A count that has run out
+   * is no reason to give up the narrowing — the line the linter counted along
+   * and the text sitting in the form are not always the same text any more. */
+  function within(hay, needle, nth) {
+    if (!needle) return -1;
+    const hits = [];
+    for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, at + 1)) hits.push(at);
+    if (!hits.length) return -1;
+    return hits[Math.min(Math.max(nth || 1, 1), hits.length) - 1];
+  }
+
   /* Anchor every finding still open. Each root is indexed once, and which copy
-   * of the snippet a finding gets is its OWN `occurrence`, the one `extract`
+   * of the snippet a finding gets is its OWN `occurrence`, the one `fromApi`
    * counted — not a running tally of how many findings quoted that snippet
    * before it. The difference is the whole paragraph rule: one paragraph
    * naming three acronyms comes back as three findings quoting exactly the
    * same snippet, and a running tally would send the second to a second copy
    * of that paragraph, which does not exist — the first acronym would light
-   * up and the other two would report "snippet not found". Only genuinely
-   * repeated findings (same check, same message, same snippet) carry
-   * occurrence 2, 3, … and those are the ones that must walk forward.
+   * up and the other two would report "snippet not found". Only a snippet the
+   * article really does say twice — findings on a second line of its own —
+   * carries occurrence 2, 3, … and those are the ones that must walk forward.
    *
-   * Two passes: the snippet says *where*, the target says *what*. Once the
-   * snippet is found, if the message names a precise piece it is searched for
-   * inside it and the highlight tightens onto that — one lit acronym is worth
-   * more than a whole paragraph washed in colour. If that piece is not in
-   * there, the snippet stays lit: too wide beats nothing. */
+   * Two passes: the snippet says *where*, `matched` says *what*. Once the
+   * snippet is found, the words the API named are searched for inside it and
+   * the highlight tightens onto them — one lit acronym is worth more than a
+   * whole paragraph washed in colour. When there is nothing left of them once
+   * the tags are out (`<strong> </strong>` is a space), or they cannot be
+   * found in there, the snippet stays lit: too wide beats nothing. */
   function anchor(findings, roots) {
     const indices = roots.map((r) => buildIndex(r.root));
     for (const f of findings) {
       f.range = null; f.frame = null; f.narrowed = false;
       if (f.state === 'ignored' || f.state === 'done') continue;
-      const needle = flat(unquote(f.snippet));
+      const needle = flat(f.snippet);
       if (!needle) continue;
       for (let i = 0; i < indices.length; i++) {
         const wide = pick(indices[i], needle, f.occurrence || 1);
         if (!wide) continue;
 
         let spot = wide;
-        const short = target(f.message, f.snippet);
-        if (short) {
-          const rel = indices[i].s.slice(wide.from, wide.to + 1).indexOf(short);
-          if (rel >= 0) {
-            spot = { from: wide.from + rel, to: wide.from + rel + short.length - 1 };
-            f.narrowed = true;
-          }
+        const rel = within(indices[i].s.slice(wide.from, wide.to + 1), f.target, f.targetNth);
+        if (rel >= 0) {
+          spot = { from: wide.from + rel, to: wide.from + rel + f.target.length - 1 };
+          f.narrowed = true;
         }
         f.range = rangeFrom(indices[i], spot);
         f.frame = roots[i].frame;
@@ -699,7 +709,7 @@
     if (f.snippet && !f.range) {
       const s = document.createElement('div');
       s.className = 'rlx-snippet';
-      s.textContent = unquote(f.snippet);
+      s.textContent = f.snippet;
       stage.note.appendChild(s);
     }
 
@@ -968,37 +978,36 @@
     button.disabled = !!busy;
   }
 
-  /* The linter's HTML runs to a few hundred kB and `sessionStorage` holds
-   * little: only the last article is kept. This is here so that reloading the
-   * edit page does not ask the linter a second time, not to build an
-   * archive. */
-  function remember(slug, html) {
+  /* Only the last article is kept. This is here so that reloading the edit
+   * page does not ask the linter a second time, not to build an archive — and
+   * the answer is now tens of kB rather than hundreds, which makes it a
+   * comfortable fit in `sessionStorage` rather than a tight one. */
+  function remember(slug, json) {
     for (const k of Object.keys(sessionStorage)) {
       if (k.startsWith(CACHE_KEY) && k !== CACHE_KEY + slug) sessionStorage.removeItem(k);
     }
-    try { sessionStorage.setItem(CACHE_KEY + slug, html); } catch { /* quota: never mind */ }
+    try { sessionStorage.setItem(CACHE_KEY + slug, json); } catch { /* quota: never mind */ }
   }
 
-  /* The cache first, the linter only if it has to. Both the preflight on the
+  /* The cache first, the API only if it has to. Both the preflight on the
    * article page and the lint on the edit page come through here, which is
    * what keeps a click at one request: the article page asks, the edit page
    * finds the answer already sitting in `sessionStorage`. */
-  async function linterHtml(slug, { force } = {}) {
+  async function lintResult(slug, { force } = {}) {
     const cached = force ? null : sessionStorage.getItem(CACHE_KEY + slug);
-    if (cached) return cached;
-    const html = await askLinter(slug);
-    remember(slug, html);
-    return html;
+    if (cached) {
+      try { return JSON.parse(cached); } catch { sessionStorage.removeItem(CACHE_KEY + slug); }
+    }
+    const data = await askLinter(slug);
+    remember(slug, JSON.stringify(data));
+    return data;
   }
 
-  /* Zero findings is good news only if what we read was the results page.
-   * `extract()` goes through Tailwind classes that are not an API: the day
-   * they change it comes back empty on every article — and "nothing to lint",
-   * said on the strength of a parser that has just broken, is the one wrong
-   * answer here. No cards at all means something else is going on, so the trip
-   * to the editor happens as it used to and the failure stays visible. */
-  const hasResults = (html) => html.includes('data-flux-card');
-
+  /* Zero findings is now simply zero findings. Reading the linter's HTML page,
+   * an empty result and a parser that had stopped working looked exactly the
+   * same, and the doubt had to be written into the code; `askLinter` refuses
+   * anything that is not a lint result, so an empty `lints[]` that gets this
+   * far is an article with nothing wrong with it. */
   const ALL_CLEAR = 'Nothing to lint.';
   const allClearSub = (slug) => `The linter found no issues in "${slug}".`;
 
@@ -1011,8 +1020,8 @@
     hideBanner();
     setButtonState('Lint…', true);
     try {
-      const html = await linterHtml(slug);
-      if (!extract(html).length && hasResults(html)) {
+      const data = await lintResult(slug);
+      if (!fromApi(data).length) {
         showBanner(ALL_CLEAR, allClearSub(slug));
         return;
       }
@@ -1033,12 +1042,12 @@
     hideBanner();
     setButtonState('Lint…', true);
     try {
-      const html = await linterHtml(slug, { force });
-      const findings = extract(html).map((f) => ({ ...f, state: 'open', range: null, frame: null }));
+      const data = await lintResult(slug, { force });
+      const findings = fromApi(data).map((f) => ({ ...f, state: 'open', range: null, frame: null }));
 
       // Also the answer to "Re-lint" on an article you have just finished
       // fixing: no stage, one sentence.
-      if (!findings.length && hasResults(html)) {
+      if (!findings.length) {
         destroyStage();
         showBanner(ALL_CLEAR, allClearSub(slug));
         return;

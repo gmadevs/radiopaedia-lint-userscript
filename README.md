@@ -4,7 +4,7 @@
 
 **A `Lint` button next to the title of any [radiopaedia.org](https://radiopaedia.org) article.**
 
-One click takes you to the editor, asks the [radiopaedia.work linter](https://radiopaedia.work/lint/linter?slug=epilepsy)
+One click takes you to the editor, asks the [radiopaedia.work lint API](https://radiopaedia.work/api/v1/lint?article=epilepsy)
 about that article, and lights the findings up *on the text itself* — coloured by severity, with
 the message alongside, and keys to walk through them one at a time.
 
@@ -20,9 +20,9 @@ the message alongside, and keys to walk through them one at a time.
 </div>
 
 ```
-                                        ┌─  nothing to fix  →  a banner, and you stay put
-Lint  →  radiopaedia.work/lint/linter  ─┤
-                                        └─  findings        →  /edit, lit on the text
+                                         ┌─  nothing to fix  →  a banner, and you stay put
+Lint  →  radiopaedia.work/api/v1/lint  ──┤
+                                         └─  findings        →  /edit, lit on the text
 ```
 
 ---
@@ -79,12 +79,10 @@ This is not an extra request. It is the same one, made a moment earlier: the ans
 `sessionStorage`, and the edit page reads it from there instead of asking again.
 
 > [!NOTE]
-> Zero findings counts as *clean* only if what came back looks like a results page at all. The
-> linter draws a card per check that has something to report, so a clean article still carries
-> its own markup — while a parser that has stopped working (see
-> [what can break it](#troubleshooting)) returns nothing on every article. In that second case
-> you get the old behaviour, the trip to the editor, rather than a cheerful banner from a parser
-> that has just broken.
+> Zero findings means zero findings. The answer is JSON, and anything that is not a lint result —
+> a Cloudflare check, an error, an article the linter cannot read — is refused before it gets
+> anywhere near the banner, so *"nothing to lint"* is never something a broken reader says by
+> mistake.
 
 ---
 
@@ -155,10 +153,14 @@ spacing, case, curly quotes, and **zero-width spaces**, which Radiopaedia articl
 The linter quotes the "Radiographic features" heading with a U+200B stuck to the front, and `\s`
 in JavaScript does not cover that character: one invisible thing, and the snippet is never found.
 
-Once the snippet is located, if the message names a precise piece — `'SUDEP' has no definition` —
-the highlight tightens onto that. One lit acronym is worth more than a paragraph washed in
-colour. On the `epilepsy` article that is 11 findings out of 11 anchored, 9 of them narrowed to
-the exact word.
+Once the snippet is located, the highlight tightens onto the offending words themselves — the API
+names them in `matched`, and `position` says which copy of them along the line, so on a sentence
+with six commas in it the sixth is the one that lights up. One lit acronym is worth more than a
+paragraph washed in colour. On the `epilepsy` article that is 11 findings out of 11 anchored, all
+11 narrowed to the exact words; across `pneumothorax`, `meningioma`, `appendicitis`,
+`glioblastoma-idh-wildtype` and `striatocapsular-infarct`, 148 out of 148 anchored and 146
+narrowed — the two that stay wide are `<strong> </strong>`, an empty bold tag, which is nothing
+to point at once the markup is gone.
 
 </details>
 
@@ -185,7 +187,8 @@ it"* — and a second memory of verdicts that never talks to the first one is wo
 <br>
 
 The linter reads the article from Radiopaedia on your behalf, so a request to it is a request to
-them. This is a human pressing a button on one article at a time, which is fine — and it is why
+them. The API is unauthenticated and rate-limited at 60 requests a minute, which a person
+pressing a button will never come near. This is a human pressing a button on one article at a time, which is fine — and it is why
 there is no prefetching, no automatic retry, and why the answer is kept in `sessionStorage` so
 reloading the edit page does not ask twice. The check that happens before the jump to the editor
 reads the same cache: the article page asks, the edit page finds the answer already there.
@@ -202,7 +205,7 @@ reads the same cache: the article page asks, the edit page finds the answer alre
 | Symptom | Likely cause | Fix |
 | :-- | :-- | :-- |
 | No button, and no `[Radiopaedia Lint] active` line in the console | The script is not running | Chrome/Edge: turn on **Allow user scripts** for Tampermonkey (step 3 above) |
-| Button is there, no findings come back | The linter's Tailwind classes changed | See *What can break it* below |
+| Button is there, no findings come back | The API's field names changed, or it is answering an error | See *What can break it* below |
 | Findings come back, nothing is highlighted | A different editor, or a snippet that cannot be found in the text | See `EDITOR_SELECTORS` below |
 
 <details>
@@ -210,9 +213,10 @@ reads the same cache: the article page asks, the edit page finds the answer alre
 
 <br>
 
-**The linter's Tailwind classes**, which are not an API: `extract()` reads findings out of
-`div[data-flux-card]`, `[data-flux-heading]`, `[data-flux-badge]` and `div.pb-6`. New stylesheet,
-no findings.
+**The API's field names.** `fromApi()` reads `lints[]` and, in each entry, `condition`,
+`severity`, `message`, `trimmed`, `matched`, `line` and `position`. A renamed field is what would
+stop it — where the previous versions read the findings off the linter's HTML page, through
+Tailwind classes that were never an API, and a new stylesheet was enough to break them silently.
 
 **The editor selectors**, in `EDITOR_SELECTORS` near the top: TinyMCE in an iframe and plain
 contenteditables are covered. A different editor gets added there.
