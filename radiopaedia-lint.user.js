@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.4.0
+// @version      1.4.1
 // @description  A Lint button next to the article title: asks the radiopaedia.work linter first, says so when there is nothing to fix, and otherwise takes you to the editor with the findings highlighted on the text, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -343,9 +343,16 @@
     return r;
   }
 
-  /* Anchor every finding still open. Each root is indexed once, and repeated
-   * occurrences of the same snippet are handed out in order: two findings on
-   * the same snippet land on two different places.
+  /* Anchor every finding still open. Each root is indexed once, and which copy
+   * of the snippet a finding gets is its OWN `occurrence`, the one `extract`
+   * counted — not a running tally of how many findings quoted that snippet
+   * before it. The difference is the whole paragraph rule: one paragraph
+   * naming three acronyms comes back as three findings quoting exactly the
+   * same snippet, and a running tally would send the second to a second copy
+   * of that paragraph, which does not exist — the first acronym would light
+   * up and the other two would report "snippet not found". Only genuinely
+   * repeated findings (same check, same message, same snippet) carry
+   * occurrence 2, 3, … and those are the ones that must walk forward.
    *
    * Two passes: the snippet says *where*, the target says *what*. Once the
    * snippet is found, if the message names a precise piece it is searched for
@@ -354,18 +361,14 @@
    * there, the snippet stays lit: too wide beats nothing. */
   function anchor(findings, roots) {
     const indices = roots.map((r) => buildIndex(r.root));
-    const used = new Map();
     for (const f of findings) {
       f.range = null; f.frame = null; f.narrowed = false;
       if (f.state === 'ignored' || f.state === 'done') continue;
       const needle = flat(unquote(f.snippet));
       if (!needle) continue;
       for (let i = 0; i < indices.length; i++) {
-        const key = i + ' ' + needle;
-        const already = used.get(key) || 0;
-        const wide = locate(indices[i], needle, already + 1);
+        const wide = locate(indices[i], needle, f.occurrence || 1);
         if (!wide) continue;
-        used.set(key, already + 1);
 
         let spot = wide;
         const short = target(f.message, f.snippet);
