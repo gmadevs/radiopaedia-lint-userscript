@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.7.0
+// @version      1.8.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -198,6 +198,34 @@
     return n;
   }
 
+  /* Where the missing comma goes, for the findings that are about a comma
+   * that is not there.
+   *
+   * "Use the Oxford comma in 'patchy, reticulonodular or mixed'" quotes the
+   * phrase, and lighting the phrase says which one it means — but not where
+   * the comma belongs, which is the only thing you actually have to know. It
+   * belongs immediately before the last conjunction, and that is something the
+   * phrase itself says: the last ` or ` / ` and ` / ` nor ` in it.
+   *
+   * Two offsets come back because two things need one. The note prints the
+   * phrase as it should read, and prints it in the spacing a human wrote; the
+   * caret is drawn in the editor's text, which is indexed in `flat()` shape.
+   * The same point, counted twice. */
+  const CONJUNCTION = /\s+(?:or|and|nor)\b/gi;
+
+  function insertion(lint) {
+    if (lint.condition !== 'Radiopaedia.OxfordComma') return null;
+    const phrase = plain(lint.matched);
+    let at = -1;
+    for (const m of phrase.matchAll(CONJUNCTION)) at = m.index;
+    if (at <= 0) return null;
+    return {
+      insert: ',',
+      flatAt: flat(phrase.slice(0, at)).length,
+      fixed: phrase.slice(0, at) + ',' + phrase.slice(at),
+    };
+  }
+
   /* One entry of `lints[]`, one finding — in the order they occur in the
    * article rather than grouped by check, so that walking them with `j` walks
    * the article from top to bottom.
@@ -241,6 +269,7 @@
 
       out.push({ check, severity, line: where, message, snippet,
                  target: flat(plain(lint.matched)), targetNth: nthInLine(lint),
+                 point: insertion(lint),
                  occurrence: copy.n, fp: `${check}|${message}|${snippet}|${where}` });
     }
     return out;
@@ -483,7 +512,7 @@
   function anchor(findings, roots) {
     const indices = roots.map((r) => buildIndex(r.root));
     for (const f of findings) {
-      f.range = null; f.frame = null; f.narrowed = false;
+      f.range = null; f.frame = null; f.narrowed = false; f.caret = null;
       if (f.state === 'ignored' || f.state === 'done') continue;
       const needle = flat(f.snippet);
       if (!needle) continue;
@@ -499,6 +528,17 @@
         }
         f.range = rangeFrom(indices[i], spot);
         f.frame = roots[i].frame;
+
+        /* The caret sits between two characters, so it is anchored on the one
+         * before it and drawn against that character's trailing edge. Only
+         * when the highlight really is the quoted phrase: on a finding that
+         * stayed wide, an offset into the phrase points at nothing. */
+        if (f.narrowed && f.point) {
+          const at = spot.from + f.point.flatAt;
+          if (at > spot.from && at <= spot.to + 1) {
+            f.caret = rangeFrom(indices[i], { from: at - 1, to: at - 1 });
+          }
+        }
         // Where it lived, kept for after the edit that dissolves the range:
         // `highlightBounds` falls back to it so the note does not fly off to
         // the corner of the screen the moment you start typing.
@@ -556,6 +596,18 @@
     .rlx-mark { position:fixed; border-radius:2px; }
     .rlx-mark.rlx-current { outline:2px solid; outline-offset:1px; }
 
+    /* The insertion caret: a rule between two letters, with the character it
+       stands for above it. A transform rather than a negative left, so the
+       glyph stays centred on the rule whatever character it is. */
+    .rlx-caret { position:fixed; width:2px; border-radius:1px; }
+    .rlx-caret::after {
+      /* Under the rule rather than over it: a comma belongs on the baseline,
+         and the line above is somebody else's text. */
+      content:attr(data-insert); position:absolute; left:50%; top:100%;
+      transform:translate(-50%, -68%);
+      font:800 15px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
     #rlx-note {
       position:fixed; z-index:99999; max-width:min(30em, 78vw);
       padding:.6em .8em; border-radius:8px; border-left:4px solid;
@@ -571,6 +623,8 @@
       font-size:12px; text-transform:uppercase; letter-spacing:.04em; opacity:.8; }
     #rlx-note .rlx-msg { margin-top:.35em; }
     #rlx-note .rlx-hint { margin-top:.4em; font-size:12px; opacity:.62; }
+    #rlx-note .rlx-fix { margin-top:.4em; padding:.25em .5em; border-radius:6px;
+      background:rgba(127,127,127,.14); font-weight:600; }
     #rlx-note .rlx-snippet { margin-top:.4em; padding-left:.6em; border-left:2px solid #e5e7eb;
       color:#4b5563; font-style:italic; }
 
@@ -768,7 +822,35 @@
         stage.layer.appendChild(mark);
       }
     }
+    drawCaret(stage.findings[stage.i]);
     placeNote();
+  }
+
+  /* The place the comma is missing from, on the current finding only: a rule
+   * standing between the two characters it goes between, with the character
+   * itself sitting above it. A washed phrase says *this one*; this says
+   * *here*, which is the thing you cannot read off the message. */
+  function drawCaret(f) {
+    if (!f?.caret || f.state !== 'open' || !f.point) return;
+    let rects;
+    try { rects = f.caret.getClientRects(); } catch { return; }
+    const r = rects[rects.length - 1];
+    if (!r || !r.height) return;
+
+    const box = f.frame ? f.frame.getBoundingClientRect() : null;
+    let x = r.right, y = r.top;
+    if (box) {
+      x += box.left; y += box.top;
+      // Inside the iframe's own scroll, like the marks.
+      if (x < box.left || x > box.right || y + r.height < box.top || y > box.bottom) return;
+    }
+    const c = paint(f.severity);
+    const el = document.createElement('div');
+    el.className = 'rlx-caret';
+    el.dataset.insert = f.point.insert;
+    el.style.cssText = `left:${x - 1}px; top:${y}px; height:${r.height}px; ` +
+                       `background:${c.ink}; color:${c.ink};`;
+    stage.layer.appendChild(el);
   }
 
   /* The note of the current finding — including one that has just closed
@@ -797,6 +879,16 @@
     msg.className = 'rlx-msg';
     msg.textContent = f.message;
     stage.note.append(head, msg);
+
+    // The phrase as it should read. The message quotes it as it is, which
+    // leaves the difference between the two for the reader to find.
+    if (f.point?.fixed && !settled) {
+      const fix = document.createElement('div');
+      fix.className = 'rlx-fix';
+      fix.style.color = c.ink;
+      fix.textContent = f.point.fixed;
+      stage.note.appendChild(fix);
+    }
 
     // Settled, and still on screen: the one thing left to say is how to leave.
     if (settled) {

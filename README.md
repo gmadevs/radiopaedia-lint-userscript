@@ -254,7 +254,17 @@ the linter's own position lands inside one — *"more than 5 commas in a single 
 reported against a comma of the citation — nothing is narrowed at all and the whole sentence
 stays lit, which is what the message is about anyway. A rule that really is about citations, like
 the spacing before one, still gets its highlight: those are skipped only while there is prose to
-prefer. One lit acronym is worth more than a
+prefer.
+
+**Where the fix is a character that is not there yet**, a highlight cannot say it. *"Use the
+Oxford comma in 'patchy, reticulonodular or mixed'"* lights the phrase, and the phrase is not the
+answer — the answer is one point inside it. Those findings get a caret drawn between the two
+characters the comma belongs between, with the comma itself hanging under it, and the note prints
+the phrase the way it should read:
+
+```text
+patchy, reticulonodular, or mixed
+``` One lit acronym is worth more than a
 paragraph washed in colour. On the `epilepsy` article that is 11 findings out of 11 anchored, all
 11 narrowed to the exact words; across `pneumothorax`, `meningioma`, `appendicitis`,
 `glioblastoma-idh-wildtype` and `striatocapsular-infarct`, 148 out of 148 anchored and 146
