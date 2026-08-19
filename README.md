@@ -20,7 +20,9 @@ the message alongside, and keys to walk through them one at a time.
 </div>
 
 ```
-Lint  →  /edit  →  radiopaedia.work/lint/linter?slug=…  →  findings lit on the text
+                                        ┌─  nothing to fix  →  a banner, and you stay put
+Lint  →  radiopaedia.work/lint/linter  ─┤
+                                        └─  findings        →  /edit, lit on the text
 ```
 
 ---
@@ -28,6 +30,7 @@ Lint  →  /edit  →  radiopaedia.work/lint/linter?slug=…  →  findings lit 
 ## Contents
 
 - [Installing](#installing)
+- [Nothing to lint](#nothing-to-lint)
 - [Working through the findings](#working-through-the-findings)
 - [How it works](#how-it-works)
 - [Troubleshooting](#troubleshooting)
@@ -62,6 +65,26 @@ not running at all, and nothing about where the button gets placed matters yet.
 
 > [!NOTE]
 > You need to be signed in to Radiopaedia with edit rights, since the whole point is the editor.
+
+---
+
+## Nothing to lint
+
+The button asks the linter **before** it takes you anywhere. An article the linter has nothing to
+say about no longer costs you the trip to the edit page and the trip back: a banner says so, and
+you stay where you are. **Re-lint** answers the same way — once the last finding is gone the bar
+closes and the banner takes its place.
+
+This is not an extra request. It is the same one, made a moment earlier: the answer is kept in
+`sessionStorage`, and the edit page reads it from there instead of asking again.
+
+> [!NOTE]
+> Zero findings counts as *clean* only if what came back looks like a results page at all. The
+> linter draws a card per check that has something to report, so a clean article still carries
+> its own markup — while a parser that has stopped working (see
+> [what can break it](#troubleshooting)) returns nothing on every article. In that second case
+> you get the old behaviour, the trip to the editor, rather than a cheerful banner from a parser
+> that has just broken.
 
 ---
 
@@ -164,7 +187,8 @@ it"* — and a second memory of verdicts that never talks to the first one is wo
 The linter reads the article from Radiopaedia on your behalf, so a request to it is a request to
 them. This is a human pressing a button on one article at a time, which is fine — and it is why
 there is no prefetching, no automatic retry, and why the answer is kept in `sessionStorage` so
-reloading the edit page does not ask twice.
+reloading the edit page does not ask twice. The check that happens before the jump to the editor
+reads the same cache: the article page asks, the edit page finds the answer already there.
 
 > [!WARNING]
 > Please do not wrap this in anything that clicks by itself.

@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.3.1
-// @description  A Lint button next to the article title: takes you to the editor, brings back the radiopaedia.work linter findings highlighted on the text, and walks you through them one at a time.
+// @version      1.4.0
+// @description  A Lint button next to the article title: asks the radiopaedia.work linter first, says so when there is nothing to fix, and otherwise takes you to the editor with the findings highlighted on the text, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @grant        GM_xmlhttpRequest
@@ -443,6 +443,21 @@
     #rlx-bar .rlx-sep { width:1px; align-self:stretch; background:#4b5563; }
     #rlx-bar .rlx-close { background:transparent; font-size:16px; line-height:1; }
 
+    #rlx-banner {
+      position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:99999;
+      display:flex; align-items:center; gap:.6em;
+      max-width:min(42em, 94vw); padding:.7em 1em; border-radius:12px;
+      background:#111827; color:#f9fafb; box-shadow:0 8px 30px rgba(0,0,0,.35);
+      font:14px/1.45 system-ui,-apple-system,sans-serif; cursor:pointer;
+      animation: rlx-banner-in .18s ease-out;
+    }
+    #rlx-banner .rlx-tick { color:#34d399; font-size:17px; line-height:1; }
+    #rlx-banner .rlx-sub { display:block; margin-top:.15em; font-size:12.5px; opacity:.75; }
+    @keyframes rlx-banner-in {
+      from { opacity:0; transform:translate(-50%, -8px); }
+      to   { opacity:1; transform:translate(-50%, 0); }
+    }
+
     @media (prefers-color-scheme: dark) {
       #rlx-note { background:#1f2937; color:#f3f4f6; }
       #rlx-note .rlx-snippet { border-left-color:#4b5563; color:#d1d5db; }
@@ -525,6 +540,46 @@
     removeEventListener('resize', scheduleDraw);
     document.removeEventListener('keydown', onKey, true);
     stage.findings = []; stage.i = -1; stage.history = [];
+  }
+
+  // ———————————————————————————————————————————————— the all-clear banner
+
+  /* Nothing to show on the text means there is nothing to put a stage around:
+   * a bar reading "0/0" is a worse way of saying "clean" than a sentence. The
+   * banner goes away on its own, on a click, or on Esc — it is an answer, not
+   * a thing to manage. */
+  let bannerTimer = null;
+
+  function showBanner(headline, sub) {
+    hideBanner();
+    const el = document.createElement('div');
+    el.id = 'rlx-banner';
+    el.innerHTML =
+      '<span class="rlx-tick">\u2713</span><span></span>';
+    const body = el.lastElementChild;
+    body.textContent = headline;
+    if (sub) {
+      const small = document.createElement('span');
+      small.className = 'rlx-sub';
+      small.textContent = sub;
+      body.appendChild(small);
+    }
+    el.title = 'Click to dismiss';
+    el.addEventListener('click', hideBanner);
+    document.body.appendChild(el);
+    document.addEventListener('keydown', bannerKey, true);
+    bannerTimer = setTimeout(hideBanner, 7000);
+  }
+
+  function hideBanner() {
+    clearTimeout(bannerTimer);
+    bannerTimer = null;
+    document.getElementById('rlx-banner')?.remove();
+    document.removeEventListener('keydown', bannerKey, true);
+  }
+
+  function bannerKey(e) {
+    if (e.key === 'Escape') hideBanner();
   }
 
   // —————————————————————————————————————————————————————— drawing
@@ -821,10 +876,7 @@
     b.title = 'Run the linter on this article and show the findings on the text';
     b.addEventListener('click', () => {
       if (inEditor()) return runLint(slug, {});
-      // Outside the editor: go to the editor first, and let the lint start
-      // there — this way navigation cannot abort the request halfway.
-      sessionStorage.setItem(PENDING_KEY, slug);
-      location.href = `https://radiopaedia.org/articles/${encodeURIComponent(slug)}/edit`;
+      return preflight(slug);
     });
 
     const title = inEditor() ? null : visibleTitle();
@@ -878,17 +930,70 @@
     try { sessionStorage.setItem(CACHE_KEY + slug, html); } catch { /* quota: never mind */ }
   }
 
+  /* The cache first, the linter only if it has to. Both the preflight on the
+   * article page and the lint on the edit page come through here, which is
+   * what keeps a click at one request: the article page asks, the edit page
+   * finds the answer already sitting in `sessionStorage`. */
+  async function linterHtml(slug, { force } = {}) {
+    const cached = force ? null : sessionStorage.getItem(CACHE_KEY + slug);
+    if (cached) return cached;
+    const html = await askLinter(slug);
+    remember(slug, html);
+    return html;
+  }
+
+  /* Zero findings is good news only if what we read was the results page.
+   * `extract()` goes through Tailwind classes that are not an API: the day
+   * they change it comes back empty on every article — and "nothing to lint",
+   * said on the strength of a parser that has just broken, is the one wrong
+   * answer here. No cards at all means something else is going on, so the trip
+   * to the editor happens as it used to and the failure stays visible. */
+  const hasResults = (html) => html.includes('data-flux-card');
+
+  const ALL_CLEAR = 'Nothing to lint.';
+  const allClearSub = (slug) => `The linter found no issues in "${slug}".`;
+
+  /* Outside the editor the linter is asked *before* navigating. An article
+   * with nothing wrong with it used to cost you the trip to the edit page and
+   * the trip back; now it costs a sentence. The answer is kept either way, so
+   * this is not an extra request — it is the same one, made earlier. */
+  async function preflight(slug) {
+    if (!slug) return;
+    hideBanner();
+    setButtonState('Lint…', true);
+    try {
+      const html = await linterHtml(slug);
+      if (!extract(html).length && hasResults(html)) {
+        showBanner(ALL_CLEAR, allClearSub(slug));
+        return;
+      }
+      // Go to the editor and let the lint start there — this way navigation
+      // cannot abort anything halfway.
+      sessionStorage.setItem(PENDING_KEY, slug);
+      location.href = `https://radiopaedia.org/articles/${encodeURIComponent(slug)}/edit`;
+    } catch (err) {
+      alert(`Lint failed.\n\n${err.message}`);
+    } finally {
+      setButtonState('Lint', false);
+    }
+  }
+
   async function runLint(slug, { force } = {}) {
     if (!slug) return;
     stage.slug = slug;
+    hideBanner();
     setButtonState('Lint…', true);
     try {
-      let html = force ? null : sessionStorage.getItem(CACHE_KEY + slug);
-      if (!html) {
-        html = await askLinter(slug);
-        remember(slug, html);
-      }
+      const html = await linterHtml(slug, { force });
       const findings = extract(html).map((f) => ({ ...f, state: 'open', range: null, frame: null }));
+
+      // Also the answer to "Re-lint" on an article you have just finished
+      // fixing: no stage, one sentence.
+      if (!findings.length && hasResults(html)) {
+        destroyStage();
+        showBanner(ALL_CLEAR, allClearSub(slug));
+        return;
+      }
 
       const roots = await awaitEditor();
       if (!roots.length) {
