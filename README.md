@@ -4,9 +4,10 @@
 
 **A `Lint` button next to the title of any [radiopaedia.org](https://radiopaedia.org) article.**
 
-One click takes you to the editor, asks the [radiopaedia.work lint API](https://radiopaedia.work/api/v1/lint?article=epilepsy)
-about that article, and lights the findings up *on the text itself* — coloured by severity, with
-the message alongside, and keys to walk through them one at a time.
+The button asks the [radiopaedia.work lint API](https://radiopaedia.work/api/v1/lint?article=epilepsy)
+as the page opens and takes the colour of what it found, so you know before clicking. Click it
+and the findings are lit up *on the text itself* in the editor — coloured by severity, with the
+message alongside, and keys to walk through them one at a time.
 
 [![Install](https://img.shields.io/badge/Install-userscript-2ea44f?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js)
 
@@ -20,9 +21,11 @@ the message alongside, and keys to walk through them one at a time.
 </div>
 
 ```
-                                         ┌─  nothing to fix  →  a banner, and you stay put
-Lint  →  radiopaedia.work/api/v1/lint  ──┤
-                                         └─  findings        →  /edit, lit on the text
+page opens  →  radiopaedia.work/api/v1/lint  →  the button takes the colour of the worst of it
+                                                🔴 error  🟠 warning  🔵 suggestion  ⚪ nothing
+
+click       →  the same answer, from the cache  ┬─  nothing to fix  →  a banner, you stay put
+                                                └─  findings        →  /edit, lit on the text
 ```
 
 ---
@@ -30,6 +33,7 @@ Lint  →  radiopaedia.work/api/v1/lint  ──┤
 ## Contents
 
 - [Installing](#installing)
+- [The colour of the button](#the-colour-of-the-button)
 - [Nothing to lint](#nothing-to-lint)
 - [Working through the findings](#working-through-the-findings)
 - [How it works](#how-it-works)
@@ -65,6 +69,33 @@ not running at all, and nothing about where the button gets placed matters yet.
 
 > [!NOTE]
 > You need to be signed in to Radiopaedia with edit rights, since the whole point is the editor.
+
+---
+
+## The colour of the button
+
+Opening an article asks the linter about it, and the button says the answer in the colour of the
+worst thing in there — the same colours the highlights use in the editor, so it reads as the same
+thing seen from further away. Hovering it gives you the count.
+
+| | The button | The article |
+| :-: | :-- | :-- |
+| 🔴 | red | at least one `error` |
+| 🟠 | amber | no errors, at least one `warning` |
+| 🔵 | blue | only `suggestion`s |
+| ⚪ | grey | nothing to fix |
+| | pale, half-faded | still asking |
+
+The answer is kept for the session, so the click that follows costs no second request — and on a
+grey button it does not even need the editor: the *nothing to lint* banner comes back instantly.
+
+> [!IMPORTANT]
+> This is one request per article page you open, where it used to be one per click, and the
+> linter reads the article from Radiopaedia to answer it. It is kept to the article page itself
+> (not its revisions, not the editor), it waits for a tab you can actually see rather than one
+> the browser opened on a guess, it never retries, and it fails silently — a button that could
+> not ask looks exactly like one that has not been asked. If you would rather go back to asking
+> only when you click, set `PREVIEW_ON_LOAD = false` at the top of the script.
 
 ---
 
@@ -120,6 +151,9 @@ these move you to another one.
 | 🔴 | `error` | red |
 | 🟠 | `warning` | amber |
 | 🔵 | `suggestion` | blue |
+
+One table, two places: these are the colours of the highlights, of the note beside them, and of
+the button before you ever click it.
 
 ### The note stays out of the way
 
@@ -236,14 +270,17 @@ it"* — and a second memory of verdicts that never talks to the first one is wo
 <br>
 
 The linter reads the article from Radiopaedia on your behalf, so a request to the API is a
-request to them. This is a human pressing a button on one article at a time, which is fine — and
-it is why there is no prefetching, no automatic retry, and why the answer is kept in
-`sessionStorage` so reloading the edit page does not ask twice. The check that happens before the
-jump to the editor reads the same cache: the article page asks, the edit page finds the answer
-already there.
+request to them. Since the button colours itself on load, that is now one request per article
+page you open rather than one per click — a real change, and the reason for every guard listed
+[above](#the-colour-of-the-button): the article page only, a visible tab only, one answer per
+article per session, no retry.
+
+Everything downstream still reads that one answer. The edit page finds it in `sessionStorage`
+instead of asking again, and so does the check that happens before the jump to the editor: the
+article page asks, everything after it remembers.
 
 The API itself is unauthenticated and rate-limited at 60 requests a minute — a number a person
-pressing a button will never come near, and a number a loop would reach in seconds.
+reading articles will never come near, and a number a loop would reach in seconds.
 
 > [!WARNING]
 > Please do not wrap this in anything that clicks by itself.

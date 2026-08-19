@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.5.1
-// @description  A Lint button next to the article title: asks the radiopaedia.work lint API first, says so when there is nothing to fix, and otherwise takes you to the editor with the findings highlighted on the text, one at a time.
+// @version      1.6.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @grant        GM_xmlhttpRequest
@@ -62,6 +62,19 @@
 
 (function () {
   'use strict';
+
+  /* The button says what the article is like before you click it, which means
+   * asking the linter as the page opens. Set to false and nothing leaves the
+   * browser until you press the button.
+   *
+   * Worth knowing what it costs: the linter reads the article from Radiopaedia
+   * to answer, so this turns one request per CLICK into one request per
+   * ARTICLE PAGE YOU OPEN. It is kept to the article page itself, it waits for
+   * a tab you can actually see, and the answer is cached for the session — but
+   * a morning of browsing is a morning of lint runs, and the API allows 60 a
+   * minute. Nothing here retries, and a failure is silent: the button simply
+   * stays the colour it was. */
+  const PREVIEW_ON_LOAD = true;
 
   const API_URL = 'https://radiopaedia.work/api/v1/lint?article=';
   const LINTER_TIMEOUT = 60_000;    // the linter still reads the article from Radiopaedia, but a second or two does it
@@ -454,7 +467,7 @@
     .rlx-btn {
       display:inline-flex; align-items:center; gap:.4em; vertical-align:middle;
       margin-left:.6em; padding:.25em .7em; border:1px solid currentColor;
-      border-radius:999px; background:transparent; color:#2563eb;
+      border-radius:999px; background:transparent; color:var(--rlx-ink, #2563eb);
       font:600 13px/1.4 system-ui,-apple-system,sans-serif; cursor:pointer;
       /* The title is a flex container, and it deforms the button twice over.
          A long title squeezes it until "Lint" wraps to "Lin/t", because
@@ -464,7 +477,9 @@
          give up width, keep your own height. */
       white-space:nowrap; flex:0 0 auto; align-self:center;
     }
-    .rlx-btn:hover { background:#2563eb; color:#fff; }
+    .rlx-btn:hover { background:var(--rlx-ink, #2563eb); color:#fff; }
+    /* Asking. Not grey — grey is an answer here, and it would be the wrong one. */
+    .rlx-btn-asking { opacity:.55; }
     .rlx-btn[disabled] { opacity:.55; cursor:progress; }
     .rlx-btn-float { position:fixed; top:14px; right:14px; z-index:99999;
       background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.18); margin:0; }
@@ -960,6 +975,62 @@
 
   let button = null;
 
+  /* What the last answer said about this article, in the colour of the boxes
+   * it would draw on the text: red if anything is an error, amber if anything
+   * is a warning, blue for suggestions, grey for an article with nothing to
+   * fix. Same `COLORS` table the highlights and the note use — the button is
+   * meant to be read as the same thing, seen from further away.
+   *
+   * It is kept out here rather than on the button because Radiopaedia remounts
+   * its own page and takes the button with it: the next `mountButton()` paints
+   * the new one from this. */
+  let verdict = null;
+  const SEVEREST = ['error', 'warning', 'suggestion'];
+
+  function paintButton() {
+    if (!button) return;
+    button.classList.toggle('rlx-btn-asking', verdict === 'asking');
+    if (!verdict || verdict === 'asking') {
+      button.style.removeProperty('--rlx-ink');
+      return;
+    }
+    button.style.setProperty('--rlx-ink', verdict.ink);
+    button.title = verdict.title;
+  }
+
+  /* Ask about the article while you are still reading it, and answer in the
+   * colour of the button. The request is the same one the click would make and
+   * the answer is kept in `sessionStorage`, so clicking afterwards costs
+   * nothing and the "nothing to lint" banner comes back instantly.
+   *
+   * Silent on failure, on purpose: nothing the page did not ask for should
+   * ever put an alert in front of you. A linter that cannot be reached leaves
+   * a button that looks exactly like one that has not been asked yet, which is
+   * the truth. */
+  async function preview(slug) {
+    verdict = 'asking';
+    paintButton();
+    try {
+      const findings = fromApi(await lintResult(slug));
+      const counts = { error: 0, warning: 0, suggestion: 0, other: 0 };
+      for (const f of findings) counts[f.severity in counts ? f.severity : 'other']++;
+      const worst = SEVEREST.find((sev) => counts[sev]);
+      const said = SEVEREST.filter((sev) => counts[sev])
+        .map((sev) => `${counts[sev]} ${sev}${counts[sev] > 1 ? 's' : ''}`)
+        .join(', ');
+      verdict = {
+        ink: paint(worst).ink,   // no worst: `paint` answers grey, which is the answer
+        title: findings.length
+          ? `The linter found ${said || findings.length + ' things'} in this article — ` +
+            'click to fix them in the editor'
+          : 'The linter found nothing to fix in this article',
+      };
+    } catch {
+      verdict = null;
+    }
+    paintButton();
+  }
+
   function mountButton() {
     // `isConnected` rather than a query: the observer also fires for the marks
     // we redraw ourselves on every scroll frame, and searching the document
@@ -990,6 +1061,7 @@
     if (!r.width || !r.height) pinToCorner(b);
 
     button = b;
+    paintButton();
   }
 
   /* The fallback spot: fixed at the top right, outside any branch of the site.
@@ -1144,4 +1216,33 @@
       runLint(pending, {});
     }
   }
+
+  /* The article page and nothing else: `/articles/<slug>` exactly, so the
+   * revisions, the cases and the editor do not each cost their own lint run.
+   * In the editor the click does the asking, as it always did. */
+  const onArticlePage = () => /^\/articles\/[^/?#]+\/?$/.test(location.pathname);
+
+  function previewSoon() {
+    const slug = currentSlug();
+    if (!slug || !onArticlePage() || inEditor()) return;
+    if (document.visibilityState === 'visible') return void preview(slug);
+
+    /* A tab you cannot see may be one the browser opened on a guess and you
+     * will never look at — cmd-clicking a dozen links opens a dozen of them.
+     * Asking would be a request to Radiopaedia for an article nobody is
+     * reading, so it waits until somebody is: the tab becoming visible, or the
+     * window being given focus. Both, because a page can be looked at without
+     * either event on its own being the one that says so. */
+    const wake = () => {
+      if (document.visibilityState !== 'visible' && !document.hasFocus()) return;
+      document.removeEventListener('visibilitychange', wake);
+      removeEventListener('focus', wake);
+      const slugNow = currentSlug();
+      if (slugNow && onArticlePage() && !inEditor()) preview(slugNow);
+    };
+    document.addEventListener('visibilitychange', wake);
+    addEventListener('focus', wake);
+  }
+
+  if (PREVIEW_ON_LOAD) previewSoon();
 })();
