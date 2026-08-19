@@ -4,10 +4,11 @@
 
 **A `Lint` button next to the title of any [radiopaedia.org](https://radiopaedia.org) article.**
 
-The button asks the [radiopaedia.work lint API](https://radiopaedia.work/api/v1/lint?article=epilepsy)
-as the page opens and takes the colour of what it found, so you know before clicking. Click it
-and the findings are lit up *on the text itself* in the editor — coloured by severity, with the
-message alongside, and keys to walk through them one at a time.
+Click it and the findings come back lit up *on the text itself* in the editor — coloured by
+severity, with the message alongside, and keys to walk through them one at a time. Turn its
+**auto** switch on and it does not wait to be clicked: every article you open goes to the
+[radiopaedia.work lint API](https://radiopaedia.work/api/v1/lint?article=epilepsy) and the button
+takes the colour of what came back, so you know before clicking.
 
 [![Install](https://img.shields.io/badge/Install-userscript-2ea44f?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js)
 
@@ -16,16 +17,16 @@ message alongside, and keys to walk through them one at a time.
 [![Userscript](https://img.shields.io/badge/userscript-Tampermonkey-00485B?logo=tampermonkey&logoColor=white)](https://www.tampermonkey.net/)
 [![No build step](https://img.shields.io/badge/dependencies-none-lightgrey)](radiopaedia-lint.user.js)
 
-<img src="docs/lint-button.png" alt="The Lint button sitting next to a Radiopaedia article title" width="820">
+<img src="docs/lint-button.png" alt="The Lint button and its auto switch, sitting next to a Radiopaedia article title" width="820">
 
 </div>
 
 ```
-page opens  →  radiopaedia.work/api/v1/lint  →  the button takes the colour of the worst of it
-                                                🔴 error  🟠 warning  🔵 suggestion  ⚪ nothing
+page opens   auto  →  radiopaedia.work/api/v1/lint  →  the button takes the colour of the worst
+                                                       🔴 error 🟠 warning 🔵 suggestion ⚪ none
 
-click       →  the same answer, from the cache  ┬─  nothing to fix  →  a banner, you stay put
-                                                └─  findings        →  /edit, lit on the text
+click              →  that same answer, from the cache  ┬─  nothing to fix  →  a banner, you stay
+                      (or the first one, in manual)     └─  findings        →  /edit, on the text
 ```
 
 ---
@@ -61,7 +62,7 @@ the file → save.
 **4. Reload an article page.** The console should carry one line:
 
 ```text
-[Radiopaedia Lint] active · /articles/epilepsy · slug: epilepsy · button: next to the title
+[Radiopaedia Lint] active · /articles/epilepsy · slug: epilepsy · mode: automatic · button: next to the title
 ```
 
 That line is the quickest answer to *"why is there no button"*: if it is missing, the script is
