@@ -16,6 +16,8 @@ takes the colour of what came back, so you know before clicking.
 [![License: MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
 [![Userscript](https://img.shields.io/badge/userscript-Tampermonkey-00485B?logo=tampermonkey&logoColor=white)](https://www.tampermonkey.net/)
 [![No build step](https://img.shields.io/badge/dependencies-none-lightgrey)](radiopaedia-lint.user.js)
+[![One file](https://img.shields.io/github/size/gmadevs/radiopaedia-lint-userscript/radiopaedia-lint.user.js?label=one%20file&color=lightgrey)](radiopaedia-lint.user.js)
+[![Last commit](https://img.shields.io/github/last-commit/gmadevs/radiopaedia-lint-userscript?color=blue)](https://github.com/gmadevs/radiopaedia-lint-userscript/commits/main)
 
 <img src="docs/lint-button.png" alt="The Lint button and its auto switch, sitting next to a Radiopaedia article title" width="820">
 
