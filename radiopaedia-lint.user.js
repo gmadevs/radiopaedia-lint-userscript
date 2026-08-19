@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.5.0
+// @version      1.5.1
 // @description  A Lint button next to the article title: asks the radiopaedia.work lint API first, says so when there is nothing to fix, and otherwise takes you to the editor with the findings highlighted on the text, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -79,6 +79,8 @@
     other:      { ink: '#6b7280', wash: 'rgba(107, 114, 128, .20)' },
   };
   const paint = (severity) => COLORS[severity] || COLORS.other;
+  // A finding you have just fixed, or ignored: still on screen, no longer a finding.
+  const SETTLED = { ink: '#059669', wash: 'rgba(5, 150, 105, .18)' };
 
   // ————————————————————————————————————————————————————————————— text
 
@@ -437,6 +439,10 @@
         }
         f.range = rangeFrom(indices[i], spot);
         f.frame = roots[i].frame;
+        // Where it lived, kept for after the edit that dissolves the range:
+        // `highlightBounds` falls back to it so the note does not fly off to
+        // the corner of the screen the moment you start typing.
+        f.home = { el: indices[i].owners[spot.from], frame: roots[i].frame };
         break;
       }
     }
@@ -481,6 +487,7 @@
     #rlx-note .rlx-head { display:flex; gap:.5em; align-items:baseline;
       font-size:12px; text-transform:uppercase; letter-spacing:.04em; opacity:.8; }
     #rlx-note .rlx-msg { margin-top:.35em; }
+    #rlx-note .rlx-hint { margin-top:.4em; font-size:12px; opacity:.62; }
     #rlx-note .rlx-snippet { margin-top:.4em; padding-left:.6em; border-left:2px solid #e5e7eb;
       color:#4b5563; font-style:italic; }
 
@@ -681,10 +688,14 @@
     placeNote();
   }
 
+  /* The note of the current finding — including one that has just closed
+   * itself under your hands. It stays where the words were, says what became
+   * of them, and says which key moves on: nothing about typing moves you. */
   function placeNote() {
     const f = stage.findings[stage.i];
     if (!f || !stage.live) { if (stage.note) stage.note.hidden = true; return; }
-    const c = paint(f.severity);
+    const settled = f.state !== 'open';
+    const c = settled ? SETTLED : paint(f.severity);
     stage.note.hidden = false;
     stage.note.style.borderLeftColor = c.ink;
     stage.note.innerHTML = '';
@@ -693,7 +704,8 @@
     head.className = 'rlx-head';
     const sev = document.createElement('span');
     sev.style.cssText = `color:${c.ink}; font-weight:700`;
-    sev.textContent = f.severity || 'finding';
+    sev.textContent = settled ? (f.state === 'ignored' ? '✓ ignored' : '✓ fixed')
+                              : (f.severity || 'finding');
     const where = document.createElement('span');
     where.textContent = f.check + (f.line ? ` · line ${f.line}` : '');
     head.append(sev, where);
@@ -703,10 +715,19 @@
     msg.textContent = f.message;
     stage.note.append(head, msg);
 
+    // Settled, and still on screen: the one thing left to say is how to leave.
+    if (settled) {
+      const hint = document.createElement('div');
+      hint.className = 'rlx-hint';
+      hint.textContent = 'Alt + → for the next one, Alt + ← to go back.';
+      stage.note.appendChild(hint);
+    }
+
     // The snippet only when it is NOT on screen. When the finding is anchored
     // you are already looking at the highlighted words, and repeating them
-    // here just makes the note tall enough to cover them.
-    if (f.snippet && !f.range) {
+    // here just makes the note tall enough to cover them. Once it is settled
+    // the old wording is history: you are looking at what replaced it.
+    if (f.snippet && !f.range && !settled) {
       const s = document.createElement('div');
       s.className = 'rlx-snippet';
       s.textContent = f.snippet;
@@ -731,14 +752,22 @@
    * a finding that wraps gets its remaining lines covered by the very note
    * explaining them — which is exactly what you do not want to hide. */
   function highlightBounds(f) {
-    if (!f.range) return null;
-    try {
-      const r = f.range.getBoundingClientRect();
+    const page = (r, frame) => {
       if (!r || (!r.width && !r.height)) return null;
-      const off = f.frame ? f.frame.getBoundingClientRect() : { left: 0, top: 0 };
+      const off = frame ? frame.getBoundingClientRect() : { left: 0, top: 0 };
       return { left: r.left + off.left, top: r.top + off.top,
                right: r.right + off.left, bottom: r.bottom + off.top };
-    } catch { return null; }   // stale range
+    };
+    if (f.range) {
+      try {
+        const box = page(f.range.getBoundingClientRect(), f.frame);
+        if (box) return box;
+      } catch { /* stale range: the paragraph below answers instead */ }
+    }
+    // The words are gone — you have just edited them — but the paragraph they
+    // were in is still there, and it is what you are looking at.
+    if (f.home?.el?.isConnected) return page(f.home.el.getBoundingClientRect(), f.home.frame);
+    return null;
   }
 
   /* Where to put the note so it stays on screen and off the highlight.
@@ -780,12 +809,15 @@
     const position = f ? open.indexOf(f) + 1 : 0;
 
     stage.bar.querySelector('.rlx-count').textContent =
-      `${position || 0}/${open.length} · ${counts.error} error · ${counts.warning} warning ` +
+      `${position ? position : '–'}/${open.length} · ${counts.error} error · ${counts.warning} warning ` +
       `· ${counts.suggestion + counts.other} other`;
 
     let status = '';
     if (!stage.findings.length) status = 'No findings: the article is clean.';
     else if (!open.length) status = 'All reviewed.';
+    // A settled finding has no snippet in the text by definition — saying it
+    // "cannot be found" about the one you have just fixed reads as a fault.
+    else if (f && f.state !== 'open') status = 'Alt + → for the next one';
     else if (f && !f.range) status = 'snippet not found in the editor text';
     stage.bar.querySelector('.rlx-status').textContent = status;
 
@@ -890,7 +922,15 @@
   }
 
   /* Re-anchor after an edit. A snippet that can no longer be found is a
-   * snippet you fixed: the finding closes itself (and "undo" reopens it). */
+   * snippet you fixed: the finding closes itself (and "undo" reopens it).
+   *
+   * What it does NOT do is move you. Closing a finding is something your
+   * typing does; going to the next one is something you do, with a key. They
+   * used to be the same event, and the first character you changed took the
+   * note off the screen and scrolled the editor to the next finding while you
+   * were still mid-word — you could no longer see the sentence you were
+   * rewriting, and getting back to it meant scrolling by hand. Now the note
+   * stays on the paragraph, turns green, and waits. */
   let reanchorPending = null;
   function reanchorSoon() {
     clearTimeout(reanchorPending);
@@ -905,8 +945,8 @@
           f.state = 'done';
         }
       }
-      if (stage.findings[stage.i]?.state !== 'open') step(1);
-      else { draw(); updateBar(); }
+      draw();
+      updateBar();
     }, 700);
   }
 

@@ -110,7 +110,8 @@ move to <kbd>Alt</kbd>.
 | Close | <kbd>Esc</kbd> | — |
 
 Everything is on the bottom bar too, including **Re-lint** to ask the linter again after you have
-saved.
+saved. Nothing on this list happens by itself: editing the text can close a finding, but only
+these move you to another one.
 
 ### Severity
 
@@ -217,6 +218,11 @@ snapshot of how things were before you started, and they do not recompute while 
 What can be checked for free is checked — the moment a snippet can no longer be found in the
 text, its finding closes itself, which is also how you see that a fix landed. <kbd>u</kbd>
 reopens it.
+
+**Closing it does not move you.** The note stays on the paragraph you are working on, turns green
+and says *✓ fixed*; the highlight goes, the count drops, and nothing scrolls. Going to the next
+finding is a key you press — <kbd>Alt</kbd> + <kbd>→</kbd> while you are typing — never something
+your typing does to you.
 
 Verdicts are **not kept**: close the tab and they are gone. That is deliberate rather than
 missing. This button is for the short loop — *"I am on this article, show me what is wrong with
