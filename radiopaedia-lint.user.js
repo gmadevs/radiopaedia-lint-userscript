@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.8.2
+// @version      1.8.3
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -95,6 +95,9 @@
     other:      { ink: '#6b7280', wash: 'rgba(107, 114, 128, .20)' },
   };
   const paint = (severity) => COLORS[severity] || COLORS.other;
+
+  // How much room the highlight takes beyond the words themselves.
+  const PAD_X = 3, PAD_Y = 1;
   // A finding you have just fixed, or ignored: still on screen, no longer a finding.
   const SETTLED = { ink: '#059669', wash: 'rgba(5, 150, 105, .18)' };
 
@@ -860,9 +863,26 @@
       }
 
       for (const s of mergeLines(spans)) {
+        /* A few pixels of air around the words.
+         *
+         * A rectangle that ends exactly where the text ends puts its edge —
+         * and the outline just outside it — on the last glyph, and the last
+         * glyph is sometimes the whole finding: "the colon should not be bold"
+         * highlights `iatrogenic:`, and the colon it is talking about ends up
+         * under the border, with the text caret alongside it for company.
+         * Selections in every editor ever written have this air; the highlight
+         * should too. */
+        let x = s.x - PAD_X, y = s.y - PAD_Y;
+        let w = s.w + PAD_X * 2, h = s.h + PAD_Y * 2;
+        if (box) {
+          // Do not let the padding push the box out of the iframe it belongs to.
+          const x1 = Math.max(x, box.left), y1 = Math.max(y, box.top);
+          const x2 = Math.min(x + w, box.right), y2 = Math.min(y + h, box.bottom);
+          x = x1; y = y1; w = x2 - x1; h = y2 - y1;
+        }
         const mark = document.createElement('div');
         mark.className = 'rlx-mark' + (k === stage.i ? ' rlx-current' : '');
-        mark.style.cssText = `left:${s.x}px; top:${s.y}px; width:${s.w}px; height:${s.h}px;` +
+        mark.style.cssText = `left:${x}px; top:${y}px; width:${w}px; height:${h}px;` +
                              `background:${c.wash}; outline-color:${c.ink};`;
         stage.layer.appendChild(mark);
       }
