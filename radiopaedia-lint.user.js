@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.8.3
+// @version      1.8.4
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -835,34 +835,59 @@
     return lines;
   }
 
+  /* The lines a finding covers, in page coordinates, ready to draw. */
+  function lineBoxes(f) {
+    const box = f.frame ? f.frame.getBoundingClientRect() : null;
+    let rects;
+    try { rects = f.range.getClientRects(); } catch { return { box, lines: [] }; }
+
+    const spans = [];
+    for (const r of rects) {
+      if (!r.width || !r.height) continue;
+      let x = r.left, y = r.top, w = r.width, h = r.height;
+      if (box) {
+        x += box.left; y += box.top;
+        // Clip against the iframe's area: it scrolls inside, and without the
+        // clip the rectangles would spill past the edges of the editor.
+        const x1 = Math.max(x, box.left), y1 = Math.max(y, box.top);
+        const x2 = Math.min(x + w, box.right), y2 = Math.min(y + h, box.bottom);
+        if (x2 <= x1 || y2 <= y1) continue;
+        x = x1; y = y1; w = x2 - x1; h = y2 - y1;
+      }
+      spans.push({ x, y, w, h });
+    }
+    return { box, lines: mergeLines(spans) };
+  }
+
+  const overlaps = (a, b) =>
+    Math.min(a.x + a.w, b.x + b.w) > Math.max(a.x, b.x) &&
+    Math.min(a.y + a.h, b.y + b.h) > Math.max(a.y, b.y);
+
   function draw() {
     if (!stage.live) return;
     stage.layer.textContent = '';
+
+    /* One phrase, two findings: only the one you are reading about.
+     *
+     * A sentence can be too long AND be missing a comma, and then two washes
+     * land on the same words. Stacked, they mix into a third colour that
+     * belongs to neither, and two outlines run through the text a pixel
+     * apart. The finding in the note is the one you are working on, so it
+     * keeps the words; the other stands down whole — not just on the line
+     * they share — and gets them back, in its own colour, the moment you step
+     * onto it. Half a highlight left behind on the lines that did not clash
+     * would read as a phrase nobody is talking about. */
+    const cur = stage.findings[stage.i];
+    const lit = cur?.range && cur.state === 'open' ? lineBoxes(cur).lines : [];
+
     for (let k = 0; k < stage.findings.length; k++) {
       const f = stage.findings[k];
       if (!f.range || f.state !== 'open') continue;
       const c = paint(f.severity);
-      const box = f.frame ? f.frame.getBoundingClientRect() : null;
-      let rects;
-      try { rects = f.range.getClientRects(); } catch { continue; }
+      const { box, lines } = lineBoxes(f);
+      if (k !== stage.i && lines.some((s) => lit.some((l) => overlaps(l, s)))) continue;
 
-      const spans = [];
-      for (const r of rects) {
-        if (!r.width || !r.height) continue;
-        let x = r.left, y = r.top, w = r.width, h = r.height;
-        if (box) {
-          x += box.left; y += box.top;
-          // Clip against the iframe's area: it scrolls inside, and without the
-          // clip the rectangles would spill past the edges of the editor.
-          const x1 = Math.max(x, box.left), y1 = Math.max(y, box.top);
-          const x2 = Math.min(x + w, box.right), y2 = Math.min(y + h, box.bottom);
-          if (x2 <= x1 || y2 <= y1) continue;
-          x = x1; y = y1; w = x2 - x1; h = y2 - y1;
-        }
-        spans.push({ x, y, w, h });
-      }
-
-      for (const s of mergeLines(spans)) {
+      for (const s of lines) {
         /* A few pixels of air around the words.
          *
          * A rectangle that ends exactly where the text ends puts its edge —
