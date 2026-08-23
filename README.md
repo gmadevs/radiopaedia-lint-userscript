@@ -11,7 +11,8 @@ severity, with the message alongside, and keys to walk through them one at a tim
 takes the colour of what came back, so you know before clicking.
 
 And in the grey margin beside the text, the sections **this kind of article is supposed to have
-and has not got** — each one beside the heading it would go under.
+and has not got** — each one beside the heading it would go under. The `⚑` next to the switch
+turns that off.
 
 [![Install](https://img.shields.io/badge/Install-userscript-2ea44f?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js)
 
@@ -22,7 +23,7 @@ and has not got** — each one beside the heading it would go under.
 [![One file](https://img.shields.io/github/size/gmadevs/radiopaedia-lint-userscript/radiopaedia-lint.user.js?label=one%20file&color=lightgrey)](radiopaedia-lint.user.js)
 [![Last commit](https://img.shields.io/github/last-commit/gmadevs/radiopaedia-lint-userscript?color=blue)](https://github.com/gmadevs/radiopaedia-lint-userscript/commits/main)
 
-<img src="docs/lint-button.png" alt="The Lint button and its auto switch, sitting next to a Radiopaedia article title" width="820">
+<img src="docs/lint-and-sections.png" alt="A Radiopaedia article with the Lint button, the auto switch and the structure flag beside its title, all red for an article with errors, and four missing sections listed down the left margin" width="900">
 
 </div>
 
