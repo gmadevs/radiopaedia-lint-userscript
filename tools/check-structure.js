@@ -132,8 +132,8 @@ function check(name, opts) {
     for (const [heading, where] of Object.entries(anchors)) {
       const row = rows.find((r) => r.title === heading);
       if (!row) { problems.push(`anchor: ${heading} is not among the missing`); continue; }
-      const el = M.anchorFor(row, seen, canonName);
-      const at = el ? el.tag : null;
+      const { el, inside } = M.anchorFor(row, seen, canonName);
+      const at = el ? (inside ? 'in ' : '') + el.tag : null;
       if (at !== where) problems.push(`anchor: ${heading} → expected ${where}, got ${at}`);
     }
   }
@@ -158,7 +158,7 @@ check('a disease article, three sections in', {
   missing: ['Epidemiology', 'Pathology', '‹any imaging modality›', 'Differential diagnosis'],
   // Each one beside the section the canon puts after it — which is where it goes.
   anchors: { Epidemiology: 'Clinical presentation', Pathology: 'Radiographic features',
-             '‹any imaging modality›': 'Radiographic features',
+             '‹any imaging modality›': 'in Radiographic features',
              'Differential diagnosis': null },
 });
 
@@ -358,10 +358,10 @@ check('a subsection anchors to the section it belongs under', {
   profile: 'disease',
   missing: ['Differential diagnosis'],
   anchors: {
-    'Risk factors': 'Epidemiology',
-    Associations: 'Epidemiology',
-    Complications: 'Clinical presentation',
-    Genetics: 'Pathology',
+    'Risk factors': 'in Epidemiology',
+    Associations: 'in Epidemiology',
+    Complications: 'in Clinical presentation',
+    Genetics: 'in Pathology',
     // A top-level row still anchors to the sections it comes before.
     Terminology: 'Epidemiology',
     Diagnosis: 'Pathology',
@@ -373,7 +373,7 @@ check('a subsection anchors to the section it belongs under', {
 check('the missing modality is the parent rule, not an exception to it', {
   title: 'Some disease', type: 'general',
   headings: [[1, 'Radiographic features'], [1, 'Treatment and prognosis']],
-  anchors: { '‹any imaging modality›': 'Radiographic features' },
+  anchors: { '‹any imaging modality›': 'in Radiographic features' },
 });
 // With the parent gone there is nothing to sit under, and the row falls back
 // to the sections it comes before.

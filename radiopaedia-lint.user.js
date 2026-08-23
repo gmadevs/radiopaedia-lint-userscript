@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      2.2.3
+// @version      2.3.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time. In the margin beside the article, the sections this kind of article is supposed to have and hasn't got.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -903,6 +903,31 @@
        away kept piling on top of each other until the margin was unreadable.
        It was counted as hidden the whole time, which is how it went unnoticed. */
     .rlx-chip[hidden] { display:none; }
+    /* Which way the heading goes, which position alone cannot say: a chip
+       beside "Clinical presentation" that means "above this" and one beside
+       "Epidemiology" that means "inside this" sit in the same place and looked
+       the same. Three cases, three glyphs, and the tooltip spells each out. */
+    .rlx-chip-rel {
+      flex:0 0 auto; width:12px; text-align:center;
+      color:#c4c4c4; font-weight:400;
+    }
+    .rlx-chip:hover .rlx-chip-rel { color:var(--rlx-miss, #d97706); }
+    .rlx-chip-optional:hover .rlx-chip-rel { color:#777; }
+
+    /* The thread to the heading itself, drawn while the pointer is on a chip.
+       Position says which heading a chip belongs to right up until the stack
+       pushes it away from one, which on a dense article is most of them — so
+       the answer is drawn rather than implied, and only for the one being
+       asked about, or twenty threads would cross the margin at once. */
+    #rlx-thread {
+      position:fixed; inset:0; width:100%; height:100%;
+      pointer-events:none; overflow:visible;
+    }
+    #rlx-thread path {
+      fill:none; stroke:var(--rlx-miss, #d97706); stroke-width:1.5;
+      stroke-linecap:round; stroke-linejoin:round;
+    }
+    #rlx-thread.rlx-thread-offered path { stroke:#9a9a9a; }
     .rlx-chip:hover { background:#fffdf7; color:#111; }
     .rlx-chip-optional {
       border-left-color:#c9c9c9; color:#8a8a8a; font-weight:400;
@@ -2043,7 +2068,10 @@
   const SECTION_SEL = 'h4.section-title, h5.section-title, h6.section-title';
   const TAG_LEVEL = { H4: 1, H5: 2, H6: 3 };
 
-  const GUTTER_GAP = 12;    // between a chip and the text column
+  /* Between a chip and the text column. Wider than it looks like it needs to
+   * be: the thread runs down this corridor, and at twelve pixels it had three
+   * to turn a corner in and came out a bracket rather than a line. */
+  const GUTTER_GAP = 20;
   const GUTTER_MIN = 132;   // narrower than this and there is no room for words
   const CHIP_MAX = 190;
   const MISS = COLORS.warning;   // a section Radiopaedia asks for and isn't there
@@ -2369,7 +2397,7 @@
        parent is `Radiographic features`. */
     if (row.parent) {
       for (const [v, hit] of seen) {
-        if (v.split('/').pop() === row.parent) return hit.el;
+        if (v.split('/').pop() === row.parent) return { el: hit.el, inside: true };
       }
     }
 
@@ -2392,7 +2420,8 @@
       const after = hit.el.compareDocumentPosition(best.el) & Node.DOCUMENT_POSITION_FOLLOWING;
       if (after) best = hit;
     }
-    return best ? best.el : null;   // nothing after it: the end of the article
+    // Nothing after it: the end of the article, which it also goes above.
+    return { el: best ? best.el : null, inside: false };
   }
 
   // ————————————————————————————————————————————— what you have said about it
@@ -2487,13 +2516,15 @@
   // ————————————————————————————————————————————————————————————— the rail
 
   const rail = { layer: null, rows: [], seen: null, canonName: null, profile: null,
-                 body: null, title: null, head: null };
+                 body: null, title: null, head: null, thread: null, lit: null };
 
   function closeRail() {
     rail.layer?.remove();
     rail.layer = null;
     rail.rows = [];
     rail.title = null;
+    rail.thread = null;
+    rail.lit = null;
     removeEventListener('scroll', placeRail, true);
     removeEventListener('resize', placeRail);
   }
@@ -2587,25 +2618,45 @@
     rail.layer.appendChild(head);
     rail.head = head;
 
+    rail.thread = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    rail.thread.id = 'rlx-thread';
+    rail.thread.innerHTML = '<path/>';
+    rail.layer.appendChild(rail.thread);
+
     for (const row of shown) {
       const chip = document.createElement('div');
       chip.className = 'rlx-chip';
       if (!row.required) chip.classList.add('rlx-chip-optional');
       if (row.level > 1) chip.classList.add('rlx-chip-sub');
       chip.innerHTML = `
+        <span class="rlx-chip-rel"></span>
         <span class="rlx-chip-name"></span>
         <button class="rlx-chip-hush" title="This article does not need it">&times;</button>`;
       chip.querySelector('.rlx-chip-name').textContent = row.title;
-      chip.title = (row.modality
-        ? 'No imaging modality under Radiographic features'
-        : `${row.required ? 'Required' : 'Offered'} by the ${canonName} structure: ${row.entry}`)
-        + '. Click to copy the heading.';
+
+      const where = anchorFor(row, seen, canonName);
+      row.anchor = where.el;
+      row.inside = where.inside;
+
+      const beside = row.anchor ? tidy(row.anchor.textContent) : null;
+      const goes = !beside ? 'Goes at the end of the article'
+        : (row.inside ? `Goes inside "${beside}"` : `Goes above "${beside}"`);
+      chip.querySelector('.rlx-chip-rel').textContent =
+        !beside ? '\u2193' : (row.inside ? '\u21b3' : '\u2191');
+      chip.title = `${goes}. ${row.modality
+        ? 'Radiographic features has no modality under it'
+        : `${row.required ? 'Required' : 'Offered'} by the ${canonName} structure: ${row.entry}`
+        }. Click to copy the heading.`;
+
       chip.addEventListener('click', (e) => {
         if (e.target.closest('.rlx-chip-hush')) return hush(row.entry);
         copyHeading(chip, row);
       });
+      chip.addEventListener('mouseenter', () => { rail.lit = row; placeRail(); });
+      chip.addEventListener('mouseleave', () => {
+        if (rail.lit === row) { rail.lit = null; placeRail(); }
+      });
       row.el = chip;
-      row.anchor = anchorFor(row, seen, canonName);
       rail.layer.appendChild(chip);
     }
 
@@ -2710,6 +2761,38 @@
       hidden.textContent = said ? `\u2195 ${said}` : '';
       hidden.hidden = !said;
     }
+
+    drawThread(box);
+  }
+
+  /* The elbow from the chip under the pointer to the heading it belongs to.
+   *
+   * Two straight runs and a corner rather than a diagonal: it has to stay
+   * readable crossing a column of other chips, and a slanted line through them
+   * is not. It lands on the TOP of the heading for a section — the line the
+   * new heading would take — and on its BOTTOM for a subsection, where that
+   * section's own text begins. So the thread says the same thing as the glyph
+   * on the chip, in the place it is talking about. */
+  function drawThread(box) {
+    const path = rail.thread?.firstElementChild;
+    if (!path) return;
+
+    const row = rail.lit;
+    if (!row || row.el.hidden) return void path.removeAttribute('d');
+
+    const chip = row.el.getBoundingClientRect();
+    const rect = row.anchor?.isConnected ? row.anchor.getBoundingClientRect() : null;
+    const tx = Math.round(box.left - 4);
+    const ty = Math.round(rect ? (row.inside ? rect.bottom - 2 : rect.top + 1) : box.bottom);
+    const cx = Math.round(chip.right);
+    const cy = Math.round(chip.top + chip.height / 2);
+    // The corner sits in the corridor rather than halfway to the chip, so the
+    // vertical run is always in the same place whatever the window is doing.
+    const mx = tx - 8;
+
+    rail.thread.classList.toggle('rlx-thread-offered', !row.required);
+    path.setAttribute('d', `M${cx},${cy} H${mx} V${ty} H${tx}`
+                         + ` M${tx - 4},${ty - 3} L${tx},${ty} L${tx - 4},${ty + 3}`);
   }
 
   // ————————————————————————————————————————————————————————————— wiring

@@ -49,6 +49,7 @@ article_type                                            └─  the ones missing
 - [Proper nouns](#proper-nouns)
 - [The sections that are missing](#the-sections-that-are-missing)
   - [Required and offered](#required-and-offered)
+  - [Above it, or inside it](#above-it-or-inside-it)
   - [When the sections are out of order](#when-the-sections-are-out-of-order)
   - [A chip is beside a heading or it is nowhere](#a-chip-is-beside-a-heading-or-it-is-nowhere)
 - [How it works](#how-it-works)
@@ -300,10 +301,29 @@ for a section it requires, grey and light for one it merely offers. **Where it s
 indent: a subsection is stepped in under the section it belongs to.
 
 ```
-┃ Epidemiology         ×     amber, bold      Radiopaedia requires it
-┃ Terminology          ×     grey, light      Radiopaedia offers it
-    ┃ Genetics         ×     indented         a subsection, under a section that is there
+┃ ↑ Epidemiology       ×     amber, bold      Radiopaedia requires it
+┃ ↑ Terminology        ×     grey, light      Radiopaedia offers it
+    ┃ ↳ Genetics       ×     indented         a subsection, under a section that is there
 ```
+
+### Above it, or inside it
+
+A chip beside `Clinical presentation` that means *above this* and one beside `Epidemiology` that
+means *inside this* were sitting in the same place and looking the same. Position cannot tell them
+apart, so the chip says which:
+
+| | |
+| :-- | :-- |
+| `↑` | goes **above** the heading it is beside |
+| `↳` | goes **inside** it, as a subsection |
+| `↓` | goes at the **end** of the article — there is nothing after it to come before |
+
+Position also stops being an answer the moment the stack pushes a chip away from its heading,
+which on a dense article is most of them. So put the pointer on a chip and a thread is drawn to
+the heading itself, down the corridor between the margin and the text: it lands on the **top** of
+the heading for a section — the line the new one would take — and on its **bottom** for a
+subsection, where that section's own text begins. One at a time, because twenty threads across the
+margin would be a worse answer than none.
 
 Only the required ones are shown to begin with — `+ show 8 optional` in the header brings the rest,
 and it stays on until you turn it off. The optional ones are filtered, or they would arrive thirty
