@@ -317,5 +317,45 @@ check('a real article with a section under the wrong parent', {
   anchors: { Epidemiology: 'Clinical presentation', 'Differential diagnosis': null },
 });
 
+// —— a subsection belongs beside its parent, not beside what follows it ————
+// radiopaedia.org/articles/aqueductal-stenosis, headings as the page has them.
+// `Risk factors` and `Associations` belong under `Epidemiology`; `Complications`
+// under `Clinical presentation`. Anchored by what the canon names next they
+// would line up against the section AFTER their parent — Risk factors beside
+// Clinical presentation, Complications beside Pathology — and read as though
+// they belonged to it.
+check('a subsection anchors to the section it belongs under', {
+  title: 'Aqueduct stenosis', type: 'general',
+  headings: [[1, 'Epidemiology'], [1, 'Clinical presentation'], [1, 'Pathology'],
+             [1, 'Radiographic features'], [2, 'Ultrasound'], [2, 'MRI'],
+             [1, 'Treatment and prognosis']],
+  profile: 'disease',
+  missing: ['Differential diagnosis'],
+  anchors: {
+    'Risk factors': 'Epidemiology',
+    Associations: 'Epidemiology',
+    Complications: 'Clinical presentation',
+    Genetics: 'Pathology',
+    // A top-level row still anchors to the sections it comes before.
+    Terminology: 'Epidemiology',
+    Diagnosis: 'Pathology',
+    'Differential diagnosis': null,
+  },
+});
+// The missing modality is not a case of its own: its parent is `Radiographic
+// features`, and the same rule puts it there.
+check('the missing modality is the parent rule, not an exception to it', {
+  title: 'Some disease', type: 'general',
+  headings: [[1, 'Radiographic features'], [1, 'Treatment and prognosis']],
+  anchors: { '‹any imaging modality›': 'Radiographic features' },
+});
+// With the parent gone there is nothing to sit under, and the row falls back
+// to the sections it comes before.
+check('a subsection whose parent is absent falls back', {
+  title: 'Some disease', type: 'general',
+  headings: [[1, 'Treatment and prognosis']],
+  anchors: { '‹any imaging modality›': 'Treatment and prognosis' },
+});
+
 console.log(failed ? `\n${failed} failed` : '\nall good');
 process.exit(failed ? 1 : 0);

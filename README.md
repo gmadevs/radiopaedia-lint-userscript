@@ -49,6 +49,7 @@ article_type                                            └─  the ones missing
 - [The sections that are missing](#the-sections-that-are-missing)
   - [Required and offered](#required-and-offered)
   - [When the sections are out of order](#when-the-sections-are-out-of-order)
+  - [A chip is beside a heading or it is nowhere](#a-chip-is-beside-a-heading-or-it-is-nowhere)
 - [How it works](#how-it-works)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
@@ -247,9 +248,17 @@ other half, and the two do not overlap.
 
 So: in the grey margin to the left of the text, one chip for each section the article has not got
 — the ones Radiopaedia requires to begin with, its suggestions a click away — sitting **beside the
-heading it would go under**. Miss `Pathology` and the chip lands
-next to `Radiographic features`, because that is where the section goes. Miss something with
-nothing after it, and it lands at the end of the text, because that is where *that* goes.
+heading it would go under**. Miss `Pathology` and the chip lands next to `Radiographic features`,
+because that is where the section goes. Miss something with nothing after it, and it lands at the
+end of the text, because that is where *that* goes.
+
+A **subsection** goes beside its parent instead, and that is not the same rule. What identifies
+`Complications` is not what comes after it, it is what it sits inside: under `Clinical
+presentation` it is the complication of the disease, under `Treatment and prognosis` it is the
+complication of the treatment. Anchored by what the canon names next it would land against
+`Pathology` and read as though it belonged there — and `Risk factors`, whose parent is
+`Epidemiology`, would line up against `Clinical presentation`. The missing modality is this same
+rule rather than a case of its own: its parent is `Radiographic features`.
 
 ```
       ┌──────────────────────┐
@@ -388,6 +397,18 @@ would be lying about the space; saying less is not.
 
 The article's own DOM is never touched, exactly as with the highlights. The chips are a layer over
 the page, placed from the headings' own rectangles and moved on every frame that scrolls.
+
+### A chip is beside a heading or it is nowhere
+
+Scroll past a heading and its chip goes with it; reach the bottom of the window and the rest wait
+their turn. Neither is a limitation worked around — it is what a margin note is. The first version
+clamped every chip into the space under the header instead, so scrolling down a long article swept
+them into a pile at the top left, twenty headings stacked against a paragraph none of them had
+anything to do with; and on a short article with the optional ones showing, the stack ran off the
+bottom of the window and kept going.
+
+The header says how many are off screen in each direction — `↕ 3 above, 2 below` — and the count
+badge's tooltip lists all of them, so nothing disappears without being counted.
 
 ### Changing the canon
 
@@ -575,6 +596,7 @@ reading articles will never come near, and a number a loop would reach in second
 | No chips, and the linter has answered | Nothing required is missing, or the article is a kind Radiopaedia asks nothing of | Signs, devices, comparisons and biographies have no required sections; that is Radiopaedia's doing |
 | The wrong sections are being asked for | The kind of article was guessed wrong | Change it in the menu in the rail header; it is remembered for that article |
 | Chips are thin coloured tabs | The window is too narrow for words in the margin | Widen it past ~1150px, or read the headings from the tooltips |
+| Fewer chips than the count says | Their headings are off screen | `↕ N above, M below` in the header says which way to scroll; the count badge's tooltip lists them all |
 | `⇅` in the header | Some sections are not in the canon's order | The placements are approximate on that article; the linter reports the wrong-parent half of it separately |
 | Only two or three chips, and you wanted more | Optional headings are hidden by default | `+ show N optional` in the header; it stays on |
 

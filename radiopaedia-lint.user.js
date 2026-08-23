@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      2.1.0
+// @version      2.2.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time. In the margin beside the article, the sections this kind of article is supposed to have and hasn't got.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -856,6 +856,10 @@
        not about any one missing heading — and because it is the reason the
        placements below are approximate rather than exact. */
     .rlx-rail-jumbled { color:#b45309; cursor:help; }
+    /* How many chips are off screen in each direction. Flex-basis 100% so it
+       takes a line of its own rather than squeezing the count out of the
+       first one. */
+    .rlx-rail-hidden { flex:1 1 100%; color:#aaa; font-weight:400; cursor:help; }
     .rlx-rail-what { flex:1 1 auto; }
     /* The kind of article, and the whole point of its being a menu: the guess
        is a guess, and on the article it gets wrong it is one click to say so. */
@@ -2338,22 +2342,37 @@
    * features` itself, not after whatever follows it. */
   function anchorFor(row, seen, canonName) {
     const rows = CANON.canons[canonName] || [];
-    if (row.modality) {
-      const rf = seen.get('Radiographic features');
-      if (rf) return rf.el;
+
+    /* A SUBSECTION goes beside the section it belongs under, whenever that
+       section is there.
+       
+       What identifies `Complications` is not what comes after it, it is what
+       it sits inside: under `Clinical presentation` it is the complication of
+       the disease, under `Treatment and prognosis` the complication of the
+       treatment. Anchored by the rule below it would land beside `Pathology`,
+       which is the next section the canon names and reads as though it
+       belonged to it — and `Risk factors` and `Associations`, whose parent is
+       `Epidemiology`, would line up against `Clinical presentation`.
+       
+       The missing modality is this same rule and not a case of its own: its
+       parent is `Radiographic features`. */
+    if (row.parent) {
+      for (const [v, hit] of seen) {
+        if (v.split('/').pop() === row.parent) return hit.el;
+      }
     }
-    /* Every section the canon puts after this one and the article has, and
-       then the one that is HIGHEST ON THE PAGE — not the one the canon
-       happens to name first.
+
+    /* A SECTION goes beside the sections it comes before — and of those, the
+       one HIGHEST ON THE PAGE, not the one the canon happens to name first.
        
        The two are the same answer on an article whose sections are in order,
        and they part company on one that is not. Take an article that runs
        `Radiographic features` and then `Clinical presentation`, which is
        backwards, and a missing `Epidemiology`: the canon names Clinical
-       presentation first, so the old rule put the chip below Radiographic
-       features — beside the second of the two sections it is supposed to come
-       before. Epidemiology goes above BOTH, so the anchor has to be whichever
-       of them the reader meets first. */
+       presentation first, so reading the order off the canon put the chip
+       below Radiographic features — beside the second of the two sections it
+       is supposed to come before. Epidemiology goes above BOTH, so the anchor
+       has to be whichever of them the reader meets first. */
     let best = null;
     for (let j = Math.ceil(row.order); j < rows.length; j++) {
       const hit = seen.get(rows[j].v);
@@ -2498,12 +2517,15 @@
     const head = document.createElement('div');
     head.className = 'rlx-rail-head';
     head.innerHTML = `
-      <span class="rlx-rail-n">${need}</span>
+      <span class="rlx-rail-n" title="${
+        rows.map((r) => (r.required ? '' : '· ') + r.title).join('\n').replace(/"/g, '')
+      }">${need}</span>
       <span class="rlx-rail-what">${need
         ? `section${need > 1 ? 's' : ''} missing`
         : (aside ? 'all set aside' : 'nothing required')}</span>
       ${jumbled ? '<span class="rlx-rail-jumbled" title="Some sections are not in the order the canon puts them in, which the linter reports separately. The placements below are approximate on this article.">&#8645;</span>' : ''}
       <button class="rlx-rail-off" title="Hide the structure rail everywhere">&times;</button>
+      <span class="rlx-rail-hidden" hidden title="Chips whose heading is off screen. Scroll to them."></span>
       <select class="rlx-rail-kind" title="What kind of article this is. The canon follows from it."></select>
       ${optional.length || showOptional()
         ? `<button class="rlx-rail-more${showOptional() ? ' rlx-on' : ''}">${
@@ -2593,22 +2615,49 @@
     rail.head.style.left = `${left}px`;
     rail.head.style.width = slim ? 'auto' : `${width}px`;
     rail.head.style.top = `${Math.max(8, Math.min(box.top, innerHeight - 40))}px`;
-    const headBottom = rail.head.getBoundingClientRect().bottom;
 
-    // Two missing headings can want the same heading to sit beside, and then
-    // they want the same pixel. Sorted by where they belong and pushed down
-    // one after another: the order stays the canon's, and nothing is hidden
-    // underneath anything.
+    /* A chip is beside a heading or it is nowhere.
+     *
+     * The first version clamped every chip to just under the header, so that
+     * scrolling down a long article swept them all into a pile at the top left
+     * — twenty headings stacked against a paragraph none of them had anything
+     * to do with — and on a short article with the optional ones showing, the
+     * stack ran off the bottom of the window and kept going.
+     *
+     * Both are the same mistake: a margin note whose text has gone is not a
+     * margin note any more. The heading scrolled past, the chip goes with it;
+     * the stack reaching the bottom of the window, the rest wait their turn. It
+     * costs nothing to scroll back, and the header's count still says how many
+     * there are altogether. */
+    const headBottom = rail.head.getBoundingClientRect().bottom;
+    const fold = innerHeight - 8;
     let floor = headBottom + 6;
+    let above = 0, below = 0;
+
     for (const row of rail.rows) {
-      const target = row.anchor?.isConnected
-        ? row.anchor.getBoundingClientRect().top
-        : box.bottom;
-      const top = Math.max(floor, target);
+      const rect = row.anchor?.isConnected ? row.anchor.getBoundingClientRect() : null;
+      const target = rect ? rect.top : box.bottom;
+      const gone = rect ? rect.bottom < 0 : box.bottom < 0;
+      if (gone) { row.el.hidden = true; above++; continue; }
+
+      row.el.hidden = false;
       row.el.style.left = `${left}px`;
       row.el.style.width = slim ? '8px' : `${width}px`;
-      row.el.style.top = `${top}px`;
-      floor = top + row.el.getBoundingClientRect().height + 4;
+      row.el.style.top = `${Math.max(floor, target)}px`;
+
+      // Measured where it has been put, not before: the width decides how many
+      // lines the heading takes, and that decides where the next one starts.
+      const placed = row.el.getBoundingClientRect();
+      if (placed.top > fold) { row.el.hidden = true; below++; continue; }
+      floor = placed.bottom + 4;
+    }
+
+    const hidden = rail.head.querySelector('.rlx-rail-hidden');
+    if (hidden) {
+      const said = [above ? `${above} above` : '', below ? `${below} below` : '']
+        .filter(Boolean).join(', ');
+      hidden.textContent = said ? `\u2195 ${said}` : '';
+      hidden.hidden = !said;
     }
   }
 
