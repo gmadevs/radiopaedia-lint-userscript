@@ -245,16 +245,18 @@ not recognised for that article type — *"Osteology" is not a recognised headin
 type* — and it never says anything about the heading that should be there and is not. This is the
 other half, and the two do not overlap.
 
-So: in the grey margin to the left of the text, one chip for each required section the article
-has not got, sitting **beside the heading it would go under**. Miss `Pathology` and the chip lands
+So: in the grey margin to the left of the text, one chip for each section the article has not got
+— the ones Radiopaedia requires to begin with, its suggestions a click away — sitting **beside the
+heading it would go under**. Miss `Pathology` and the chip lands
 next to `Radiographic features`, because that is where the section goes. Miss something with
 nothing after it, and it lands at the end of the text, because that is where *that* goes.
 
 ```
       ┌──────────────────────┐
-      │ 4  sections missing  │   CSF overdrainage
+      │ 4  sections missing ×│   CSF overdrainage
       │ Disease           ▾  │   ────────────────
-      └──────────────────────┘   CSF overdrainage, also known as overshunting, is …
+      │ + show 9 optional    │   CSF overdrainage, also known as overshunting, is …
+      └──────────────────────┘
       ┌──────────────────────┐
       │ Epidemiology       × │   Clinical presentation
       └──────────────────────┘   Classically, patients present with headaches …
