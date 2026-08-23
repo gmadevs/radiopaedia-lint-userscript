@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.9.0
+// @version      1.10.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -833,23 +833,67 @@
     #rlx-note .rlx-snippet { margin-top:.4em; padding-left:.6em; border-left:2px solid #e5e7eb;
       color:#4b5563; font-style:italic; }
 
+    /* One row, always. Wrapping put the status on a second line as soon as the
+       sentence grew, and the bar changed height under the pointer while you
+       were working in it — the buttons you were aiming at moved. The status is
+       the only part that gives ground now: it shrinks and ends in an ellipsis,
+       and everything you can press keeps its size.
+
+       Top and bottom are set from the script, by placeBar(). The 18px here is
+       what it looks like until the first measurement lands. */
     #rlx-bar {
-      position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:99999;
-      display:flex; align-items:center; gap:.5em; flex-wrap:wrap; justify-content:center;
-      max-width:min(62em, 94vw); padding:.55em .7em; border-radius:12px;
+      /* Centred by auto margins between left:0 and right:0, not by
+         left:50% + translateX. The old pair looks the same and is not: a fixed
+         box that starts at the middle of the window has only the right half to
+         be wide in, so the bar was being sized against 50% of the screen and
+         its last buttons hung outside its own background. Two edges and auto
+         margins give it the whole width to shrink-to-fit in — and fit-content
+         is what makes it shrink at all, since a box pinned to both edges with
+         width:auto simply fills them, which is a dark pill with a lot of
+         nothing in it once half the buttons are gone. */
+      position:fixed; left:0; right:0; margin:0 auto; bottom:18px; z-index:99999;
+      display:flex; align-items:center; gap:.45em; flex-wrap:wrap; justify-content:center;
+      width:fit-content; max-width:min(64em, 96vw); padding:.5em .7em; border-radius:13px;
       background:#111827; color:#f9fafb; box-shadow:0 8px 30px rgba(0,0,0,.35);
-      font:13px/1.4 system-ui,-apple-system,sans-serif;
+      font:14px/1.4 system-ui,-apple-system,sans-serif;
     }
-    #rlx-bar button { padding:.35em .7em; border:0; border-radius:7px;
-      background:#374151; color:#f9fafb; font:inherit; font-weight:600; cursor:pointer; }
-    #rlx-bar button:hover:not([disabled]) { background:#4b5563; }
-    #rlx-bar button[disabled] { opacity:.4; cursor:default; }
-    #rlx-bar .rlx-count { font-variant-numeric:tabular-nums; opacity:.85; }
-    #rlx-bar .rlx-title { font-weight:700; }
-    #rlx-bar .rlx-status { max-width:26em; overflow:hidden; text-overflow:ellipsis;
-      white-space:nowrap; opacity:.9; }
-    #rlx-bar .rlx-sep { width:1px; align-self:stretch; background:#4b5563; }
-    #rlx-bar .rlx-close { background:transparent; font-size:16px; line-height:1; }
+    #rlx-bar button { flex:0 0 auto; padding:.4em .8em; border:0; border-radius:8px;
+      background:#374151; color:#e5e7eb; font:inherit; font-weight:600; cursor:pointer; }
+    #rlx-bar button:hover:not([disabled]) { background:#4b5563; color:#fff; }
+    #rlx-bar button[disabled] { opacity:.35; cursor:default; }
+
+    /* Done is the one you press a hundred times an afternoon, and it was the
+       same grey as Re-lint, which you press once. Green rather than the
+       severity's own colour: red on the button you are meant to press reads as
+       a warning about pressing it, and green is already what the finding turns
+       when you do. */
+    #rlx-bar .rlx-primary { background:#059669; color:#fff; }
+    #rlx-bar .rlx-primary:hover:not([disabled]) { background:#047857; color:#fff; }
+
+    /* The arrows are arrows, not buttons: no fill until you point at them. */
+    #rlx-bar .rlx-step { background:transparent; padding:.28em .5em;
+      font-size:17px; line-height:1; }
+
+    #rlx-bar .rlx-count { display:flex; align-items:center; gap:.42em; flex:0 0 auto;
+      font-variant-numeric:tabular-nums; }
+    #rlx-bar .rlx-of { font-weight:600; }
+    /* A severity is a colour in this script — on the highlight, on the note,
+       on the button by the title. Here too, which is three words shorter. */
+    #rlx-bar .rlx-tally { display:inline-flex; align-items:center; gap:.3em; }
+    #rlx-bar .rlx-dot { width:.62em; height:.62em; border-radius:50%; }
+    #rlx-bar .rlx-sepdot { opacity:.4; }
+    #rlx-bar .rlx-known { opacity:.65; }
+    #rlx-bar .rlx-title { font-weight:700; flex:0 0 auto; }
+    /* flex-basis 0, so the line is measured as though the status were not
+       there: it never pushes itself onto a second row, it takes whatever room
+       is left over and ends in an ellipsis. Wrapping is still on for a window
+       narrow enough that the buttons alone will not fit — better a second row
+       than a button off the edge — but the sentence cannot cause it. */
+    #rlx-bar .rlx-status { flex:1 1 0; min-width:0; overflow:hidden;
+      text-overflow:ellipsis; white-space:nowrap; opacity:.85; }
+    #rlx-bar .rlx-sep { width:1px; align-self:stretch; background:#4b5563; flex:0 0 auto; }
+    #rlx-bar .rlx-close, #rlx-bar .rlx-flip { background:transparent; font-size:16px;
+      line-height:1; padding:.3em .5em; }
 
     #rlx-banner {
       position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:99999;
@@ -901,19 +945,21 @@
     stage.bar.innerHTML = `
       <span class="rlx-title">Lint</span>
       <span class="rlx-count"></span>
-      <span class="rlx-sep"></span>
-      <button data-act="prev" title="Previous (k)">&lsaquo;</button>
-      <button data-act="next" title="Next (j)">&rsaquo;</button>
-      <button data-act="done" title="Done (s)">&#10003; Done</button>
+      <span class="rlx-sep rlx-sep-nav"></span>
+      <button data-act="prev" class="rlx-step" title="Previous (k)">&lsaquo;</button>
+      <button data-act="next" class="rlx-step" title="Next (j)">&rsaquo;</button>
+      <button data-act="done" class="rlx-primary" title="Done (s)">&#10003; Done</button>
       <button data-act="ignore" title="Ignore (x)">Ignore</button>
       <button data-act="undo" title="Undo the last one (u)">Undo</button>
-      <span class="rlx-sep"></span>
+      <span class="rlx-sep rlx-sep-tools"></span>
       <button data-act="copy" title="Copy the message (c)">Copy</button>
       <button data-act="propose" title="Add this name to the shared list (p)">+ Name</button>
       <button data-act="reload" title="Ask the linter again">Re-lint</button>
+      <button data-act="flip" class="rlx-flip" title="Move the bar to the other edge (t)">&#8645;</button>
       <button data-act="close" class="rlx-close" title="Close (Esc)">&times;</button>
       <span class="rlx-status"></span>`;
     document.body.appendChild(stage.bar);
+    placeBar(true);
     stage.bar.addEventListener('click', (e) => {
       const what = e.target.closest('[data-act]')?.dataset.act;
       if (what) act(what);
@@ -1062,6 +1108,7 @@
 
   function draw() {
     if (!stage.live) return;
+    placeBar();
     stage.layer.textContent = '';
 
     /* One phrase, two findings: only the one you are reading about.
@@ -1276,11 +1323,94 @@
    * meant to sit clear of. The first that lands clean wins. If the highlight
    * is so tall that nothing fits beside it, the note goes below anyway and
    * hovering it fades it out, which is what the CSS is for. */
+  /* Where the bar can stand without covering anything.
+   *
+   * It used to sit 18px off the bottom and that was the end of it — which is
+   * fine until the page puts something there, and Radiopaedia does: a sticky
+   * promo strip, and on the edit page the Tags field and the buttons under it.
+   * A bar that covers the form you came to fill in is worse than no bar.
+   *
+   * So it looks. `elementsFromPoint` along the edge it wants to occupy, at its
+   * own three x positions rather than one, because a banner does not have to
+   * be centred to be in the way; anything of ours is skipped; and the first
+   * thing found that is `fixed` or `sticky` — itself or through an ancestor,
+   * since the strip is usually a child of the pinned container — decides how
+   * far up to move. Everything else scrolls away on its own and is not worth
+   * dodging.
+   *
+   * Capped at 40% of the window: a fixed element that tall is a cookie wall or
+   * a lightbox, and the answer to those is not to climb over them.
+   *
+   * Measured at most four times a second. Scrolling fires this through the
+   * same frame the highlights are redrawn in, and hit-testing three points and
+   * reading a computed style on each is not free. */
+  const BAR_EDGE = 18;
+  const BAR_TOP_KEY = 'rlx-bar-top';   // which edge you last put it on
+
+  function barIsTop() {
+    try { return localStorage.getItem(BAR_TOP_KEY) === '1'; } catch { return false; }
+  }
+
+  function setBarTop(on) {
+    try { localStorage.setItem(BAR_TOP_KEY, on ? '1' : '0'); } catch { /* this session only */ }
+    placeBar(true);
+    placeNote();
+  }
+
+  function pinnedAncestor(el) {
+    for (let n = el; n && n.nodeType === 1 && n !== document.documentElement; n = n.parentElement) {
+      const pos = getComputedStyle(n).position;
+      if (pos === 'fixed' || pos === 'sticky') return n;
+    }
+    return null;
+  }
+
+  let barMeasured = 0;
+  function placeBar(force) {
+    if (!stage.live || !stage.bar) return;
+    const now = performance.now();
+    if (!force && now - barMeasured < 250) return;
+    barMeasured = now;
+
+    const top = barIsTop();
+    const r = stage.bar.getBoundingClientRect();
+    const y = top ? 2 : innerHeight - 2;
+    const xs = [r.left + 2, (r.left + r.right) / 2, r.right - 2];
+
+    let clear = BAR_EDGE;
+    for (const x0 of xs) {
+      const x = Math.min(Math.max(x0, 1), innerWidth - 1);
+      for (const el of document.elementsFromPoint(x, y)) {
+        if (el.closest('#rlx-bar, #rlx-note, #rlx-banner, #rlx-layer')) continue;
+        const pinned = pinnedAncestor(el);
+        if (!pinned) continue;
+        const b = pinned.getBoundingClientRect();
+        const room = (top ? b.bottom : innerHeight - b.top) + BAR_EDGE;
+        if (room > clear) clear = room;
+        break;
+      }
+    }
+    clear = Math.min(clear, innerHeight * 0.4);
+
+    stage.bar.style.top = top ? `${Math.round(clear)}px` : 'auto';
+    stage.bar.style.bottom = top ? 'auto' : `${Math.round(clear)}px`;
+  }
+
   function notePlacement(spot, w, h) {
-    const gap = 10, edge = 12, barRoom = 76;   // the bar lives at the bottom
+    const gap = 10, edge = 12;
+
+    /* The room the bar takes, on the edge the bar is actually on — measured
+     * rather than assumed. It used to be 76px of reserved space at the bottom
+     * and nothing at the top, which was true while the bar could only be in
+     * one place. */
+    const b = stage.bar?.getBoundingClientRect();
+    const barAtTop = b && b.top < innerHeight / 2;
+    const roomTop = b && barAtTop ? b.bottom + gap : edge;
+    const roomBottom = b && !barAtTop ? innerHeight - b.top + gap : edge;
+
     const clamp = (p) => ({
       left: Math.min(Math.max(p.left, edge), Math.max(edge, innerWidth - w - edge)),
-      top: Math.min(Math.max(p.top, edge), Math.max(edge, innerHeight - h - barRoom)),
+      top: Math.min(Math.max(p.top, roomTop), Math.max(roomTop, innerHeight - h - roomBottom)),
     });
     const clear = (p) => p.left + w <= spot.left || p.left >= spot.right ||
                          p.top + h <= spot.top || p.top >= spot.bottom;
@@ -1306,23 +1436,68 @@
     const f = stage.findings[stage.i];
     const position = f ? open.indexOf(f) + 1 : 0;
 
-    /* The names are counted apart rather than not counted. The linter said
+    /* The count, in the colours the rest of the script already speaks in.
+     *
+     * It used to read "–/0 · 0 error · 0 warning · 0 other", which spends a
+     * third of the bar to say nothing three times over. A severity is a colour
+     * here — on the highlight, on the note, on the button by the title — so it
+     * can be a dot, and a severity nothing is left of simply does not appear.
+     * When the walk is over the numbers are over too, and what is worth saying
+     * is what you did: "All reviewed · 9 fixed · 3 ignored".
+     *
+     * The names are counted apart rather than not counted. The linter said
      * something about them and we decided it did not apply: that is a
      * decision, and a decision belongs on screen next to the numbers it
      * changed, not behind them. */
-    stage.bar.querySelector('.rlx-count').textContent =
-      `${position ? position : '–'}/${open.length} · ${counts.error} error · ${counts.warning} warning ` +
-      `· ${counts.suggestion + counts.other} other` +
-      (stage.hidden ? ` · ${stage.hidden} known ${stage.hidden > 1 ? 'names' : 'name'}` : '');
+    const count = stage.bar.querySelector('.rlx-count');
+    count.textContent = '';
+
+    const word = (text, cls) => {
+      if (count.childNodes.length) {
+        const dot = document.createElement('span');
+        dot.className = 'rlx-sepdot';
+        dot.textContent = '·';
+        count.appendChild(dot);
+      }
+      const el = document.createElement('span');
+      if (cls) el.className = cls;
+      el.textContent = text;
+      count.appendChild(el);
+      return el;
+    };
+
+    if (open.length) {
+      word(`${position ? position : '–'}/${open.length}`, 'rlx-of');
+      for (const sev of [...SEVEREST, 'other']) {
+        if (!counts[sev]) continue;
+        const tally = word('', 'rlx-tally');
+        const dot = document.createElement('span');
+        dot.className = 'rlx-dot';
+        dot.style.background = paint(sev === 'other' ? null : sev).ink;
+        const n = document.createElement('span');
+        n.textContent = String(counts[sev]);
+        tally.append(dot, n);
+        tally.title = `${counts[sev]} ${sev}${counts[sev] > 1 ? 's' : ''}`;
+      }
+    } else {
+      word('All reviewed', 'rlx-of');
+      const done = stage.findings.filter((x) => x.state === 'done').length;
+      const ignored = stage.findings.filter((x) => x.state === 'ignored').length;
+      if (done) word(`${done} fixed`);
+      if (ignored) word(`${ignored} ignored`);
+    }
+    if (stage.hidden) {
+      word(`${stage.hidden} known ${stage.hidden > 1 ? 'names' : 'name'}`, 'rlx-known');
+    }
 
     let status = '';
     if (!stage.findings.length) status = 'No findings: the article is clean.';
-    else if (!open.length) status = 'All reviewed.';
     // A settled finding has no snippet in the text by definition — saying it
     // "cannot be found" about the one you have just fixed reads as a fault.
-    else if (f && f.state !== 'open') status = 'Alt + → for the next one';
-    else if (f && !f.range) status = 'snippet not found in the editor text';
+    else if (f && f.state !== 'open' && open.length) status = 'Alt + → for the next one';
+    else if (f && f.state === 'open' && !f.range) status = 'snippet not found in the editor text';
     stage.bar.querySelector('.rlx-status').textContent = status;
+    placeBar();
 
     const disable = (name, v) => {
       const b = stage.bar.querySelector(`[data-act="${name}"]`);
@@ -1332,16 +1507,28 @@
     disable('done', !f); disable('ignore', !f); disable('copy', !f);
     disable('undo', !stage.history.length);
 
+    /* What is on the bar is what there is to do. A button that can never be
+     * pressed from here is not an option, it is furniture: with nothing left
+     * open there is no finding to mark, to skip or to copy, and Undo, Re-lint
+     * and the close button are the whole of what is left. Nothing moves while
+     * you are working — this is the end of the walk, not a state you pass
+     * through. */
+    const show = (name, on) => {
+      const b = stage.bar.querySelector(`[data-act="${name}"]`);
+      if (b) b.hidden = !on;
+    };
+    const walking = open.length > 0;
+    for (const b of ['prev', 'next', 'done', 'ignore', 'copy']) show(b, walking);
+    stage.bar.querySelector('.rlx-sep-nav').hidden = !walking;
+
     // Offered only where there is a name to offer: a `ListCaps` finding whose
     // opening words are in neither the file nor your own list of things
-    // already proposed.
+    // already proposed. Hidden otherwise — it appears exactly when it works.
     const name = f && f.state === 'open' && !proposed()[fold(f.propose || '')] ? f.propose : null;
     const add = stage.bar.querySelector('[data-act="propose"]');
     if (add) {
-      add.disabled = !name;
-      add.title = name
-        ? `Add '${name}' to the shared list of names (p)`
-        : 'Add a proper noun to the shared list — offered on a capitalised list item';
+      add.hidden = !name;
+      add.title = name ? `Add '${name}' to the shared list of names (p)` : '';
     }
   }
 
@@ -1426,6 +1613,7 @@
         placeNote();
         return;
       }
+      case 'flip': return setBarTop(!barIsTop());
       case 'reload': return runLint(stage.slug, { force: true });
       case 'close': return destroyStage();
     }
@@ -1451,7 +1639,7 @@
     if (isTyping(e.target)) return;
 
     const m = { j: 'next', k: 'prev', s: 'done', x: 'ignore', u: 'undo',
-                c: 'copy', p: 'propose', Escape: 'close' }[e.key];
+                c: 'copy', p: 'propose', t: 'flip', Escape: 'close' }[e.key];
     if (m) { e.preventDefault(); act(m); }
   }
 

@@ -155,11 +155,25 @@ move to <kbd>Alt</kbd>.
 | Undo the last verdict | <kbd>u</kbd> | — |
 | Copy the message | <kbd>c</kbd> | — |
 | Add a proper noun | <kbd>p</kbd> | — |
+| Move the bar to the other edge | <kbd>t</kbd> | — |
 | Close | <kbd>Esc</kbd> | — |
 
 Everything is on the bottom bar too, including **Re-lint** to ask the linter again after you have
 saved. Nothing on this list happens by itself: editing the text can close a finding, but only
 these move you to another one.
+
+### The bar keeps out of the way
+
+It measures what is under it before it settles: a sticky promo strip, the Tags field, anything the
+page has pinned to the bottom edge — the bar sits **above** it rather than on top of it, and
+re-measures as you scroll and resize. When the automatic answer is wrong, <kbd>t</kbd> moves it to
+the top edge instead, where it does the same thing under the site's header, and it stays where you
+put it.
+
+The count reads in the colours the highlights already use — `3/12 · 🔴 1 · 🟠 3 · 🔵 8` — and a
+severity with nothing left in it simply disappears. When the last finding is reviewed the numbers
+give way to what you did, `All reviewed · 9 fixed · 3 ignored`, and the buttons that no longer do
+anything go with them.
 
 ### Severity
 
