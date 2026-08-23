@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      2.2.0
+// @version      2.2.1
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time. In the margin beside the article, the sections this kind of article is supposed to have and hasn't got.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -860,6 +860,7 @@
        takes a line of its own rather than squeezing the count out of the
        first one. */
     .rlx-rail-hidden { flex:1 1 100%; color:#aaa; font-weight:400; cursor:help; }
+    .rlx-rail-hidden[hidden] { display:none; }
     .rlx-rail-what { flex:1 1 auto; }
     /* The kind of article, and the whole point of its being a menu: the guess
        is a guess, and on the article it gets wrong it is one click to say so. */
@@ -892,6 +893,13 @@
       border-left:3px solid var(--rlx-miss, #d97706);
       color:#444; font-weight:600; cursor:pointer;
     }
+    /* "hidden" has to be spelled out here. The attribute works by the browser's
+       own "display:none", and "display:flex" two lines up is an author rule,
+       which beats it — so a chip whose heading had scrolled away went on being
+       drawn at the last place it had been put, and the ones that had scrolled
+       away kept piling on top of each other until the margin was unreadable.
+       It was counted as hidden the whole time, which is how it went unnoticed. */
+    .rlx-chip[hidden] { display:none; }
     .rlx-chip:hover { background:#fffdf7; color:#111; }
     .rlx-chip-optional {
       border-left-color:#c9c9c9; color:#8a8a8a; font-weight:400;

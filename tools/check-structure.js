@@ -62,6 +62,31 @@ function load() {
 
 const M = load();
 
+/* The stylesheet is a template literal, and a backtick inside one of its
+ * comments ends it early — which does not fail here, it fails at `new
+ * Function`, with a syntax error pointing at a line of CSS. It has happened
+ * twice, both times while writing a comment that quoted a CSS property the way
+ * every other comment in the file quotes code. So the file says it plainly and
+ * this checks it, rather than trusting whoever writes the next comment to
+ * remember. `${` would be worse: that one interpolates silently. */
+function checkStyleBlock() {
+  const src = fs.readFileSync(SCRIPT, 'utf8');
+  const open = src.indexOf('GM_addStyle(`');
+  if (open < 0) return console.log('✓ the style block is where it was') || 0;
+  const from = open + 'GM_addStyle(`'.length;
+  const block = src.slice(from, src.indexOf('`);', from));
+  const problems = [];
+  if (block.includes('`')) problems.push('a backtick inside it ends the template early');
+  if (block.includes('${')) problems.push('a ${ inside it interpolates silently');
+  if (problems.length) {
+    failed++;
+    console.log('✗ the CSS template literal');
+    for (const p of problems) console.log(`    ${p} — use " instead`);
+  } else {
+    console.log('✓ the CSS template literal has nothing in it that ends it early');
+  }
+}
+
 /* Headings as the page hands them over: a level and a title, in document
  * order. The parent is worked out the same way `sectionsOnPage` works it out. */
 function page(list) {
@@ -81,6 +106,7 @@ function page(list) {
 const Node = { DOCUMENT_POSITION_PRECEDING: 2, DOCUMENT_POSITION_FOLLOWING: 4 };
 
 let failed = 0;
+checkStyleBlock();
 
 function check(name, opts) {
   const { title, type, headings = [], profile, missing, offered, anchors, jumbled } = opts;
