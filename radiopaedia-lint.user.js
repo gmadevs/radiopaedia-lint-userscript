@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.10.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time.
+// @version      2.0.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time. In the margin beside the article, the sections this kind of article is supposed to have and hasn't got.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -756,11 +756,34 @@
       display:inline-flex; align-items:center; gap:.4em; vertical-align:middle;
       margin-left:.6em; white-space:nowrap; flex:0 0 auto; align-self:center;
     }
+    /* Shaped like Radiopaedia's own "Edit article", down to the numbers read
+       off it: ".btn.btn-flat" is 6px/12px of padding, 12px semibold on an 18px
+       line, a 2px corner, a hairline border that goes darker along the bottom,
+       and an inset highlight along the top. Thirty-two pixels tall, and ours
+       is thirty-two pixels tall.
+
+       Only the colour is ours. Radiopaedia's sits in flat grey; this one keeps
+       the flat, and tints it with the verdict — a wash of the ink for the
+       fill, the ink itself for the text. With no verdict yet the mix lands on
+       their grey, which is the right thing for a button that has not been told
+       anything. "color-mix" is a one-line upgrade over the plain "#ededed"
+       above it, and where it is not understood the plain one stands.
+
+       "font-family:inherit" rather than a stack of our own: Radiopaedia sets
+       Open Sans on the body and on the title alike, so inheriting lands on the
+       same face wherever the button is mounted, and keeps landing there if
+       they ever change it. Size, weight and line-height are set explicitly, or
+       the title would hand down its own — which is 27px semibold. */
     .rlx-btn {
       display:inline-flex; align-items:center; gap:.4em; vertical-align:middle;
-      padding:.25em .7em; border:1px solid currentColor;
-      border-radius:999px; background:transparent; color:var(--rlx-ink, #2563eb);
-      font:600 13px/1.4 system-ui,-apple-system,sans-serif; cursor:pointer;
+      padding:6px 12px; border-radius:2px;
+      border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
+      background:#ededed;
+      background:color-mix(in srgb, var(--rlx-ink, #555) 12%, #ededed);
+      color:var(--rlx-ink, #555);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05);
+      font-family:inherit; font-size:12px; font-weight:600; line-height:18px;
+      letter-spacing:normal; text-transform:none; cursor:pointer;
       /* The title is a flex container, and it deforms the button twice over.
          A long title squeezes it until "Lint" wraps to "Lin/t", because
          flex-shrink defaults to 1 and the button gets treated as spare room;
@@ -777,18 +800,93 @@
     /* The switch. Filled in the colour of the verdict while it is on, so the
        two read as one control; hollow and grey when nothing is being asked. */
     .rlx-auto {
-      padding:.18em .5em; border:1px solid currentColor; border-radius:999px;
-      background:transparent; color:#9ca3af; cursor:pointer;
-      font:600 11px/1.35 system-ui,-apple-system,sans-serif; letter-spacing:.04em;
+      padding:3px 7px; border-radius:2px;
+      border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
+      background:#ededed; color:#999; cursor:pointer;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05);
+      font-family:inherit; font-size:11px; font-weight:600; line-height:14px;
+      letter-spacing:normal; text-transform:none;
       white-space:nowrap; flex:0 0 auto; align-self:center;
     }
-    .rlx-auto:hover { color:#6b7280; }
+    .rlx-auto:hover { color:#555; }
     .rlx-auto.rlx-on { background:var(--rlx-ink, #2563eb); border-color:transparent; color:#fff; }
     .rlx-auto.rlx-on:hover { color:#fff; opacity:.85; }
 
     .rlx-btn-float { position:fixed; top:14px; right:14px; z-index:99999; margin:0;
-      padding:4px 6px; border-radius:999px;
+      padding:4px 6px; border-radius:2px;
       background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.18); }
+
+    /* ————— the structure rail: the sections the article has not got yet.
+
+       A layer of its own, under the highlights: the two never appear together
+       — one lives on the article page, the other in the editor — but a chip
+       drawn over a highlight would be the wrong way round if they ever did.
+
+       The chips are "position:fixed" and placed from JavaScript, because what
+       they line up with is a heading in a column that scrolls. What CSS is
+       left is what they look like: Radiopaedia's own flat button, borrowed one
+       more time, with the amber of a linter warning down the left edge —
+       which is what a missing required section is. */
+    #rlx-gutter { position:fixed; inset:0; pointer-events:none; z-index:99996; }
+    #rlx-gutter > * { pointer-events:auto; box-sizing:border-box; }
+
+    .rlx-rail-head, .rlx-chip {
+      position:fixed; border-radius:2px;
+      border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
+      background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.06);
+      font-family:"Open Sans", system-ui, -apple-system, sans-serif;
+      font-size:11px; line-height:15px;
+    }
+
+    .rlx-rail-head {
+      display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+      padding:5px 7px; background:#f7f7f7; color:#777; font-weight:600;
+    }
+    .rlx-rail-n {
+      display:inline-block; min-width:16px; padding:0 4px; border-radius:2px;
+      background:var(--rlx-miss, #d97706); color:#fff; text-align:center;
+    }
+    .rlx-rail-what { flex:1 1 auto; }
+    /* The kind of article, and the whole point of its being a menu: the guess
+       is a guess, and on the article it gets wrong it is one click to say so. */
+    .rlx-rail-kind {
+      flex:1 1 100%; max-width:100%; padding:2px 4px; border-radius:2px;
+      border:1px solid rgba(0,0,0,.12); background:#fff; color:#555;
+      font-family:inherit; font-size:10px; font-weight:600; cursor:pointer;
+    }
+    .rlx-rail-off, .rlx-rail-undo {
+      padding:0 4px; border:0; border-radius:2px; background:transparent;
+      color:#aaa; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;
+    }
+    .rlx-rail-off:hover, .rlx-rail-undo:hover { color:#555; background:rgba(0,0,0,.06); }
+
+    .rlx-chip {
+      display:flex; align-items:flex-start; gap:4px;
+      padding:4px 6px 4px 7px;
+      border-left:3px solid var(--rlx-miss, #d97706);
+      color:#555; font-weight:600; cursor:pointer;
+    }
+    .rlx-chip:hover { background:#fffdf7; color:#222; }
+    /* A subsection, said quietly: it is missing from inside a section, not
+       from the spine of the article. */
+    .rlx-chip-sub { margin-left:10px; border-left-style:dashed; font-weight:400; }
+    .rlx-chip-name { flex:1 1 auto; overflow-wrap:anywhere; }
+    .rlx-chip-hush {
+      flex:0 0 auto; padding:0 2px; border:0; background:transparent;
+      color:#ccc; font:inherit; font-size:12px; line-height:14px; cursor:pointer;
+    }
+    .rlx-chip:hover .rlx-chip-hush { color:#999; }
+    .rlx-chip-hush:hover { color:#555; }
+    .rlx-chip-copied { background:var(--rlx-miss, #d97706); border-color:transparent; color:#fff; }
+    .rlx-chip-copied .rlx-chip-name::after { content:" — copied"; opacity:.8; font-weight:400; }
+
+    /* No room for words. A tab against the edge of the text and the heading in
+       the tooltip: less than the chip said, and none of it a lie about where
+       the section goes. */
+    .rlx-rail-slim .rlx-chip { padding:0; border-left-width:8px; height:22px; }
+    .rlx-rail-slim .rlx-chip-name, .rlx-rail-slim .rlx-chip-hush { display:none; }
+    .rlx-rail-slim .rlx-rail-what, .rlx-rail-slim .rlx-rail-kind { display:none; }
+    .rlx-rail-slim .rlx-rail-head { padding:2px 3px; gap:2px; }
 
     #rlx-layer { position:fixed; inset:0; pointer-events:none; z-index:99997; }
     .rlx-mark { position:fixed; border-radius:2px; }
@@ -1680,7 +1778,7 @@
   }
   const inEditor = () => /\/edit\/?$/.test(location.pathname);
 
-  let group = null, button = null, toggle = null;
+  let group = null, button = null, toggle = null, railToggle = null;
 
   /* What the last answer said about this article, in the colour of the boxes
    * it would draw on the text: red if anything is an error, amber if anything
@@ -1804,7 +1902,17 @@
     t.textContent = 'auto';
     t.addEventListener('click', () => setAuto(!auto()));
 
-    g.append(b, t);
+    /* The third control, and the smallest: the structure rail on or off. A
+       flag rather than a word because the pair beside it already carries two,
+       and because what it switches is visible the moment it is on. */
+    const r = document.createElement('button');
+    r.className = 'rlx-auto rlx-rail-toggle';
+    r.type = 'button';
+    r.textContent = '\u2691';
+    r.title = 'Show the sections this kind of article is missing, in the margin';
+    r.addEventListener('click', () => setRailOn(!railOn()));
+
+    g.append(b, t, r);
 
     const title = inEditor() ? null : visibleTitle();
     if (title) title.appendChild(g);
@@ -1814,12 +1922,13 @@
     // branch — and a page seen by a signed-in user has more than one `h1`,
     // menus and modals included — the button exists, `querySelector` finds it,
     // and there is nothing on screen. Better to notice here than later.
-    const r = b.getBoundingClientRect();
-    if (!r.width || !r.height) pinToCorner(g);
+    const box = b.getBoundingClientRect();
+    if (!box.width || !box.height) pinToCorner(g);
 
-    group = g; button = b; toggle = t;
+    group = g; button = b; toggle = t; railToggle = r;
     paintButton();
     paintToggle();
+    paintRailToggle();
   }
 
   /* The fallback spot: fixed at the top right, outside any branch of the site.
@@ -1838,6 +1947,587 @@
       if (r.width > 0 && r.height > 0) return el;
     }
     return null;
+  }
+
+  // ————————————————————————————————————————————————— the structure
+
+  /* What headings this KIND of article is supposed to have, and which of them
+   * are not there.
+   *
+   * The linter answers the other half of this question. `Radiopaedia.HeadingsValid`
+   * says when a heading is not one this article type recognises — "Osteology"
+   * is not a recognised heading for this article type — and it says nothing at
+   * all about the heading that should be there and isn't. The two halves do not
+   * overlap: one reads what is written, this one reads what is missing from it.
+   *
+   * The canon is `article-structure.json`, next to this file in the repository
+   * and fetched the same way `proper-nouns.txt` is. It is a transcription of
+   * Radiopaedia's own `<type>-article-structure` help pages — twenty-three
+   * structures, three hundred and twenty-seven headings, each with the level it
+   * belongs at and the heading it belongs under — generated by
+   * `tools/export-structure.py`. Radiopaedia's recommendations, not ours: when
+   * they change theirs, this is an old transcription until somebody re-runs it.
+   *
+   * The parent is part of a heading's identity, which is the one subtlety worth
+   * stating twice. `Complications` under `Clinical presentation` is the
+   * complication of the disease; under `Treatment and prognosis` it is the
+   * complication of the treatment. They are two rows of the canon and an
+   * article can want both.
+   *
+   * Only the REQUIRED headings become chips. Every canon has thirty-odd
+   * optional ones and an article that has all six of its obligations is not
+   * improved by being told about thirty things Radiopaedia never asked for. */
+
+  const STRUCTURE_URL = 'https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/article-structure.json';
+  const STRUCTURE_TIMEOUT = 15_000;
+  const STRUCTURE_MAX = 512 * 1024;
+  const STRUCTURE_KEY = 'rlx-structure';   // the file, for this tab's session
+  const RAIL_KEY = 'rlx-rail';             // the switch, remembered across sessions
+  const PROFILE_KEY = 'rlx-profile';       // {slug: the kind you said it was}
+  const HUSHED_KEY = 'rlx-hushed';         // {slug: [headings you said it does not need]}
+
+  /* How the article body reads on the page. Radiopaedia renders an editor
+   * "Heading 1" as `<h4 class="linked-header section-title">`, a "Heading 2"
+   * as `<h5>`, a "Heading 3" as `<h6>` — the page's own `<h1>` is the article
+   * title and its `<h2>`s belong to the furniture around the text (the "On
+   * this page" panel, References, Promoted articles). So the levels the canon
+   * counts in are the tags below, and nothing else on the page can be mistaken
+   * for one. */
+  const ARTICLE_BODY = '#content.article .body.user-generated-content';
+  const SECTION_SEL = 'h4.section-title, h5.section-title, h6.section-title';
+  const TAG_LEVEL = { H4: 1, H5: 2, H6: 3 };
+
+  const GUTTER_GAP = 12;    // between a chip and the text column
+  const GUTTER_MIN = 132;   // narrower than this and there is no room for words
+  const CHIP_MAX = 190;
+  const MISS = COLORS.warning;   // a section Radiopaedia asks for and isn't there
+
+  let CANON = null;         // the file, compiled; `null` is "we do not know"
+  let canonAsked = null;
+
+  function askStructure() {
+    return new Promise((resolve) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: STRUCTURE_URL,
+        timeout: STRUCTURE_TIMEOUT,
+        onload: (r) => {
+          const body = r.responseText || '';
+          if (r.status >= 400 || body.length > STRUCTURE_MAX) return resolve(null);
+          resolve(body);
+        },
+        onerror: () => resolve(null),
+        ontimeout: () => resolve(null),
+      });
+    });
+  }
+
+  /* The file, turned into the things the checks actually ask for: the regexes
+   * compiled, and one lookup per canon from a heading's normalised text to the
+   * rows that could be it. Two rows can share a text — the two `Complications`
+   * — so it is a list and the parent picks between them.
+   *
+   * The patterns cross from Python to JavaScript unchanged. They use `\b`,
+   * `\w`, `\s`, alternation and optional groups, and every one of those means
+   * the same thing in both. Anything that did not would have had to be
+   * rewritten by hand, and would have drifted the first time upstream changed. */
+  function compile(raw) {
+    const canons = {}, index = {}, modalities = {};
+    for (const [name, rows] of Object.entries(raw.canons || {})) {
+      canons[name] = rows;
+      const byText = new Map();
+      rows.forEach((c) => {
+        const key = normaliseHeading(c.t);
+        if (!byText.has(key)) byText.set(key, []);
+        byText.get(key).push(c);
+      });
+      index[name] = byText;
+      modalities[name] = rows.filter((c) => c.p === 'Radiographic features').map((c) => c.t);
+    }
+    return {
+      canons, index, modalities,
+      profiles: raw.profiles || {},
+      synonyms: raw.synonyms || {},
+      rules: (raw.rules || []).map(([p, r]) => [p, new RegExp(r, 'i')]),
+      notPathologyOnly: new Set(raw.notPathologyOnly || []),
+      diseaseVeto: new RegExp(raw.diseaseVeto || '(?!)', 'i'),
+      anatomyTypes: (raw.anatomyTypes || []).map(([p, r]) => [p, new RegExp(r, 'i')]),
+      byArticleType: raw.byArticleType || {},
+      fallback: raw.fallbackProfile || 'disease',
+      modalityEntry: raw.modalityEntry,
+      modalityTitle: raw.modalityTitle,
+      transcribed: raw.transcribed,
+    };
+  }
+
+  async function canon() {
+    if (CANON) return CANON;
+    if (canonAsked) return canonAsked;
+    canonAsked = (async () => {
+      let text = sessionStorage.getItem(STRUCTURE_KEY);
+      if (text == null) {
+        text = await askStructure();
+        if (text != null) {
+          try { sessionStorage.setItem(STRUCTURE_KEY, text); } catch { /* quota: never mind */ }
+        }
+      }
+      let raw = null;
+      try { raw = text == null ? null : JSON.parse(text); } catch { raw = null; }
+      CANON = raw && raw.canons ? compile(raw) : null;
+      return CANON;
+    })();
+    return canonAsked;
+  }
+
+  /* A heading reduced to how it compares. Radiopaedia has zero-width characters
+   * sitting inside headings — `Radiographic features` comes back from the
+   * linter with a U+200B stuck to the front of it — and bold markers, and
+   * trailing colons, none of which are part of the name. */
+  const HEADING_NOISE = /[​‌‍﻿*_`]+/g;
+
+  function normaliseHeading(text) {
+    return String(text ?? '')
+      .replace(HEADING_NOISE, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^:+|:+$/g, '')
+      .trim()
+      .toLowerCase();
+  }
+
+  /* The canonical name of a heading read off the page, or null for one the
+   * canon does not have.
+   *
+   * The canon first and the synonyms second, never the other way round.
+   * `Histology` is a way of writing `Microscopic appearance` in an article
+   * about a disease, and in the anatomy canon it is a row of its own — there,
+   * it has to stay itself. */
+  function canonicalHeading(text, canonName) {
+    const key = normaliseHeading(text);
+    const byText = CANON.index[canonName] || CANON.index.standard;
+    if (byText.has(key)) return byText.get(key)[0].t;
+    const target = CANON.synonyms[key];
+    if (target && byText.has(normaliseHeading(target))) return target;
+    return null;
+  }
+
+  /* What kind of article this is.
+   *
+   * The lint API says first, and where it says anything it is right: it is
+   * Radiopaedia's own classification of its own article, not a guess about it.
+   * It only distinguishes a few kinds — anatomy and classification are the
+   * ones that matter, and everything else arrives as `general` — so the rest
+   * is the ordered list of title rules, first match wins, ported from the
+   * project that wrote them.
+   *
+   * The anatomical SUB-type is a guess from the title and stays one: the API
+   * says `anatomy_general` for a bone and for a nerve alike, and a bone wants
+   * `Ossification` where a nerve wants a course. A wrong guess costs three
+   * chips, and the menu in the rail header is the answer to it.
+   *
+   * Three rules are held back by a title that names a disease: `Iodinated
+   * contrast induced thyrotoxicosis` is not a contrast agent, it is the
+   * thyrotoxicosis one causes. */
+  /* The article's title, and only it.
+   *
+   * `visibleTitle()` returns the `<h1>` — which by now has the Lint button
+   * inside it, so its `textContent` reads "CSF overdrainage Lint auto ⚑". Feed
+   * that to the rules and they are matching partly on our own furniture. The
+   * clone is thrown away immediately; the page keeps its heading. */
+  function articleTitle() {
+    const h1 = visibleTitle();
+    if (h1) {
+      const clean = h1.cloneNode(true);
+      clean.querySelector('.rlx-group')?.remove();
+      const text = tidy(clean.textContent);
+      if (text) return text;
+    }
+    return tidy(document.title.split('|')[0]);
+  }
+
+  function profileFor(title, articleType) {
+    const chosen = chosenProfile();
+    if (chosen && CANON.profiles[chosen]) return chosen;
+
+    const text = tidy(title);
+    const base = CANON.byArticleType[tidy(articleType)];
+    if (base === 'anatomy') {
+      for (const [profile, re] of CANON.anatomyTypes) if (re.test(text)) return profile;
+      return 'anatomy';
+    }
+    if (base) return base;
+
+    for (const [profile, re] of CANON.rules) {
+      if (!re.test(text)) continue;
+      if (CANON.notPathologyOnly.has(profile) && CANON.diseaseVeto.test(text)) continue;
+      return profile;
+    }
+    return CANON.fallback;
+  }
+
+  // ————————————————————————————— what the page has, and what it has not
+
+  /* The headings of the article body, in order, each with the heading it sits
+   * under. The parent is the last heading of a smaller level seen before it,
+   * which is the same rule Radiopaedia's own linter uses to decide that a
+   * section is under the wrong one. */
+  function sectionsOnPage() {
+    const body = document.querySelector(ARTICLE_BODY);
+    if (!body) return null;
+    const found = [], stack = [];
+    for (const el of body.querySelectorAll(SECTION_SEL)) {
+      // The promoted-articles block is user-generated content too, and it is
+      // not the article.
+      if (el.closest('.snippet, .expandable')) continue;
+      const level = TAG_LEVEL[el.tagName];
+      if (!level) continue;
+      while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
+      const parent = stack.length ? stack[stack.length - 1].title : null;
+      const title = tidy(el.textContent);
+      stack.push({ level, title });
+      found.push({ el, level, title, parent });
+    }
+    return { body, found };
+  }
+
+  /* Which rows of the canon the page's headings are. Keyed by the row, so that
+   * "is `Pathology` there?" is one lookup and not a scan. */
+  function matchUp(found, canonName) {
+    const byText = CANON.index[canonName] || CANON.index.standard;
+    const seen = new Map();
+    for (const s of found) {
+      const title = canonicalHeading(s.title, canonName);
+      if (!title) continue;
+      const rows = byText.get(normaliseHeading(title)) || [];
+      const parent = s.parent ? canonicalHeading(s.parent, canonName) : null;
+      // Two `Complications` in the canon: the parent picks. Matching neither,
+      // it goes on the first and is reported as sitting in the wrong place.
+      const row = rows.find((c) => c.p === parent) || rows[0];
+      if (!row || seen.has(row.v)) continue;   // repeated: the first one counts
+      seen.set(row.v, { el: s.el, written: s.title,
+                        misplaced: row.l !== s.level || row.p !== parent });
+    }
+    return seen;
+  }
+
+  /* The required headings this article has not got.
+   *
+   * Under `Radiographic features` you do not need every modality, you need
+   * one: an article with no imaging at all is incomplete however long it is,
+   * and an article with a CT section cannot be asked for an MRI by a machine.
+   * That is the one synthetic row, and it disappears the moment any modality
+   * is there.
+   *
+   * A profile with no obligations produces nothing at all, and that is
+   * Radiopaedia's doing, not a gap here. Of signs it says they are "in general
+   * short articles and do not usually require subheadings"; of devices, that
+   * the articles "will vary depending on the device". Asking a sign for
+   * `Pathology` would be inventing an obligation that does not exist. */
+  function whatIsMissing(profileName, found) {
+    const profile = CANON.profiles[profileName] || CANON.profiles[CANON.fallback];
+    if (!profile || !profile.required.length) return { rows: [], seen: new Map(), profile };
+
+    const canonName = profile.canon;
+    const rows = CANON.canons[canonName] || [];
+    const seen = matchUp(found, canonName);
+    const required = new Set(profile.required);
+    const hushed = new Set(hushedHere());
+    const out = [];
+
+    rows.forEach((c, i) => {
+      if (!required.has(c.v) && !required.has(c.t)) return;
+      if (seen.has(c.v) || hushed.has(c.v)) return;
+      out.push({ entry: c.v, title: c.t, level: c.l, parent: c.p, order: i });
+    });
+
+    if (profile.modality && !hushed.has(CANON.modalityEntry)) {
+      const any = (CANON.modalities[canonName] || [])
+        .some((m) => seen.has(`Radiographic features/${m}`));
+      if (!any) {
+        const at = rows.findIndex((c) => c.t === 'Radiographic features');
+        out.push({ entry: CANON.modalityEntry, title: CANON.modalityTitle,
+                   level: 2, parent: 'Radiographic features',
+                   order: (at < 0 ? rows.length : at) + 0.5, modality: true });
+      }
+    }
+
+    out.sort((a, b) => a.order - b.order);
+    return { rows: out, seen, profile, canonName };
+  }
+
+  /* Where a missing heading belongs on the page: beside the first heading the
+   * canon puts AFTER it that the article actually has. Miss `Pathology` and
+   * the chip lands next to `Radiographic features`, which is exactly where the
+   * section would go. Miss something the article has nothing after — or have
+   * no headings at all — and it lands at the end of the text, which is also
+   * where it would go.
+   *
+   * The missing modality is the exception: it belongs under `Radiographic
+   * features` itself, not after whatever follows it. */
+  function anchorFor(row, seen, canonName) {
+    const rows = CANON.canons[canonName] || [];
+    if (row.modality) {
+      const rf = seen.get('Radiographic features');
+      if (rf) return rf.el;
+    }
+    for (let j = Math.ceil(row.order); j < rows.length; j++) {
+      const hit = seen.get(rows[j].v);
+      if (hit) return hit.el;
+    }
+    return null;   // the end of the article
+  }
+
+  // ————————————————————————————————————————————— what you have said about it
+
+  /* Three preferences, three lifetimes. The rail is on or off for good, like
+   * `auto`. The kind an article is, and the sections you have said it does not
+   * need, are per article and kept for good too — a judgement you made once
+   * should not have to be made again on the next visit. All of it is keyed on
+   * the slug, and none of it ever leaves the browser. */
+  function railOn() {
+    try {
+      const v = localStorage.getItem(RAIL_KEY);
+      if (v !== null) return v === '1';
+    } catch { /* fall through to the default */ }
+    return true;
+  }
+
+  function setRailOn(on) {
+    try { localStorage.setItem(RAIL_KEY, on ? '1' : '0'); } catch { /* this session only */ }
+    paintRailToggle();
+    if (on) railSoon();
+    else closeRail();
+  }
+
+  function readMap(key) {
+    try { return JSON.parse(localStorage.getItem(key) || '{}') || {}; }
+    catch { return {}; }
+  }
+
+  function writeMap(key, map) {
+    try { localStorage.setItem(key, JSON.stringify(map)); } catch { /* this session only */ }
+  }
+
+  function chosenProfile() {
+    const slug = currentSlug();
+    return slug ? readMap(PROFILE_KEY)[slug] || null : null;
+  }
+
+  function chooseProfile(name) {
+    const slug = currentSlug();
+    if (!slug) return;
+    const map = readMap(PROFILE_KEY);
+    if (name) map[slug] = name; else delete map[slug];
+    writeMap(PROFILE_KEY, map);
+    // A judgement about `Epidemiology` means nothing once you have said the
+    // article is an anatomy article, whose canon has no such row.
+    const hushes = readMap(HUSHED_KEY);
+    delete hushes[slug];
+    writeMap(HUSHED_KEY, hushes);
+    railSoon();
+  }
+
+  function hushedHere() {
+    const slug = currentSlug();
+    return slug ? readMap(HUSHED_KEY)[slug] || [] : [];
+  }
+
+  function hush(entry) {
+    const slug = currentSlug();
+    if (!slug) return;
+    const map = readMap(HUSHED_KEY);
+    const list = new Set(map[slug] || []);
+    list.add(entry);
+    map[slug] = [...list];
+    writeMap(HUSHED_KEY, map);
+    railSoon();
+  }
+
+  function unhushAll() {
+    const slug = currentSlug();
+    if (!slug) return;
+    const map = readMap(HUSHED_KEY);
+    delete map[slug];
+    writeMap(HUSHED_KEY, map);
+    railSoon();
+  }
+
+  // ————————————————————————————————————————————————————————————— the rail
+
+  const rail = { layer: null, rows: [], seen: null, canonName: null, profile: null, body: null };
+
+  function closeRail() {
+    rail.layer?.remove();
+    rail.layer = null;
+    rail.rows = [];
+    removeEventListener('scroll', placeRail, true);
+    removeEventListener('resize', placeRail);
+  }
+
+  /* Draw once, place on every frame that moves. Same bargain the highlights
+   * make: the chips are `position:fixed` and their tops are read off the
+   * headings they belong to, so scrolling is a matter of moving them, not of
+   * building them again. The article DOM is never touched — a chip that lived
+   * inside the text would be one more thing to go wrong on the day somebody
+   * opens the editor. */
+  function openRail(rows, seen, canonName, profileName, body) {
+    closeRail();
+    // Nothing missing and nothing set aside: say nothing. Nothing missing
+    // BECAUSE it was all set aside is a different state, and it keeps its
+    // header — otherwise the undo button would be inside the thing it undoes.
+    if (!rows.length && !hushedHere().length) return;
+
+    rail.rows = rows;
+    rail.seen = seen;
+    rail.canonName = canonName;
+    rail.profile = profileName;
+    rail.body = body;
+
+    rail.layer = document.createElement('div');
+    rail.layer.id = 'rlx-gutter';
+    rail.layer.style.setProperty('--rlx-miss', MISS.ink);
+
+    const head = document.createElement('div');
+    head.className = 'rlx-rail-head';
+    const hushedCount = hushedHere().length;
+    head.innerHTML = `
+      <span class="rlx-rail-n">${rows.length}</span>
+      <span class="rlx-rail-what">${rows.length
+        ? `section${rows.length > 1 ? 's' : ''} missing`
+        : 'all set aside'}</span>
+      <select class="rlx-rail-kind" title="What kind of article this is. The canon follows from it."></select>
+      ${hushedCount ? `<button class="rlx-rail-undo" title="Bring back the ${hushedCount} you set aside">↺ ${hushedCount}</button>` : ''}
+      <button class="rlx-rail-off" title="Hide the structure rail everywhere">&times;</button>`;
+
+    const kind = head.querySelector('.rlx-rail-kind');
+    for (const [name, p] of Object.entries(CANON.profiles)) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = p.label || name;
+      opt.selected = name === profileName;
+      kind.appendChild(opt);
+    }
+    kind.addEventListener('change', () => chooseProfile(kind.value));
+    head.querySelector('.rlx-rail-off').addEventListener('click', () => setRailOn(false));
+    head.querySelector('.rlx-rail-undo')?.addEventListener('click', unhushAll);
+    rail.layer.appendChild(head);
+    rail.head = head;
+
+    for (const row of rows) {
+      const chip = document.createElement('div');
+      chip.className = 'rlx-chip';
+      if (row.level > 1) chip.classList.add('rlx-chip-sub');
+      chip.innerHTML = `
+        <span class="rlx-chip-name"></span>
+        <button class="rlx-chip-hush" title="This article does not need it">&times;</button>`;
+      chip.querySelector('.rlx-chip-name').textContent = row.title;
+      chip.title = row.modality
+        ? 'No imaging modality under Radiographic features. Click to copy the heading.'
+        : `Missing: ${row.entry}. Click to copy the heading.`;
+      chip.addEventListener('click', (e) => {
+        if (e.target.closest('.rlx-chip-hush')) return hush(row.entry);
+        copyHeading(chip, row);
+      });
+      row.el = chip;
+      row.anchor = anchorFor(row, seen, canonName);
+      rail.layer.appendChild(chip);
+    }
+
+    document.body.appendChild(rail.layer);
+    addEventListener('scroll', placeRail, true);
+    addEventListener('resize', placeRail);
+    placeRail();
+  }
+
+  /* The heading, on the clipboard, ready to be pasted into the editor. The
+   * modality row has no name to copy — `‹any imaging modality›` is a question,
+   * not a heading — so it offers its parent instead. */
+  function copyHeading(chip, row) {
+    const text = row.modality ? 'Radiographic features' : row.title;
+    navigator.clipboard?.writeText(text).then(() => {
+      chip.classList.add('rlx-chip-copied');
+      setTimeout(() => chip.classList.remove('rlx-chip-copied'), 900);
+    }, () => { /* no clipboard: the name is on screen anyway */ });
+  }
+
+  let placePending = null;
+  function placeRail() {
+    if (placePending) return;
+    placePending = requestAnimationFrame(() => { placePending = null; layOut(); });
+  }
+
+  /* The grey margin to the left of the text, and how much of it there is.
+   *
+   * Radiopaedia centres a fixed 612px column, so the margin is whatever the
+   * window has left over: about 490px at 1920, 250 at 1440, 175 at 1280, and
+   * nothing at all once the layout folds to one column. Below `GUTTER_MIN`
+   * there is no room for words, and the chips go slim — a coloured tab against
+   * the edge of the text, with the heading in its tooltip. Lying about the
+   * space by letting the chips overlap the article would be worse than saying
+   * less. */
+  function layOut() {
+    if (!rail.layer || !rail.body?.isConnected) return closeRail();
+
+    const box = rail.body.getBoundingClientRect();
+    const room = box.left - GUTTER_GAP * 2;
+    const slim = room < GUTTER_MIN;
+    const width = slim ? 8 : Math.min(CHIP_MAX, room);
+    const left = Math.max(4, box.left - GUTTER_GAP - width);
+
+    rail.layer.classList.toggle('rlx-rail-slim', slim);
+    rail.head.style.left = `${left}px`;
+    rail.head.style.width = slim ? 'auto' : `${width}px`;
+    rail.head.style.top = `${Math.max(8, Math.min(box.top, innerHeight - 40))}px`;
+    const headBottom = rail.head.getBoundingClientRect().bottom;
+
+    // Two missing headings can want the same heading to sit beside, and then
+    // they want the same pixel. Sorted by where they belong and pushed down
+    // one after another: the order stays the canon's, and nothing is hidden
+    // underneath anything.
+    let floor = headBottom + 6;
+    for (const row of rail.rows) {
+      const target = row.anchor?.isConnected
+        ? row.anchor.getBoundingClientRect().top
+        : box.bottom;
+      const top = Math.max(floor, target);
+      row.el.style.left = `${left}px`;
+      row.el.style.width = slim ? '8px' : `${width}px`;
+      row.el.style.top = `${top}px`;
+      floor = top + row.el.getBoundingClientRect().height + 4;
+    }
+  }
+
+  // ————————————————————————————————————————————————————————————— wiring
+
+  /* The rail waits for the linter, and asks it for nothing.
+   *
+   * `article_type` arrives inside the lint answer, which is already cached for
+   * the session — so the rail costs no request of its own, and it appears when
+   * a lint answer for this article exists: on load with `auto` on, on the
+   * click without it. Drawing it any earlier would mean guessing the kind of
+   * article from the title alone, and the title alone cannot tell an anatomy
+   * article from a disease. Six wrong chips are worse than none. */
+  let lastArticleType;
+  let railRun = 0;
+  async function railSoon(articleType) {
+    if (!railOn() || inEditor() || !currentSlug()) return closeRail();
+    if (articleType !== undefined) lastArticleType = articleType;
+    if (lastArticleType === undefined) return;
+
+    const run = ++railRun;
+    if (!await canon()) return;          // unreadable file: say nothing
+    if (run !== railRun) return;         // overtaken while fetching
+
+    const page = sectionsOnPage();
+    if (!page) return closeRail();
+
+    const name = profileFor(articleTitle(), lastArticleType);
+    const { rows, seen, canonName } = whatIsMissing(name, page.found);
+    openRail(rows, seen, canonName || CANON.profiles[name]?.canon, name, page.body);
+  }
+
+  function paintRailToggle() {
+    railToggle?.classList.toggle('rlx-on', railOn());
   }
 
   // ——————————————————————————————————————————————————————————— startup
@@ -1884,6 +2574,10 @@
    * that lies. */
   async function findingsFor(slug, opts = {}) {
     const [data] = await Promise.all([lintResult(slug, opts), names(opts)]);
+    // The kind of article travels in the lint answer, so the rail rides along
+    // on a request that was going to be made anyway. Not awaited: the findings
+    // are what the caller is waiting for.
+    railSoon(data.article_type ?? null);
     return fromApi(data);
   }
 

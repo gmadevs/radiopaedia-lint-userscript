@@ -10,6 +10,9 @@ severity, with the message alongside, and keys to walk through them one at a tim
 [radiopaedia.work lint API](https://radiopaedia.work/api/v1/lint?article=epilepsy) and the button
 takes the colour of what came back, so you know before clicking.
 
+And in the grey margin beside the text, the sections **this kind of article is supposed to have
+and has not got** — each one beside the heading it would go under.
+
 [![Install](https://img.shields.io/badge/Install-userscript-2ea44f?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js)
 
 [![Version](https://img.shields.io/github/v/release/gmadevs/radiopaedia-lint-userscript?color=blue)](https://github.com/gmadevs/radiopaedia-lint-userscript/releases/latest)
@@ -29,6 +32,9 @@ page opens   auto  →  radiopaedia.work/api/v1/lint  →  the button takes the 
 
 click              →  that same answer, from the cache  ┬─  nothing to fix  →  a banner, you stay
                       (or the first one, in manual)     └─  findings        →  /edit, on the text
+
+same answer's       →  what kind of article this is  →  the sections its kind must have
+article_type                                            └─  the ones missing, in the left margin
 ```
 
 ---
@@ -40,6 +46,7 @@ click              →  that same answer, from the cache  ┬─  nothing to fix
 - [Nothing to lint](#nothing-to-lint)
 - [Working through the findings](#working-through-the-findings)
 - [Proper nouns](#proper-nouns)
+- [The sections that are missing](#the-sections-that-are-missing)
 - [How it works](#how-it-works)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
@@ -223,9 +230,137 @@ offered — an unreadable list is not an empty one, and the findings come throug
 linter sent them.
 
 > [!NOTE]
-> This is the only reason the script talks to a second host, `raw.githubusercontent.com`, and it
-> only ever reads. Nothing is sent there: what reaches the repository is what you type into
-> GitHub yourself.
+> This and [the canon](#the-sections-that-are-missing) are the only reasons the script talks to a
+> second host, `raw.githubusercontent.com`, and it only ever reads. Nothing is sent there: what
+> reaches the repository is what you type into GitHub yourself.
+
+---
+
+## The sections that are missing
+
+The linter checks the headings that **are** there. `Radiopaedia.HeadingsValid` says when one is
+not recognised for that article type — *"Osteology" is not a recognised heading for this article
+type* — and it never says anything about the heading that should be there and is not. This is the
+other half, and the two do not overlap.
+
+So: in the grey margin to the left of the text, one chip for each required section the article
+has not got, sitting **beside the heading it would go under**. Miss `Pathology` and the chip lands
+next to `Radiographic features`, because that is where the section goes. Miss something with
+nothing after it, and it lands at the end of the text, because that is where *that* goes.
+
+```
+      ┌──────────────────────┐
+      │ 4  sections missing  │   CSF overdrainage
+      │ Disease           ▾  │   ────────────────
+      └──────────────────────┘   CSF overdrainage, also known as overshunting, is …
+      ┌──────────────────────┐
+      │ Epidemiology       × │   Clinical presentation
+      └──────────────────────┘   Classically, patients present with headaches …
+      ┌──────────────────────┐
+      │ Pathology          × │   Radiographic features
+      ├──────────────────────┤   Typical features of chronic overdrainage include:
+      │ ‹any imaging modal…› │     • small "slit-like" ventricles
+      └──────────────────────┘     • pachymeningeal thickening
+```
+
+Click a chip and the heading is on your clipboard, ready to paste into the editor. The `×` on it
+says *this article does not need that one*, and it is remembered for that article; the `↺` in the
+header brings them all back.
+
+### One canon per kind of article
+
+Radiopaedia does not have one structure, it has **twenty-three**. Its own *standard article
+structure* page gives the fixed order of the sections — Terminology, Epidemiology, Clinical
+presentation, Pathology, Radiographic features, Treatment and prognosis, History and etymology,
+Differential diagnosis, and the rest — and then says that holds "in most instances, except for the
+following specific special purpose articles", and lists eighteen of them. An anatomy article wants
+`Gross anatomy` and `Variant anatomy` and has no business being asked for `Epidemiology`.
+
+All twenty-three are in [`article-structure.json`](article-structure.json): 327 headings, each
+with the level it belongs at and the heading it belongs under, the 84 ways those headings are
+found written in real articles (`etiology`, `plain film`, `CT scan`), and which of them each kind
+of article is actually required to have. They are **Radiopaedia's recommendations, not ours**,
+transcribed from `radiopaedia.org/articles/<type>-article-structure` on 2026-08-04 — when they
+change theirs, this is an old transcription until somebody re-runs the export.
+
+Two things in there are worth stating plainly, because they are the parts that look like details
+and are not:
+
+- **The parent is part of a heading's identity.** `Complications` under `Clinical presentation` is
+  the complication of the disease; under `Treatment and prognosis` it is the complication of the
+  treatment. Two rows of the canon, and an article can want both.
+- **One modality is enough.** Under `Radiographic features` you do not need every modality, you
+  need one. An article with no imaging at all is incomplete however long it is; an article with a
+  CT section cannot be asked for an MRI by a machine.
+
+Only the **required** headings become chips. Every canon has thirty-odd optional ones, and an
+article that has all six of its obligations is not improved by being told about thirty things
+Radiopaedia never asked for.
+
+### How it knows what kind of article it is
+
+From `article_type`, which comes back inside the lint answer:
+
+```json
+{"slug":"scaphoid-bone","article_type":"anatomy_general","counts":[],"lints":[]}
+```
+
+That is Radiopaedia's own classification of its own article, and where it says something it is
+right. It only separates a few kinds — anatomy and classification are the ones that matter, and
+everything else arrives as `general` — so the rest is an ordered list of rules on the title, first
+match wins: a mnemonic before a disease, because *Tuberous sclerosis mnemonic* is a mnemonic; a
+classification before a measurement, because *Bern score* is a classification; a procedure before
+a device, because a ventriculoperitoneal shunting is an operation and the valve is the object.
+Three rules are held back by a title that names a disease — *Iodinated contrast induced
+thyrotoxicosis* is not a contrast agent, it is the thyrotoxicosis one causes.
+
+It gets things wrong, and it is meant to: the menu in the rail header is the answer to that, and
+what you choose is remembered for that article. The one worth watching is the **sign** — an
+article Radiopaedia says is "in general short" and does "not usually require subheadings". The API
+calls signs `general` like everything else, so only `sign` in the title keeps them out of the
+disease canon, and a sign measured as a disease is six chips of noise.
+
+### It costs no request of its own
+
+`article_type` arrives in the lint answer, which is already cached for the session — so the rail
+rides along on a request that was going to be made anyway, and appears **when a lint answer for
+that article exists**: on load with **auto** on, on the click without it. Drawing it any earlier
+would mean guessing the kind of article from the title alone, and the title alone cannot tell an
+anatomy article from a disease. Six wrong chips are worse than none.
+
+The `⚑` next to **auto** turns the whole thing off, and it stays off.
+
+### When there is no margin
+
+Radiopaedia centres a fixed 612px column, so the grey margin is whatever the window has left over:
+about 490px at 1920, 250 at 1440, 175 at 1280, and nothing at all once the layout folds to one
+column. Below about 130px there is no room for words and the chips go **slim** — a coloured tab
+against the edge of the text, with the heading in its tooltip. Letting them overlap the article
+would be lying about the space; saying less is not.
+
+The article's own DOM is never touched, exactly as with the highlights. The chips are a layer over
+the page, placed from the headings' own rectangles and moved on every frame that scrolls.
+
+### Changing the canon
+
+`article-structure.json` is generated, not written:
+
+```bash
+tools/export-structure.py ../neuropedia/struttura/db.py -o article-structure.json
+node tools/check-structure.js
+```
+
+The source is the canon in [neuropedia](https://github.com/gmadevs/neuropedia)'s `struttura/`,
+where it is kept as Python with a database behind it. The exporter walks it once and writes out
+the part that is data, making exactly three changes — the names go into English, the rules that
+only hold inside a neuroradiology book are dropped, and the profile stops being guessed from where
+an article sits in that book, because here the API says. The regexes cross over untouched: they
+use `\b`, `\w`, `\s`, alternation and optional groups, and every one of those means the same thing
+to Python and to JavaScript.
+
+`tools/check-structure.js` runs the checks against headings read off real articles — CSF
+overdrainage, the scaphoid — pulling the module straight out of the userscript rather than a copy,
+so there is nothing in the test that can drift from what ships.
 
 ---
 
@@ -388,6 +523,10 @@ reading articles will never come near, and a number a loop would reach in second
 | Findings come back, nothing is highlighted | A different editor, or a snippet that cannot be found in the text | See `EDITOR_SELECTORS` below |
 | *"Article not found"*, or *"nothing in it to lint"* | The API's own answer (404 / 422) for that article | Check the slug in the URL; a stub with no text has nothing to lint |
 | *"Cloudflare bot check"* | radiopaedia.work wants a human first | Open [radiopaedia.work](https://radiopaedia.work/) in a tab, clear the check, click again |
+| No chips in the margin | No lint answer for that article yet | Turn **auto** on, or click **Lint** — the rail rides on that answer and asks for nothing of its own |
+| No chips, and the linter has answered | Nothing required is missing, or the article is a kind Radiopaedia asks nothing of | Signs, devices, comparisons and biographies have no required sections; that is Radiopaedia's doing |
+| The wrong sections are being asked for | The kind of article was guessed wrong | Change it in the menu in the rail header; it is remembered for that article |
+| Chips are thin coloured tabs | The window is too narrow for words in the margin | Widen it past ~1150px, or read the headings from the tooltips |
 
 <details>
 <summary><strong>What can break it</strong></summary>
@@ -401,6 +540,18 @@ Tailwind classes that were never an API, and a new stylesheet was enough to brea
 
 **The editor selectors**, in `EDITOR_SELECTORS` near the top: TinyMCE in an iframe and plain
 contenteditables are covered. A different editor gets added there.
+
+**How Radiopaedia renders a heading.** The rail reads the article's sections off the page, and
+the page spells an editor *Heading 1* as `<h4 class="section-title">`, a *Heading 2* as `<h5>`, a
+*Heading 3* as `<h6>` — the page's own `<h1>` is the article title and its `<h2>`s belong to the
+furniture (the "On this page" panel, References, Promoted articles). That mapping is
+`ARTICLE_BODY`, `SECTION_SEL` and `TAG_LEVEL`, and if Radiopaedia ever changes the tags the rail
+finds no sections at all and shows every required heading as missing — loudly wrong rather than
+quietly, which is the way round it should be.
+
+**`article_type`.** Drop that field from the lint answer and the rail stops guessing anatomy
+correctly; it does not stop, it gets worse, which is harder to notice. It is read in one place,
+in `findingsFor`.
 
 **The title**, which has broken it once already. Signed in, the page carries two `h1` elements,
 and the one belonging to the user menu (`media-heading user-menu-name`, zero by zero) comes first

@@ -13,6 +13,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 SCRIPT=radiopaedia-lint.user.js
+# Shipped alongside, though the script fetches it from `main` rather than from a
+# release: a release that carries the canon says which canon it was built against.
+CANON=article-structure.json
 
 version=$(sed -n 's|^// @version[[:space:]]*||p' "$SCRIPT" | head -1 | tr -d '[:space:]')
 [ -n "$version" ] || { echo "no @version line in $SCRIPT" >&2; exit 1; }
@@ -41,4 +44,4 @@ fi
 
 git tag -a "$tag" -m "$tag"
 git push origin "$branch" "$tag"
-gh release create "$tag" --title "$tag" --generate-notes "$SCRIPT"
+gh release create "$tag" --title "$tag" --generate-notes "$SCRIPT" "$CANON"
