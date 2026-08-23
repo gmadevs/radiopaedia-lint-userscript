@@ -6,10 +6,11 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      1.8.4
+// @version      1.9.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
+// @connect      raw.githubusercontent.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @run-at       document-idle
@@ -53,6 +54,22 @@
  * verified: as soon as a snippet can no longer be found in the text, its
  * finding closes itself — which is also how you see that a fix landed.
  *
+ * One check of the linter's is answered here rather than shown: "we don't
+ * start a list item with a capital letter. Exceptions are proper nouns." On a
+ * radiology article half of those capitals ARE proper nouns — Alvarado,
+ * Langerhans, the British Thoracic Society — and the linter has no way to know
+ * which. `proper-nouns.txt`, next to this file in the repository, is the list
+ * of the ones we have met; a finding whose list item starts with one of them
+ * never reaches the stage. When the name is not in there yet, the bar offers
+ * to add it: the name goes to the clipboard, the file opens on GitHub, and the
+ * change is proposed from there. The list is shared, so a name added once is
+ * added for everybody — which is the whole reason it is a file in a repository
+ * and not a setting in a browser.
+ *
+ * The exception mechanism the API itself carries (`supportsExceptions`) is the
+ * right place for all of this, and it is not open to us: only Radiopaedia's
+ * own editors can register one. This is the second best thing.
+ *
  * One request here is one request to Radiopaedia: the linter reads the article
  * on our behalf. This is a human clicking a button on one article at a time,
  * so that is fine — but it is why there is no prefetching and no automatic
@@ -84,6 +101,20 @@
   const EDITOR_TIMEOUT = 30_000;    // how long we wait for the WYSIWYG to initialise
   const PENDING_KEY = 'rlx-lint-pending';
   const CACHE_KEY = 'rlx-lint-cache:';
+
+  /* The shared list of names that may start a list item, and the page you add
+   * to it. Raw for reading, the repository's own editor for writing: GitHub
+   * turns "edit a file you cannot write to" into a fork and a pull request on
+   * its own, so proposing a name costs a paste and a click and no account
+   * beyond the one the person already has. Nothing is ever sent from here —
+   * the script reads that file and nothing else, and the name travels through
+   * the clipboard, where you can see it. */
+  const NAMES_URL = 'https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/proper-nouns.txt';
+  const NAMES_EDIT_URL = 'https://github.com/gmadevs/radiopaedia-lint-userscript/edit/main/proper-nouns.txt';
+  const NAMES_TIMEOUT = 15_000;
+  const NAMES_MAX = 256 * 1024;     // a list of names; anything bigger is not one
+  const NAMES_KEY = 'rlx-names';    // the file, for this tab's session
+  const PROPOSED_KEY = 'rlx-proposed';   // {name: the day you proposed it}
 
   // What a Cloudflare interstitial carries instead of the results.
   const CHALLENGE = ['start_challenge', 'bot_management', 'Verifying you are human'];
@@ -122,24 +153,34 @@
     return tidy(new DOMParser().parseFromString(raw, 'text/html').body.textContent);
   }
 
-  /* The shape things get compared in: no spaces, no case, curly quotes and
-   * dashes folded onto their straight forms. Ignoring spacing is what makes
-   * the comparison survive both the phantom spaces the linter drags along from
-   * `<sup>` markers and quotes, and the missing ones between one tag and the
-   * next in the editor.
+  /* Typography folded onto its plain forms: curly quotes and dashes onto the
+   * straight ones, runs of space onto one space, invisible characters onto
+   * nothing at all. That last pass earns its place on its own — `\s` in JS
+   * does **not** cover the zero-width space, and articles are full of them:
+   * the linter quotes the "Radiographic features" heading with a U+200B stuck
+   * to the front, and one of those, invisible to the eye, is enough for a
+   * snippet never to be found.
    *
-   * Invisible characters need their own pass: `\s` in JS does **not** cover
-   * the zero-width space, and articles are full of them — the linter quotes
-   * the "Radiographic features" heading with a U+200B stuck to the front. One
-   * of those, invisible to the eye, and the snippet would never be found. */
-  function flat(s) {
-    return s
+   * This is the shape words are read in when the words themselves matter —
+   * the names in `proper-nouns.txt` are compared here, where "Alvarado" is
+   * still two syllables and a capital A. */
+  function fold(s) {
+    return String(s ?? '')
       .replace(/[‘’ʼ]/g, "'")
       .replace(/[“”]/g, '"')
       .replace(/[–—−]/g, '-')
       .replace(/[\u200b-\u200d\u2060\ufeff\u00ad]/g, '')
-      .replace(/\s+/g, '')
-      .toLowerCase();
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /* And the shape things get compared in when only the letters matter: the
+   * fold, with the spacing and the case taken out too. Ignoring spacing is
+   * what makes the comparison survive both the phantom spaces the linter drags
+   * along from `<sup>` markers and quotes, and the missing ones between one
+   * tag and the next in the editor. */
+  function flat(s) {
+    return fold(s).replace(/\s+/g, '').toLowerCase();
   }
 
   // ————————————————————————————————————————————— the findings
@@ -216,6 +257,9 @@
    * The same point, counted twice. */
   const CONJUNCTION = /\s+(?:or|and|nor)\b/gi;
 
+  // The one check the names list answers.
+  const LIST_CAPS = 'Radiopaedia.ListCaps';
+
   function insertion(lint) {
     if (lint.condition !== 'Radiopaedia.OxfordComma') return null;
     const phrase = plain(lint.matched);
@@ -270,12 +314,163 @@
       if (!copy) copies.set(snippet, copy = { line: lint.line, n: 1 });
       else if (copy.line !== lint.line) { copy.line = lint.line; copy.n++; }
 
+      /* The capital at the start of a list item, weighed against the names.
+       * A hit is a finding that never gets shown; a miss is one that carries
+       * the name to propose. Both only when the list was actually read — see
+       * `KNOWN`. The item is `matched`, which for this check is the list item
+       * itself, from its first word to its last. */
+      const item = lint.condition === LIST_CAPS ? plain(lint.matched) : '';
+      const known = item ? knownName(item) : null;
+      const propose = item && !known && KNOWN ? properName(item) : null;
+
       out.push({ check, severity, line: where, message, snippet,
                  target: flat(plain(lint.matched)), targetNth: nthInLine(lint),
-                 point: insertion(lint),
+                 point: insertion(lint), known, propose,
                  occurrence: copy.n, fp: `${check}|${message}|${snippet}|${where}` });
     }
     return out;
+  }
+
+  // ————————————————————————————————————————————————— the names
+
+  /* The list, as it was last read. `null` is not "no names": it is "we do not
+   * know", which is what an unreachable file leaves behind — and the two have
+   * to be told apart. On `null` nothing is hidden and nothing is offered,
+   * because both would be a claim about a file we could not read: hiding a
+   * finding would say it is a known name, and offering to add one would invite
+   * a second pull request for a name that may well be in there already. The
+   * findings simply come through as the linter sent them. */
+  let KNOWN = null;
+  let namesAsked = null;
+
+  const NAME_CHAR = /[\p{L}\p{N}]/u;
+
+  /* One entry per line, `#` starts a comment, blank lines are ignored. Kept
+   * this dull on purpose: the file is edited by hand, in a browser, by people
+   * in the middle of fixing an article — a format with a syntax to get wrong
+   * would be a second thing to get right. */
+  function parseNames(text) {
+    const out = [];
+    for (const line of String(text ?? '').split(/\r?\n/)) {
+      const entry = fold(line.replace(/#.*$/, ''));
+      if (entry) out.push(entry);
+    }
+    return out;
+  }
+
+  /* The file itself. Plain text, one GET, no headers of ours: this is the only
+   * host besides the linter the script ever talks to, and it is read-only.
+   * A failure is silent by design — see `KNOWN` above. */
+  function askNames() {
+    return new Promise((resolve) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: NAMES_URL,
+        timeout: NAMES_TIMEOUT,
+        onload: (r) => {
+          const body = r.responseText || '';
+          if (r.status >= 400 || body.length > NAMES_MAX) return resolve(null);
+          resolve(body);
+        },
+        onerror: () => resolve(null),
+        ontimeout: () => resolve(null),
+      });
+    });
+  }
+
+  /* Once per tab, and once more when you press Re-lint. The session cache is
+   * the same bargain the lint answers get: a file that changed a minute ago is
+   * worth one more request, a file that changed last month is not worth one
+   * per article. `force` is what a merged pull request needs — that, or a new
+   * tab. GitHub's raw CDN keeps its own copy for about five minutes on top of
+   * this, which no amount of asking from here will shorten. */
+  async function names({ force } = {}) {
+    if (!force && KNOWN) return KNOWN;
+    if (!force && namesAsked) return namesAsked;
+
+    namesAsked = (async () => {
+      let text = force ? null : sessionStorage.getItem(NAMES_KEY);
+      if (text == null) {
+        text = await askNames();
+        if (text != null) {
+          try { sessionStorage.setItem(NAMES_KEY, text); } catch { /* quota: never mind */ }
+        }
+      }
+      KNOWN = text == null ? null : parseNames(text);
+      if (KNOWN) forgetProposed(KNOWN);
+      return KNOWN;
+    })();
+    return namesAsked;
+  }
+
+  /* Is this list item one of the names? By prefix, at a word boundary: the
+   * file says "Alvarado" and the item is "Alvarado score"; the file says
+   * "British Thoracic Society" and the item runs on for another twenty words.
+   * The boundary is what keeps "Alvarado" off "Alvaradoism", and the case is
+   * ignored because a name typed lowercase into the file by somebody in a
+   * hurry should still work — the check only ever fires on a capital, so there
+   * is no lowercase word here for it to swallow by mistake. */
+  function knownName(item) {
+    const text = fold(item);
+    if (!text || !KNOWN) return null;
+    for (const entry of KNOWN) {
+      if (text.length < entry.length) continue;
+      if (text.slice(0, entry.length).toLowerCase() !== entry.toLowerCase()) continue;
+      if (NAME_CHAR.test(text.charAt(entry.length))) continue;
+      return entry;
+    }
+    return null;
+  }
+
+  /* What to propose, when it is not in there yet: the run of capitalised words
+   * the item opens with. "Alvarado score" gives "Alvarado"; "British Thoracic
+   * Society (BTS) guidelines (2010): …" gives "British Thoracic Society"; and
+   * "American College of Chest Physicians" gives "American College", because a
+   * lowercase "of" ends the run — wrong as a name, right as an entry, since
+   * matching is by prefix and "American College" already recognises the item.
+   * It is a first draft either way: the name goes to the clipboard, and what
+   * gets pasted into the file is whatever you decide to paste. */
+  function properName(item) {
+    const run = [];
+    for (const w of fold(item).split(' ')) {
+      if (!/^[\p{Lu}\p{N}]/u.test(w)) break;
+      run.push(w);
+    }
+    if (!run.length) return null;
+    // Trailing punctuation belongs to the sentence, not to the name.
+    return run.join(' ').replace(/[.,:;]+$/, '') || null;
+  }
+
+  /* The names you have already proposed, and the day you did.
+   *
+   * Between the click and the merge there is a pull request, and after the
+   * merge there is GitHub's cache: minutes at best, and however long a review
+   * takes at worst. Without this the same name would be offered again on the
+   * next article, and the next, and the honest answer to "have I already done
+   * this one?" would be "go and look at your pull requests". It lives in
+   * `localStorage` because it has to outlive the tab, and it clears itself up:
+   * a name that has landed in the file is a name this has nothing left to say
+   * about. */
+  function proposed() {
+    try { return JSON.parse(localStorage.getItem(PROPOSED_KEY) || '{}') || {}; }
+    catch { return {}; }
+  }
+
+  function rememberProposed(name) {
+    const all = proposed();
+    all[fold(name)] = new Date().toISOString().slice(0, 10);
+    try { localStorage.setItem(PROPOSED_KEY, JSON.stringify(all)); } catch { /* this session only */ }
+  }
+
+  function forgetProposed(list) {
+    const all = proposed();
+    const lower = list.map((e) => e.toLowerCase());
+    let changed = false;
+    for (const name of Object.keys(all)) {
+      if (lower.includes(name.toLowerCase())) { delete all[name]; changed = true; }
+    }
+    if (!changed) return;
+    try { localStorage.setItem(PROPOSED_KEY, JSON.stringify(all)); } catch { /* never mind */ }
   }
 
   // ——————————————————————————————————————————————————— network
@@ -680,6 +875,7 @@
   const stage = {
     slug: null,
     findings: [],
+    hidden: 0,        // known names, kept out of the walk but not out of the count
     roots: [],
     i: -1,
     history: [],      // for "undo": {i, state}
@@ -713,6 +909,7 @@
       <button data-act="undo" title="Undo the last one (u)">Undo</button>
       <span class="rlx-sep"></span>
       <button data-act="copy" title="Copy the message (c)">Copy</button>
+      <button data-act="propose" title="Add this name to the shared list (p)">+ Name</button>
       <button data-act="reload" title="Ask the linter again">Re-lint</button>
       <button data-act="close" class="rlx-close" title="Close (Esc)">&times;</button>
       <span class="rlx-status"></span>`;
@@ -755,7 +952,7 @@
     removeEventListener('resize', scheduleDraw);
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('mousemove', onMove, true);
-    stage.findings = []; stage.i = -1; stage.history = [];
+    stage.findings = []; stage.hidden = 0; stage.i = -1; stage.history = [];
   }
 
   // ———————————————————————————————————————————————— the all-clear banner
@@ -999,6 +1196,23 @@
       stage.note.appendChild(fix);
     }
 
+    /* The names line. A `ListCaps` finding on a capital that is a name is not
+     * a finding, and the only thing standing between the two is a file — so
+     * the note says which state this one is in: not in the file, or proposed
+     * and waiting for it. The words, not a button: the note fades and lets the
+     * pointer through the moment the mouse comes near it, which is what makes
+     * the text underneath selectable and what makes anything clickable in here
+     * unclickable. The click lives on the bar, where the actions live. */
+    if (f.propose && !settled) {
+      const when = proposed()[fold(f.propose)];
+      const line = document.createElement('div');
+      line.className = 'rlx-hint';
+      line.textContent = when
+        ? `'${f.propose}' was proposed for the names list on ${when} — waiting for it to land.`
+        : `'${f.propose}' is not in the names list. Press p to add it.`;
+      stage.note.appendChild(line);
+    }
+
     // Settled, and still on screen: the one thing left to say is how to leave.
     if (settled) {
       const hint = document.createElement('div');
@@ -1092,9 +1306,14 @@
     const f = stage.findings[stage.i];
     const position = f ? open.indexOf(f) + 1 : 0;
 
+    /* The names are counted apart rather than not counted. The linter said
+     * something about them and we decided it did not apply: that is a
+     * decision, and a decision belongs on screen next to the numbers it
+     * changed, not behind them. */
     stage.bar.querySelector('.rlx-count').textContent =
       `${position ? position : '–'}/${open.length} · ${counts.error} error · ${counts.warning} warning ` +
-      `· ${counts.suggestion + counts.other} other`;
+      `· ${counts.suggestion + counts.other} other` +
+      (stage.hidden ? ` · ${stage.hidden} known ${stage.hidden > 1 ? 'names' : 'name'}` : '');
 
     let status = '';
     if (!stage.findings.length) status = 'No findings: the article is clean.';
@@ -1112,6 +1331,18 @@
     disable('prev', open.length < 2); disable('next', open.length < 2);
     disable('done', !f); disable('ignore', !f); disable('copy', !f);
     disable('undo', !stage.history.length);
+
+    // Offered only where there is a name to offer: a `ListCaps` finding whose
+    // opening words are in neither the file nor your own list of things
+    // already proposed.
+    const name = f && f.state === 'open' && !proposed()[fold(f.propose || '')] ? f.propose : null;
+    const add = stage.bar.querySelector('[data-act="propose"]');
+    if (add) {
+      add.disabled = !name;
+      add.title = name
+        ? `Add '${name}' to the shared list of names (p)`
+        : 'Add a proper noun to the shared list — offered on a capitalised list item';
+    }
   }
 
   // ————————————————————————————————————————————————— navigation and actions
@@ -1176,6 +1407,25 @@
         if (f) navigator.clipboard?.writeText(f.message);
         return;
       }
+      /* The name to the clipboard, the file to a new tab. Two halves of one
+       * gesture: GitHub has no way to prefill the contents of a file you are
+       * editing — that exists for new files and for issues, not for this — so
+       * the name travels in the clipboard and you paste it where you want it,
+       * which is also the last chance to correct it before it becomes the
+       * list everybody reads.
+       *
+       * Nothing is sent. The script writes to the clipboard and opens a page;
+       * what reaches the repository is what you type into GitHub yourself. */
+      case 'propose': {
+        const f = stage.findings[stage.i];
+        if (!f?.propose) return;
+        navigator.clipboard?.writeText(f.propose);
+        rememberProposed(f.propose);
+        window.open(NAMES_EDIT_URL, '_blank', 'noopener');
+        updateBar();
+        placeNote();
+        return;
+      }
       case 'reload': return runLint(stage.slug, { force: true });
       case 'close': return destroyStage();
     }
@@ -1201,7 +1451,7 @@
     if (isTyping(e.target)) return;
 
     const m = { j: 'next', k: 'prev', s: 'done', x: 'ignore', u: 'undo',
-                c: 'copy', Escape: 'close' }[e.key];
+                c: 'copy', p: 'propose', Escape: 'close' }[e.key];
     if (m) { e.preventDefault(); act(m); }
   }
 
@@ -1317,7 +1567,7 @@
     verdict = 'asking';
     paintButton();
     try {
-      const findings = fromApi(await lintResult(slug));
+      const findings = actionable(await findingsFor(slug));
       const counts = { error: 0, warning: 0, suggestion: 0, other: 0 };
       for (const f of findings) counts[f.severity in counts ? f.severity : 'other']++;
       const worst = SEVEREST.find((sev) => counts[sev]);
@@ -1435,13 +1685,40 @@
     return data;
   }
 
+  /* The findings, with the names list read alongside them. Two requests to
+   * two hosts, asked at once because neither waits on the other, and the list
+   * is the smaller of the two by an order of magnitude.
+   *
+   * Everything downstream — the colour of the button, the all-clear banner,
+   * the walk through the stage — goes through here, so a name in the file is
+   * hidden in all three or in none. That is the point of putting it this far
+   * up: a button that counts a finding the stage refuses to show is a button
+   * that lies. */
+  async function findingsFor(slug, opts = {}) {
+    const [data] = await Promise.all([lintResult(slug, opts), names(opts)]);
+    return fromApi(data);
+  }
+
+  /* The ones there is something to do about. A known name is not one of them:
+   * the linter is right that the item starts with a capital and right that it
+   * cannot tell which capitals are names — this file can, and the answer is
+   * "that one is fine". */
+  const actionable = (findings) => findings.filter((f) => !f.known);
+
   /* Zero findings is now simply zero findings. Reading the linter's HTML page,
    * an empty result and a parser that had stopped working looked exactly the
    * same, and the doubt had to be written into the code; `askLinter` refuses
    * anything that is not a lint result, so an empty `lints[]` that gets this
    * far is an article with nothing wrong with it. */
   const ALL_CLEAR = 'Nothing to lint.';
-  const allClearSub = (slug) => `The linter found no issues in "${slug}".`;
+
+  /* "No issues" is not quite true when the only findings were names sitting in
+   * `proper-nouns.txt`, and the difference is worth a clause: the linter did
+   * say something, and what became of it is not a mystery. */
+  const allClearSub = (slug, hidden = 0) =>
+    `The linter found no issues in "${slug}".` +
+    (hidden ? ` (${hidden} ${hidden > 1 ? 'findings were names' : 'finding was a name'} ` +
+              'already in the list.)' : '');
 
   /* Outside the editor the linter is asked *before* navigating. An article
    * with nothing wrong with it used to cost you the trip to the edit page and
@@ -1452,9 +1729,10 @@
     hideBanner();
     setButtonState('Lint…', true);
     try {
-      const data = await lintResult(slug);
-      if (!fromApi(data).length) {
-        showBanner(ALL_CLEAR, allClearSub(slug));
+      const all = await findingsFor(slug);
+      const findings = actionable(all);
+      if (!findings.length) {
+        showBanner(ALL_CLEAR, allClearSub(slug, all.length - findings.length));
         return;
       }
       // Go to the editor and let the lint start there — this way navigation
@@ -1474,14 +1752,15 @@
     hideBanner();
     setButtonState('Lint…', true);
     try {
-      const data = await lintResult(slug, { force });
-      const findings = fromApi(data).map((f) => ({ ...f, state: 'open', range: null, frame: null }));
+      const all = await findingsFor(slug, { force });
+      const findings = actionable(all).map((f) => ({ ...f, state: 'open', range: null, frame: null }));
+      const hidden = all.length - findings.length;
 
       // Also the answer to "Re-lint" on an article you have just finished
       // fixing: no stage, one sentence.
       if (!findings.length) {
         destroyStage();
-        showBanner(ALL_CLEAR, allClearSub(slug));
+        showBanner(ALL_CLEAR, allClearSub(slug, hidden));
         return;
       }
 
@@ -1493,6 +1772,7 @@
       destroyStage();
       stage.roots = roots;
       stage.findings = findings;
+      stage.hidden = hidden;
       anchor(stage.findings, stage.roots);
       createStage();
       listenToFrames();

@@ -1,0 +1,34 @@
+# Names that may legitimately start a list item.
+#
+# The linter's `Radiopaedia.ListCaps` check says "we don't start a list item
+# with a capital letter. Exceptions are proper nouns." — and on a radiology
+# article a good half of them are exactly that: an eponym, a society, a
+# peptide. This file is the list of those, and a finding whose list item
+# STARTS WITH one of these entries is not shown.
+#
+# One entry per line. Matching is by prefix, at a word boundary and ignoring
+# case, so "Alvarado" covers "Alvarado score" and "Alvarado score (2020)"
+# without covering "Alvaradoism". Put the whole phrase in when the first word
+# alone would be too broad. '#' starts a comment, blank lines are ignored.
+#
+# To add one: the Lint bar offers it on the finding itself — press p, and the
+# name is copied and this file opens on GitHub, where you paste it in and
+# propose the change. Everyone using the script gets it once it is merged.
+
+# ——— Proper nouns: eponyms, people, places, organisations ———
+
+Alvarado
+American College of Chest Physicians
+British Thoracic Society
+Langerhans
+Meckel
+
+# ——— Nomenclature: proteins, peptides, genes ———
+#
+# Capitalised by the naming convention rather than by being anybody's name,
+# but just as wrong to lowercase: "aß peptide" is not a thing.
+
+ABri
+ADan
+AGel
+Aß

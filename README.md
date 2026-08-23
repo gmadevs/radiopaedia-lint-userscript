@@ -39,6 +39,7 @@ click              →  that same answer, from the cache  ┬─  nothing to fix
 - [The colour of the button](#the-colour-of-the-button)
 - [Nothing to lint](#nothing-to-lint)
 - [Working through the findings](#working-through-the-findings)
+- [Proper nouns](#proper-nouns)
 - [How it works](#how-it-works)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
@@ -153,6 +154,7 @@ move to <kbd>Alt</kbd>.
 | Ignore | <kbd>x</kbd> | <kbd>Alt</kbd> + <kbd>Backspace</kbd> |
 | Undo the last verdict | <kbd>u</kbd> | — |
 | Copy the message | <kbd>c</kbd> | — |
+| Add a proper noun | <kbd>p</kbd> | — |
 | Close | <kbd>Esc</kbd> | — |
 
 Everything is on the bottom bar too, including **Re-lint** to ask the linter again after you have
@@ -178,6 +180,38 @@ never repeats the snippet, because you are already looking at it.
 When a finding is so tall that nothing fits beside it, reach the note with the pointer: it fades
 **and stops catching the mouse**, so you can select the text underneath as if it were not there.
 Its own message is a keystroke away either way — <kbd>c</kbd>, or **Copy** on the bar.
+
+---
+
+## Proper nouns
+
+One of the linter's checks says *"in general, we don't start a list item with a capital letter.
+Exceptions are proper nouns."* On a radiology article a good half of those capitals **are** proper
+nouns — Alvarado, Meckel, Langerhans, the British Thoracic Society — and the linter has no way to
+know which. Radiopaedia's own exception mechanism exists but is open to their editors only, so
+this is the second best thing: [`proper-nouns.txt`](proper-nouns.txt), one name per line, read
+straight from this repository. A finding whose list item starts with one of those names is not
+shown at all, and the bar says how many were set aside — `1/18 · 1 error · 3 warning · 14 other ·
+2 known names` —
+because a decision to hide something belongs next to the numbers it changed, not behind them.
+
+When the name is **not** in the file yet, the note says so and <kbd>p</kbd> adds it: the name goes
+to your clipboard and the file opens on GitHub, where you paste it in and press *Propose changes*.
+GitHub turns that into a fork and a pull request on its own, so no write access and no git are
+needed — and once it is merged, everybody running the script gets it. Names you have proposed are
+remembered locally, so the same one is not offered again on the next article while the pull
+request is still open.
+
+The list is read once per tab and cached; **Re-lint** asks for it again. On top of that GitHub's
+raw CDN keeps its own copy for about five minutes, so a name that has just been merged takes a
+few minutes to arrive. If the file cannot be read at all, nothing is hidden and nothing is
+offered — an unreadable list is not an empty one, and the findings come through exactly as the
+linter sent them.
+
+> [!NOTE]
+> This is the only reason the script talks to a second host, `raw.githubusercontent.com`, and it
+> only ever reads. Nothing is sent there: what reaches the repository is what you type into
+> GitHub yourself.
 
 ---
 
