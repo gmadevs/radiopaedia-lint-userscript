@@ -23,6 +23,7 @@ British Thoracic Society
 Langerhans
 Meckel
 Brunn
+Von Brunn
 
 # ——— Nomenclature: proteins, peptides, genes ———
 #
