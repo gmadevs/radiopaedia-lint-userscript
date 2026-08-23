@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      2.3.0
+// @version      2.3.1
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time. In the margin beside the article, the sections this kind of article is supposed to have and hasn't got.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -2072,6 +2072,12 @@
    * be: the thread runs down this corridor, and at twelve pixels it had three
    * to turn a corner in and came out a bracket rather than a line. */
   const GUTTER_GAP = 20;
+  /* And between a chip and the edge of the window, which needs nothing like as
+   * much. The two were the same number, so widening the corridor for the
+   * thread also took eight pixels off the far side where nothing runs — and
+   * pushed the width at which the chips give up on words from a shade under
+   * 1250 to a shade under 1280, which is a laptop. */
+  const GUTTER_EDGE = 6;
   const GUTTER_MIN = 132;   // narrower than this and there is no room for words
   const CHIP_MAX = 190;
   const MISS = COLORS.warning;   // a section Radiopaedia asks for and isn't there
@@ -2696,10 +2702,10 @@
     if (!rail.layer || !rail.body?.isConnected) return closeRail();
 
     const box = rail.body.getBoundingClientRect();
-    const room = box.left - GUTTER_GAP * 2;
+    const room = box.left - GUTTER_GAP - GUTTER_EDGE;
     const slim = room < GUTTER_MIN;
     const width = slim ? 8 : Math.min(CHIP_MAX, room);
-    const left = Math.max(4, box.left - GUTTER_GAP - width);
+    const left = Math.max(GUTTER_EDGE, box.left - GUTTER_GAP - width);
 
     /* The header sits level with the title, not with the top of the text.
      *

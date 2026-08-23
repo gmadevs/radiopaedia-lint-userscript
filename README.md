@@ -423,9 +423,20 @@ The `⚑` next to **auto** turns the whole thing off, and it stays off.
 
 Radiopaedia centres a fixed 612px column, so the grey margin is whatever the window has left over:
 about 490px at 1920, 250 at 1440, 175 at 1280, and nothing at all once the layout folds to one
-column. Below about 130px there is no room for words and the chips go **slim** — a coloured tab
-against the edge of the text, with the heading in its tooltip. Letting them overlap the article
-would be lying about the space; saying less is not.
+column. Twenty of those pixels are the corridor the thread runs down and six are the breathing
+room at the window's edge; what is left is the chip.
+
+| window | chip |
+| --: | --: |
+| 1920 | 200px — the cap |
+| 1440 | 200px |
+| 1366 | 191px |
+| 1280 | 148px |
+| 1248 | 132px — the last one with words in it |
+| below | **slim** |
+
+Slim is a coloured tab against the edge of the text with the heading in its tooltip. Letting the
+chips overlap the article would be lying about the space; saying less is not.
 
 The article's own DOM is never touched, exactly as with the highlights. The chips are a layer over
 the page, placed from the headings' own rectangles and moved on every frame that scrolls.
@@ -627,7 +638,7 @@ reading articles will never come near, and a number a loop would reach in second
 | No chips in the margin | No lint answer for that article yet | Turn **auto** on, or click **Lint** — the rail rides on that answer and asks for nothing of its own |
 | No chips, and the linter has answered | Nothing required is missing, or the article is a kind Radiopaedia asks nothing of | Signs, devices, comparisons and biographies have no required sections; that is Radiopaedia's doing |
 | The wrong sections are being asked for | The kind of article was guessed wrong | Change it in the menu in the rail header; it is remembered for that article |
-| Chips are thin coloured tabs | The window is too narrow for words in the margin | Widen it past ~1150px, or read the headings from the tooltips |
+| Chips are thin coloured tabs | The window is too narrow for words in the margin | Widen it past ~1250px, or read the headings from the tooltips |
 | Fewer chips than the count says | Their headings are off screen | `↕ N above, M below` in the header says which way to scroll; the count badge's tooltip lists them all |
 | `⇅` in the header | Some sections are not in the canon's order | The placements are approximate on that article; the linter reports the wrong-parent half of it separately |
 | Only two or three chips, and you wanted more | Optional headings are hidden by default | `+ show N optional` in the header; it stays on |
