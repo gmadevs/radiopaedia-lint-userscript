@@ -22,6 +22,7 @@ American College of Chest Physicians
 British Thoracic Society
 Langerhans
 Meckel
+Brunn
 
 # ——— Nomenclature: proteins, peptides, genes ———
 #
