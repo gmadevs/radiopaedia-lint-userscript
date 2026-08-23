@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      2.2.2
+// @version      2.2.3
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time. In the margin beside the article, the sections this kind of article is supposed to have and hasn't got.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -851,6 +851,9 @@
       display:inline-block; min-width:18px; padding:0 5px; border-radius:2px;
       background:var(--rlx-miss, #d97706); color:#fff; text-align:center;
     }
+    /* Nothing required is missing. The badge still says so — the rail is the
+       one place that has looked — but amber would be claiming otherwise. */
+    .rlx-rail-none { background:#b6b6b6; }
     /* Sections are out of the canon's order somewhere in this article. Said
        here and not on the chips, because it is a fact about the article and
        not about any one missing heading — and because it is the reason the
@@ -2501,18 +2504,43 @@
    * building them again. The article DOM is never touched — a chip that lived
    * inside the text would be one more thing to go wrong on the day somebody
    * opens the editor. */
+  /* What the rail would put on screen, given what is missing and what you have
+   * said about it — and whether that comes to anything.
+   *
+   * Out here rather than inside `openRail` because the last line of it is the
+   * one that has already been wrong: every control the rail has lives in its
+   * header, so a rail that decides not to exist takes them all with it, and
+   * the article where that happened was the one where you most wanted them. It
+   * is four lines and no DOM, so it can be checked without a browser. */
+  function railContent(rows, aside, optionalShown) {
+    const optional = rows.filter((r) => !r.required);
+    const shown = optionalShown ? rows : rows.filter((r) => r.required);
+    return { optional, shown,
+             need: rows.length - optional.length,
+             worth: !!(shown.length || aside || optional.length) };
+  }
+
   function openRail({ rows, seen, canonName, profile, body, jumbled }) {
     closeRail();
 
-    const optional = rows.filter((r) => !r.required);
-    const shown = showOptional() ? rows : rows.filter((r) => r.required);
-    const need = rows.filter((r) => r.required).length;
     const aside = hushedHere().length;
+    const { optional, shown, need, worth } = railContent(rows, aside, showOptional());
 
-    // Nothing to show and nothing set aside: say nothing. Nothing to show
-    // BECAUSE it was all set aside is a different state, and it keeps its
-    // header — otherwise the undo button would be inside the thing it undoes.
-    if (!shown.length && !aside) return;
+    /* The header stays for as long as there is anything to say, and "there are
+     * nineteen optional ones you are not looking at" is something to say.
+     *
+     * Every control the rail has lives in the header, so a header that leaves
+     * takes them with it. Turn the optional ones off on an article that had
+     * only optional ones and the rail had nothing to show, so it went — and
+     * with it the button that turns them back on, on the one article where
+     * that button was the only thing you wanted. The same trap, more quietly,
+     * for the sections you have set aside.
+     *
+     * So: silence only when there is genuinely nothing — nothing required
+     * missing, nothing offered, nothing set aside. Which is still the whole of
+     * what a sign or a device gets, because Radiopaedia asks nothing of them
+     * and so nothing is offered either. */
+    if (!worth) return;
 
     rail.rows = shown;
     rail.seen = seen;
@@ -2528,9 +2556,9 @@
     const head = document.createElement('div');
     head.className = 'rlx-rail-head';
     head.innerHTML = `
-      <span class="rlx-rail-n" title="${
+      <span title="${
         rows.map((r) => (r.required ? '' : '· ') + r.title).join('\n').replace(/"/g, '')
-      }">${need}</span>
+      }" class="rlx-rail-n${need ? '' : ' rlx-rail-none'}">${need}</span>
       <span class="rlx-rail-what">${need
         ? `section${need > 1 ? 's' : ''} missing`
         : (aside ? 'all set aside' : 'nothing required')}</span>

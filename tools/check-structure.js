@@ -53,7 +53,7 @@ function load() {
   `;
   const expose = `
     return { compile, profileFor, whatIsMissing, anchorFor, canonicalHeading,
-             setCanon: (c) => { CANON = c; } };
+             railContent, setCanon: (c) => { CANON = c; } };
   `;
   const M = new Function(stubs + src.slice(a, b) + expose)();
   M.setCanon(M.compile(JSON.parse(fs.readFileSync(CANON, 'utf8'))));
@@ -381,6 +381,55 @@ check('a subsection whose parent is absent falls back', {
   title: 'Some disease', type: 'general',
   headings: [[1, 'Treatment and prognosis']],
   anchors: { '‹any imaging modality›': 'Treatment and prognosis' },
+});
+
+// —— the rail must not be able to take its own controls away ——————————————
+// Every control lives in the header. Hide the optional ones on an article
+// whose only missing sections were optional and the old rule found nothing to
+// show, so the rail went — taking with it the button that brings them back, on
+// the one article where that was the only button you wanted.
+function content(name, { rows, aside = 0, optionalShown, worth, shown, need }) {
+  const got = M.railContent(rows, aside, optionalShown);
+  const problems = [];
+  if (worth !== undefined && got.worth !== worth) {
+    problems.push(`worth: expected ${worth}, got ${got.worth}`);
+  }
+  if (shown !== undefined && got.shown.length !== shown) {
+    problems.push(`shown: expected ${shown}, got ${got.shown.length}`);
+  }
+  if (need !== undefined && got.need !== need) {
+    problems.push(`need: expected ${need}, got ${got.need}`);
+  }
+  if (problems.length) {
+    failed++;
+    console.log(`✗ ${name}`);
+    for (const p of problems) console.log(`    ${p}`);
+  } else {
+    console.log(`✓ ${name}  (worth ${got.worth}, ${got.shown.length} shown, ${got.need} required)`);
+  }
+}
+
+const REQ = { required: true }, OPT = { required: false };
+
+content('optional hidden, and only optional were missing — the header stays', {
+  rows: [OPT, OPT, OPT], optionalShown: false,
+  worth: true, shown: 0, need: 0,
+});
+content('optional showing, only optional missing', {
+  rows: [OPT, OPT, OPT], optionalShown: true,
+  worth: true, shown: 3, need: 0,
+});
+content('everything set aside — the header stays, for the undo in it', {
+  rows: [], aside: 2, optionalShown: false,
+  worth: true, shown: 0, need: 0,
+});
+content('nothing missing, nothing offered, nothing set aside — silence', {
+  rows: [], optionalShown: false,
+  worth: false, shown: 0, need: 0,
+});
+content('required missing, optional hidden', {
+  rows: [REQ, REQ, OPT, OPT], optionalShown: false,
+  worth: true, shown: 2, need: 2,
 });
 
 console.log(failed ? `\n${failed} failed` : '\nall good');

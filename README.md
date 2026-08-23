@@ -281,6 +281,12 @@ of thing, something about the article as a whole. That is also what makes the fi
 right: every chip is kept below the header, and a header standing on the opening paragraph pushed
 `Terminology` and `Usage` down past `Epidemiology`, which is the section they go above.
 
+It stays for as long as there is anything to say, and *"there are nineteen optional ones you are
+not looking at"* counts. Every control the rail has lives in that header, so a header that leaves
+takes them with it — and on an article whose only missing sections were optional, hiding them
+would have hidden the button that brings them back. The badge goes grey and reads `0` when nothing
+required is missing: the rail is the one thing that has looked, so it says so.
+
 Click a chip and the heading is on your clipboard, ready to paste into the editor. The `×` on it
 says *this article does not need that one*, and it is remembered for that article; the `↺` in the
 header brings them all back.
