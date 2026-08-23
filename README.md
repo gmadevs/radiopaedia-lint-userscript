@@ -47,6 +47,8 @@ article_type                                            └─  the ones missing
 - [Working through the findings](#working-through-the-findings)
 - [Proper nouns](#proper-nouns)
 - [The sections that are missing](#the-sections-that-are-missing)
+  - [Required and offered](#required-and-offered)
+  - [When the sections are out of order](#when-the-sections-are-out-of-order)
 - [How it works](#how-it-works)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
@@ -267,6 +269,49 @@ Click a chip and the heading is on your clipboard, ready to paste into the edito
 says *this article does not need that one*, and it is remembered for that article; the `↺` in the
 header brings them all back.
 
+### Required and offered
+
+Two things are being said, and they are two different axes, so they get two different signals.
+**Whether Radiopaedia asks for it** is the left edge and the weight of the ink — amber and bold
+for a section it requires, grey and light for one it merely offers. **Where it sits** is the
+indent: a subsection is stepped in under the section it belongs to.
+
+```
+┃ Epidemiology         ×     amber, bold      Radiopaedia requires it
+┃ Terminology          ×     grey, light      Radiopaedia offers it
+    ┃ Genetics         ×     indented         a subsection, under a section that is there
+```
+
+Only the required ones are shown to begin with — `+ show 8 optional` in the header brings the rest,
+and it stays on until you turn it off. The optional ones are filtered, or they would arrive thirty
+at a time: a **subsection is only offered once the section it belongs under is there**, because
+`Pathology/Genetics` on an article with no `Pathology` is the leaf before the branch. The nine
+modalities are held back too — they are all children of `Radiographic features`, so on any article
+with that section they would come nine at once, and what Radiopaedia asks for there is *one*,
+which is already a required row of its own. A sub-modality like `Dual-energy CT` is not held back:
+it appears only on an article that has a `CT` section, one at a time.
+
+An article Radiopaedia asks nothing of — a sign, a device, a comparison — is offered nothing
+either. Its canon is the standard one and reading the whole of it out as suggestions would be the
+noise the requirement rules were written to avoid.
+
+### When the sections are out of order
+
+A missing heading is placed beside the sections it comes *before* — so "before" has to survive an
+article whose sections are not in the canon's order. It is worked out from **the page, not the
+canon**: of all the sections the canon puts after the missing one, the anchor is whichever is
+highest on the page.
+
+The two are the same answer on an article in order, and they part company on one that is not. Take
+an article running `Radiographic features` and then `Clinical presentation`, and a missing
+`Epidemiology`. The canon names Clinical presentation first — so anchoring by the canon puts the
+chip *below* Radiographic features, beside the second of the two sections it is supposed to come
+before. Epidemiology goes above both, so the anchor is whichever the reader meets first.
+
+When any section is out of the canon's order the header says so, with `⇅`. The linter reports the
+wrong-parent half of this itself, as `HeadingsValid`; what it costs here is that the placements on
+that article are approximate, and that is worth saying where the placements are.
+
 ### One canon per kind of article
 
 Radiopaedia does not have one structure, it has **twenty-three**. Its own *standard article
@@ -293,9 +338,10 @@ and are not:
   need one. An article with no imaging at all is incomplete however long it is; an article with a
   CT section cannot be asked for an MRI by a machine.
 
-Only the **required** headings become chips. Every canon has thirty-odd optional ones, and an
-article that has all six of its obligations is not improved by being told about thirty things
-Radiopaedia never asked for.
+The **required** headings become chips on their own; the optional ones are a click away, for the
+reason given under [Required and offered](#required-and-offered) — every canon has thirty-odd of
+them, and an article that has all six of its obligations is not improved by being handed thirty
+suggestions unasked.
 
 ### How it knows what kind of article it is
 
@@ -527,6 +573,8 @@ reading articles will never come near, and a number a loop would reach in second
 | No chips, and the linter has answered | Nothing required is missing, or the article is a kind Radiopaedia asks nothing of | Signs, devices, comparisons and biographies have no required sections; that is Radiopaedia's doing |
 | The wrong sections are being asked for | The kind of article was guessed wrong | Change it in the menu in the rail header; it is remembered for that article |
 | Chips are thin coloured tabs | The window is too narrow for words in the margin | Widen it past ~1150px, or read the headings from the tooltips |
+| `⇅` in the header | Some sections are not in the canon's order | The placements are approximate on that article; the linter reports the wrong-parent half of it separately |
+| Only two or three chips, and you wanted more | Optional headings are hidden by default | `+ show N optional` in the header; it stays on |
 
 <details>
 <summary><strong>What can break it</strong></summary>

@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      2.0.0
+// @version      2.1.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time. In the margin beside the article, the sections this kind of article is supposed to have and hasn't got.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -830,46 +830,74 @@
     #rlx-gutter { position:fixed; inset:0; pointer-events:none; z-index:99996; }
     #rlx-gutter > * { pointer-events:auto; box-sizing:border-box; }
 
+    /* 13px on an 18px line, which is the size Radiopaedia sets on the article's
+       own paragraphs. The first version was 11px — the size of the site's
+       chrome — and beside prose a third larger it read as a footnote about the
+       article rather than as part of reading it. The margin is not chrome. */
     .rlx-rail-head, .rlx-chip {
       position:fixed; border-radius:2px;
       border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
       background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.06);
       font-family:"Open Sans", system-ui, -apple-system, sans-serif;
-      font-size:11px; line-height:15px;
+      font-size:13px; line-height:18px;
     }
 
     .rlx-rail-head {
       display:flex; align-items:center; gap:6px; flex-wrap:wrap;
-      padding:5px 7px; background:#f7f7f7; color:#777; font-weight:600;
+      padding:6px 8px; background:#f7f7f7; color:#777; font-weight:600;
+      font-size:12px;
     }
     .rlx-rail-n {
-      display:inline-block; min-width:16px; padding:0 4px; border-radius:2px;
+      display:inline-block; min-width:18px; padding:0 5px; border-radius:2px;
       background:var(--rlx-miss, #d97706); color:#fff; text-align:center;
     }
+    /* Sections are out of the canon's order somewhere in this article. Said
+       here and not on the chips, because it is a fact about the article and
+       not about any one missing heading — and because it is the reason the
+       placements below are approximate rather than exact. */
+    .rlx-rail-jumbled { color:#b45309; cursor:help; }
     .rlx-rail-what { flex:1 1 auto; }
     /* The kind of article, and the whole point of its being a menu: the guess
        is a guess, and on the article it gets wrong it is one click to say so. */
     .rlx-rail-kind {
-      flex:1 1 100%; max-width:100%; padding:2px 4px; border-radius:2px;
+      flex:1 1 100%; max-width:100%; padding:3px 4px; border-radius:2px;
       border:1px solid rgba(0,0,0,.12); background:#fff; color:#555;
-      font-family:inherit; font-size:10px; font-weight:600; cursor:pointer;
+      font-family:inherit; font-size:11px; font-weight:600; cursor:pointer;
     }
-    .rlx-rail-off, .rlx-rail-undo {
-      padding:0 4px; border:0; border-radius:2px; background:transparent;
+    .rlx-rail-off, .rlx-rail-undo, .rlx-rail-more {
+      padding:0 5px; border:0; border-radius:2px; background:transparent;
       color:#aaa; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;
     }
-    .rlx-rail-off:hover, .rlx-rail-undo:hover { color:#555; background:rgba(0,0,0,.06); }
+    .rlx-rail-more { flex:1 1 100%; text-align:left; color:#999; }
+    .rlx-rail-more.rlx-on { color:#555; }
+    .rlx-rail-off:hover, .rlx-rail-undo:hover, .rlx-rail-more:hover {
+      color:#555; background:rgba(0,0,0,.06);
+    }
 
+    /* Two things are being said at once and they are two different axes, so
+       they get two different signals. WHETHER Radiopaedia asks for it is the
+       left edge and the weight of the ink: amber and bold for a section it
+       requires, grey and light for one it merely offers. WHERE it sits is the
+       indent: a subsection is stepped in under the section it belongs to.
+       Reading them as one — a dashed border meaning both "optional" and
+       "subsection" — is what the first version did, and it made a required
+       modality look like a suggestion. */
     .rlx-chip {
       display:flex; align-items:flex-start; gap:4px;
-      padding:4px 6px 4px 7px;
+      padding:4px 7px 4px 8px;
       border-left:3px solid var(--rlx-miss, #d97706);
-      color:#555; font-weight:600; cursor:pointer;
+      color:#444; font-weight:600; cursor:pointer;
     }
-    .rlx-chip:hover { background:#fffdf7; color:#222; }
-    /* A subsection, said quietly: it is missing from inside a section, not
-       from the spine of the article. */
-    .rlx-chip-sub { margin-left:10px; border-left-style:dashed; font-weight:400; }
+    .rlx-chip:hover { background:#fffdf7; color:#111; }
+    .rlx-chip-optional {
+      border-left-color:#c9c9c9; color:#8a8a8a; font-weight:400;
+      background:#fcfcfc;
+    }
+    .rlx-chip-optional:hover { background:#f4f4f4; color:#444; }
+    /* Stepped in under the section it belongs to. One step only: the canon
+       goes three deep and three indents in a 200px margin is most of the
+       margin. */
+    .rlx-chip-sub { margin-left:12px; }
     .rlx-chip-name { flex:1 1 auto; overflow-wrap:anywhere; }
     .rlx-chip-hush {
       flex:0 0 auto; padding:0 2px; border:0; background:transparent;
@@ -885,7 +913,9 @@
        the section goes. */
     .rlx-rail-slim .rlx-chip { padding:0; border-left-width:8px; height:22px; }
     .rlx-rail-slim .rlx-chip-name, .rlx-rail-slim .rlx-chip-hush { display:none; }
-    .rlx-rail-slim .rlx-rail-what, .rlx-rail-slim .rlx-rail-kind { display:none; }
+    .rlx-rail-slim .rlx-rail-what, .rlx-rail-slim .rlx-rail-kind,
+    .rlx-rail-slim .rlx-rail-more { display:none; }
+    .rlx-rail-slim .rlx-chip-sub { margin-left:6px; }
     .rlx-rail-slim .rlx-rail-head { padding:2px 3px; gap:2px; }
 
     #rlx-layer { position:fixed; inset:0; pointer-events:none; z-index:99997; }
@@ -1985,6 +2015,7 @@
   const RAIL_KEY = 'rlx-rail';             // the switch, remembered across sessions
   const PROFILE_KEY = 'rlx-profile';       // {slug: the kind you said it was}
   const HUSHED_KEY = 'rlx-hushed';         // {slug: [headings you said it does not need]}
+  const OPTIONAL_KEY = 'rlx-optional';     // whether the offered ones are shown too
 
   /* How the article body reads on the page. Radiopaedia renders an editor
    * "Heading 1" as `<h4 class="linked-header section-title">`, a "Heading 2"
@@ -2232,12 +2263,16 @@
     const seen = matchUp(found, canonName);
     const required = new Set(profile.required);
     const hushed = new Set(hushedHere());
+    // Which sections the article HAS, by name, so that an optional subsection
+    // can ask whether the section it belongs under is there at all.
+    const present = new Set([...seen.keys()].map((v) => v.split('/').pop()));
     const out = [];
 
     rows.forEach((c, i) => {
-      if (!required.has(c.v) && !required.has(c.t)) return;
       if (seen.has(c.v) || hushed.has(c.v)) return;
-      out.push({ entry: c.v, title: c.t, level: c.l, parent: c.p, order: i });
+      const must = required.has(c.v) || required.has(c.t);
+      if (!must && !offerable(c, present, canonName)) return;
+      out.push({ entry: c.v, title: c.t, level: c.l, parent: c.p, order: i, required: must });
     });
 
     if (profile.modality && !hushed.has(CANON.modalityEntry)) {
@@ -2246,13 +2281,50 @@
       if (!any) {
         const at = rows.findIndex((c) => c.t === 'Radiographic features');
         out.push({ entry: CANON.modalityEntry, title: CANON.modalityTitle,
-                   level: 2, parent: 'Radiographic features',
+                   level: 2, parent: 'Radiographic features', required: true,
                    order: (at < 0 ? rows.length : at) + 0.5, modality: true });
       }
     }
 
     out.sort((a, b) => a.order - b.order);
-    return { rows: out, seen, profile, canonName };
+    return { rows: out, seen, profile, canonName, jumbled: jumbled(seen, canonName) };
+  }
+
+  /* Is this optional heading worth offering at all?
+   *
+   * Every canon has thirty-odd optional rows and most of them are subsections
+   * of sections the article has not got. Offering `Pathology/Immunophenotype`
+   * to an article with no `Pathology` is offering the leaf before the branch —
+   * so a subsection is only offered once the section it belongs under is
+   * there, and top-level rows are always offered.
+   *
+   * The modalities are the exception, and they have to be: they are all
+   * children of `Radiographic features`, so on any article that has that
+   * section all nine of them would qualify at once. What Radiopaedia asks for
+   * there is one, and that is already its own row. */
+  function offerable(row, present, canonName) {
+    if (row.p === 'Radiographic features') return false;
+    return !row.p || present.has(row.p);
+  }
+
+  /* Are the article's sections in the canon's order?
+   *
+   * `matchUp` walks the page from top to bottom, so its keys are in document
+   * order; if the canon's index ever goes backwards along that walk, two
+   * sections are the wrong way round. This does not change what is missing —
+   * it changes how much the placements below can be trusted, which is why it
+   * is said in the header rather than acted on. */
+  function jumbled(seen, canonName) {
+    const rows = CANON.canons[canonName] || [];
+    const at = new Map(rows.map((c, i) => [c.v, i]));
+    let last = -1;
+    for (const v of seen.keys()) {
+      const i = at.get(v);
+      if (i == null) continue;
+      if (i < last) return true;
+      last = i;
+    }
+    return false;
   }
 
   /* Where a missing heading belongs on the page: beside the first heading the
@@ -2270,11 +2342,27 @@
       const rf = seen.get('Radiographic features');
       if (rf) return rf.el;
     }
+    /* Every section the canon puts after this one and the article has, and
+       then the one that is HIGHEST ON THE PAGE — not the one the canon
+       happens to name first.
+       
+       The two are the same answer on an article whose sections are in order,
+       and they part company on one that is not. Take an article that runs
+       `Radiographic features` and then `Clinical presentation`, which is
+       backwards, and a missing `Epidemiology`: the canon names Clinical
+       presentation first, so the old rule put the chip below Radiographic
+       features — beside the second of the two sections it is supposed to come
+       before. Epidemiology goes above BOTH, so the anchor has to be whichever
+       of them the reader meets first. */
+    let best = null;
     for (let j = Math.ceil(row.order); j < rows.length; j++) {
       const hit = seen.get(rows[j].v);
-      if (hit) return hit.el;
+      if (!hit) continue;
+      if (!best) { best = hit; continue; }
+      const after = hit.el.compareDocumentPosition(best.el) & Node.DOCUMENT_POSITION_FOLLOWING;
+      if (after) best = hit;
     }
-    return null;   // the end of the article
+    return best ? best.el : null;   // nothing after it: the end of the article
   }
 
   // ————————————————————————————————————————————— what you have said about it
@@ -2306,6 +2394,20 @@
 
   function writeMap(key, map) {
     try { localStorage.setItem(key, JSON.stringify(map)); } catch { /* this session only */ }
+  }
+
+  /* The optional headings, shown or not. Off to begin with, and a preference
+   * rather than a per-article choice: whether you want Radiopaedia's
+   * suggestions alongside its requirements is a way of working, not a fact
+   * about one article. */
+  function showOptional() {
+    try { return localStorage.getItem(OPTIONAL_KEY) === '1'; }
+    catch { return false; }
+  }
+
+  function setShowOptional(on) {
+    try { localStorage.setItem(OPTIONAL_KEY, on ? '1' : '0'); } catch { /* this session only */ }
+    railSoon();
   }
 
   function chosenProfile() {
@@ -2370,17 +2472,23 @@
    * building them again. The article DOM is never touched — a chip that lived
    * inside the text would be one more thing to go wrong on the day somebody
    * opens the editor. */
-  function openRail(rows, seen, canonName, profileName, body) {
+  function openRail({ rows, seen, canonName, profile, body, jumbled }) {
     closeRail();
-    // Nothing missing and nothing set aside: say nothing. Nothing missing
+
+    const optional = rows.filter((r) => !r.required);
+    const shown = showOptional() ? rows : rows.filter((r) => r.required);
+    const need = rows.filter((r) => r.required).length;
+    const aside = hushedHere().length;
+
+    // Nothing to show and nothing set aside: say nothing. Nothing to show
     // BECAUSE it was all set aside is a different state, and it keeps its
     // header — otherwise the undo button would be inside the thing it undoes.
-    if (!rows.length && !hushedHere().length) return;
+    if (!shown.length && !aside) return;
 
-    rail.rows = rows;
+    rail.rows = shown;
     rail.seen = seen;
     rail.canonName = canonName;
-    rail.profile = profileName;
+    rail.profile = profile;
     rail.body = body;
 
     rail.layer = document.createElement('div');
@@ -2389,41 +2497,48 @@
 
     const head = document.createElement('div');
     head.className = 'rlx-rail-head';
-    const hushedCount = hushedHere().length;
     head.innerHTML = `
-      <span class="rlx-rail-n">${rows.length}</span>
-      <span class="rlx-rail-what">${rows.length
-        ? `section${rows.length > 1 ? 's' : ''} missing`
-        : 'all set aside'}</span>
+      <span class="rlx-rail-n">${need}</span>
+      <span class="rlx-rail-what">${need
+        ? `section${need > 1 ? 's' : ''} missing`
+        : (aside ? 'all set aside' : 'nothing required')}</span>
+      ${jumbled ? '<span class="rlx-rail-jumbled" title="Some sections are not in the order the canon puts them in, which the linter reports separately. The placements below are approximate on this article.">&#8645;</span>' : ''}
+      <button class="rlx-rail-off" title="Hide the structure rail everywhere">&times;</button>
       <select class="rlx-rail-kind" title="What kind of article this is. The canon follows from it."></select>
-      ${hushedCount ? `<button class="rlx-rail-undo" title="Bring back the ${hushedCount} you set aside">↺ ${hushedCount}</button>` : ''}
-      <button class="rlx-rail-off" title="Hide the structure rail everywhere">&times;</button>`;
+      ${optional.length || showOptional()
+        ? `<button class="rlx-rail-more${showOptional() ? ' rlx-on' : ''}">${
+             showOptional() ? '\u2212 hide' : '+ show'} ${optional.length} optional</button>`
+        : ''}
+      ${aside ? `<button class="rlx-rail-undo" title="Bring back the ${aside} you set aside">&#8635; ${aside}</button>` : ''}`;
 
     const kind = head.querySelector('.rlx-rail-kind');
     for (const [name, p] of Object.entries(CANON.profiles)) {
       const opt = document.createElement('option');
       opt.value = name;
       opt.textContent = p.label || name;
-      opt.selected = name === profileName;
+      opt.selected = name === profile;
       kind.appendChild(opt);
     }
     kind.addEventListener('change', () => chooseProfile(kind.value));
     head.querySelector('.rlx-rail-off').addEventListener('click', () => setRailOn(false));
+    head.querySelector('.rlx-rail-more')?.addEventListener('click', () => setShowOptional(!showOptional()));
     head.querySelector('.rlx-rail-undo')?.addEventListener('click', unhushAll);
     rail.layer.appendChild(head);
     rail.head = head;
 
-    for (const row of rows) {
+    for (const row of shown) {
       const chip = document.createElement('div');
       chip.className = 'rlx-chip';
+      if (!row.required) chip.classList.add('rlx-chip-optional');
       if (row.level > 1) chip.classList.add('rlx-chip-sub');
       chip.innerHTML = `
         <span class="rlx-chip-name"></span>
         <button class="rlx-chip-hush" title="This article does not need it">&times;</button>`;
       chip.querySelector('.rlx-chip-name').textContent = row.title;
-      chip.title = row.modality
-        ? 'No imaging modality under Radiographic features. Click to copy the heading.'
-        : `Missing: ${row.entry}. Click to copy the heading.`;
+      chip.title = (row.modality
+        ? 'No imaging modality under Radiographic features'
+        : `${row.required ? 'Required' : 'Offered'} by the ${canonName} structure: ${row.entry}`)
+        + '. Click to copy the heading.';
       chip.addEventListener('click', (e) => {
         if (e.target.closest('.rlx-chip-hush')) return hush(row.entry);
         copyHeading(chip, row);
@@ -2522,8 +2637,9 @@
     if (!page) return closeRail();
 
     const name = profileFor(articleTitle(), lastArticleType);
-    const { rows, seen, canonName } = whatIsMissing(name, page.found);
-    openRail(rows, seen, canonName || CANON.profiles[name]?.canon, name, page.body);
+    const measured = whatIsMissing(name, page.found);
+    openRail({ ...measured, profile: name, body: page.body,
+               canonName: measured.canonName || CANON.profiles[name]?.canon });
   }
 
   function paintRailToggle() {

@@ -43,6 +43,9 @@ function load() {
     const sessionStorage = { getItem: () => null, setItem() {} };
     const document = { title: 'Test | Radiopaedia.org', querySelector: () => null,
                        body: { appendChild() {} } };
+    // \`anchorFor\` asks the page which of two headings comes first. Off the
+    // page, that is the position in the list they were read from.
+    const Node = { DOCUMENT_POSITION_PRECEDING: 2, DOCUMENT_POSITION_FOLLOWING: 4 };
     const currentSlug = () => 'test-article';
     const inEditor = () => false;
     const visibleTitle = () => null;
@@ -63,35 +66,49 @@ const M = load();
  * order. The parent is worked out the same way `sectionsOnPage` works it out. */
 function page(list) {
   const found = [], stack = [];
-  for (const [level, title] of list) {
+  list.forEach(([level, title], pos) => {
     while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
-    found.push({ el: { tag: title }, level, title,
+    const el = { tag: title, pos,
+                 compareDocumentPosition: (other) =>
+                   (other.pos > pos ? Node.DOCUMENT_POSITION_FOLLOWING
+                                    : Node.DOCUMENT_POSITION_PRECEDING) };
+    found.push({ el, level, title,
                  parent: stack.length ? stack[stack.length - 1].title : null });
     stack.push({ level, title });
-  }
+  });
   return found;
 }
+const Node = { DOCUMENT_POSITION_PRECEDING: 2, DOCUMENT_POSITION_FOLLOWING: 4 };
 
 let failed = 0;
 
-function check(name, { title, type, headings = [], profile, missing, anchors }) {
+function check(name, opts) {
+  const { title, type, headings = [], profile, missing, offered, anchors, jumbled } = opts;
   const found = page(headings);
   const got = M.profileFor(title, type);
-  const { rows, seen, canonName } = M.whatIsMissing(got, found);
-  const names = rows.map((r) => r.title);
+  const measured = M.whatIsMissing(got, found);
+  const { rows, seen, canonName } = measured;
+  const required = rows.filter((r) => r.required).map((r) => r.title);
+  const optional = rows.filter((r) => !r.required).map((r) => r.title);
   const problems = [];
 
   if (profile && got !== profile) problems.push(`profile: expected ${profile}, got ${got}`);
-  if (missing && names.join(' · ') !== missing.join(' · ')) {
-    problems.push(`missing: expected [${missing.join(', ')}], got [${names.join(', ')}]`);
+  if (missing && required.join(' · ') !== missing.join(' · ')) {
+    problems.push(`required: expected [${missing.join(', ')}], got [${required.join(', ')}]`);
+  }
+  if (offered && optional.join(' · ') !== offered.join(' · ')) {
+    problems.push(`optional: expected [${offered.join(', ')}], got [${optional.join(', ')}]`);
+  }
+  if (jumbled !== undefined && !!measured.jumbled !== jumbled) {
+    problems.push(`jumbled: expected ${jumbled}, got ${!!measured.jumbled}`);
   }
   if (anchors) {
     for (const [heading, where] of Object.entries(anchors)) {
       const row = rows.find((r) => r.title === heading);
       if (!row) { problems.push(`anchor: ${heading} is not among the missing`); continue; }
       const el = M.anchorFor(row, seen, canonName);
-      const got = el ? el.tag : null;
-      if (got !== where) problems.push(`anchor: ${heading} → expected ${where}, got ${got}`);
+      const at = el ? el.tag : null;
+      if (at !== where) problems.push(`anchor: ${heading} → expected ${where}, got ${at}`);
     }
   }
 
@@ -100,7 +117,8 @@ function check(name, { title, type, headings = [], profile, missing, anchors }) 
     console.log(`✗ ${name}`);
     for (const p of problems) console.log(`    ${p}`);
   } else {
-    console.log(`✓ ${name}  (${got}${names.length ? ' — missing ' + names.join(', ') : ''})`);
+    console.log(`✓ ${name}  (${got}${required.length ? ' — needs ' + required.join(', ') : ''}`
+              + `${optional.length ? ' — offers ' + optional.length : ''})`);
   }
 }
 
@@ -212,6 +230,91 @@ check('the two Complications are two headings', {
   missing: ['Epidemiology', 'Clinical presentation', 'Pathology',
             'Radiographic features', '‹any imaging modality›',
             'Differential diagnosis'],
+});
+
+// —— what is offered, and what is not worth offering ——————————————————————
+// A subsection is only offered once the section it belongs under is there:
+// `Pathology/Genetics` on an article with no `Pathology` is the leaf before
+// the branch. Top-level rows are always offered.
+check('nothing but top-level is offered to an empty article', {
+  title: 'Some disease', type: 'general',
+  offered: ['Terminology', 'Usage', 'Diagnosis', 'Radiology report',
+            'History and etymology', 'Practical points', 'See also'],
+});
+check('a present section opens its own subsections', {
+  title: 'Some disease', type: 'general',
+  headings: [[1, 'Pathology']],
+  offered: ['Terminology', 'Usage', 'Diagnosis',
+            'Pathology/Aetiology', 'Pathology/Location', 'Pathology/Classification',
+            'Pathology/Macroscopic appearance', 'Pathology/Microscopic appearance',
+            'Pathology/Immunophenotype', 'Pathology/Markers', 'Pathology/Genetics',
+            'Radiology report', 'History and etymology', 'Practical points', 'See also']
+           .map((v) => v.split('/').pop()),
+});
+// The nine modalities are all children of `Radiographic features`. Offered as
+// optional rows they would arrive nine at a time on any article that has that
+// section — and what Radiopaedia asks for there is one, which is already a
+// required row of its own. So the direct children are held back.
+//
+// A sub-modality is not: `Dual-energy CT` sits under `CT`, and it only appears
+// on an article that has a `CT` section, one at a time, which is the general
+// rule doing its job rather than an exception to it.
+check('the modalities are not offered one by one, sub-modalities are', {
+  title: 'Some disease', type: 'general',
+  headings: [[1, 'Radiographic features'], [2, 'CT']],
+  offered: ['Terminology', 'Usage', 'Diagnosis', 'Dual-energy CT', 'Radiology report',
+            'History and etymology', 'Practical points', 'See also'],
+});
+check('and nothing under Radiographic features when no modality is there', {
+  title: 'Some disease', type: 'general',
+  headings: [[1, 'Radiographic features']],
+  offered: ['Terminology', 'Usage', 'Diagnosis', 'Radiology report',
+            'History and etymology', 'Practical points', 'See also'],
+});
+
+// —— sections in the wrong order ——————————————————————————————————————————
+// The linter reports the wrong-parent half of this itself. What it costs HERE
+// is the placement: a missing heading is put beside the sections it comes
+// before, and "before" stops being obvious once the article is out of order.
+check('an article in order is not flagged', {
+  title: 'Some disease', type: 'general',
+  headings: [[1, 'Clinical presentation'], [1, 'Radiographic features'],
+             [1, 'Treatment and prognosis']],
+  jumbled: false,
+});
+check('an article out of order is flagged', {
+  title: 'Some disease', type: 'general',
+  headings: [[1, 'Radiographic features'], [1, 'Clinical presentation']],
+  jumbled: true,
+});
+// The whole point of anchoring by the page rather than by the canon.
+// Epidemiology comes before both of these sections, so it belongs beside
+// whichever of them the reader meets FIRST — which here is the one the canon
+// names second.
+check('out of order, the anchor is the topmost section, not the first in canon', {
+  title: 'Some disease', type: 'general',
+  headings: [[1, 'Radiographic features'], [2, 'CT'], [1, 'Clinical presentation']],
+  missing: ['Epidemiology', 'Pathology', 'Treatment and prognosis',
+            'Differential diagnosis'],
+  anchors: {
+    Epidemiology: 'Radiographic features',
+    Pathology: 'Radiographic features',
+    // Nothing in the canon after these two is on the page at all.
+    'Treatment and prognosis': null,
+    'Differential diagnosis': null,
+  },
+  jumbled: true,
+});
+// Read off radiopaedia.org/articles/deviated-nasal-septum, which puts
+// `Complications` under `Pathology` — a place the canon does not have it.
+check('a real article with a section under the wrong parent', {
+  title: 'Deviated nasal septum', type: 'general',
+  headings: [[1, 'Clinical presentation'], [1, 'Pathology'], [2, 'Etiology'],
+             [2, 'Associations'], [2, 'Complications'],
+             [1, 'Radiographic features'], [2, 'CT'], [1, 'Treatment and prognosis']],
+  profile: 'disease',
+  missing: ['Epidemiology', 'Differential diagnosis'],
+  anchors: { Epidemiology: 'Clinical presentation', 'Differential diagnosis': null },
 });
 
 console.log(failed ? `\n${failed} failed` : '\nall good');
