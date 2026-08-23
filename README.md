@@ -276,6 +276,11 @@ rule rather than a case of its own: its parent is `Radiographic features`.
       └──────────────────────┘     • pachymeningeal thickening
 ```
 
+The header sits level with the title, on the same line as the `Lint` button — it is the same kind
+of thing, something about the article as a whole. That is also what makes the first chips land
+right: every chip is kept below the header, and a header standing on the opening paragraph pushed
+`Terminology` and `Usage` down past `Epidemiology`, which is the section they go above.
+
 Click a chip and the heading is on your clipboard, ready to paste into the editor. The `×` on it
 says *this article does not need that one*, and it is remembered for that article; the `↺` in the
 header brings them all back.

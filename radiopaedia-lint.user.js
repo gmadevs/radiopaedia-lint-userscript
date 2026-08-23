@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      2.2.1
+// @version      2.2.2
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time. In the margin beside the article, the sections this kind of article is supposed to have and hasn't got.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -2483,12 +2483,14 @@
 
   // ————————————————————————————————————————————————————————————— the rail
 
-  const rail = { layer: null, rows: [], seen: null, canonName: null, profile: null, body: null };
+  const rail = { layer: null, rows: [], seen: null, canonName: null, profile: null,
+                 body: null, title: null, head: null };
 
   function closeRail() {
     rail.layer?.remove();
     rail.layer = null;
     rail.rows = [];
+    rail.title = null;
     removeEventListener('scroll', placeRail, true);
     removeEventListener('resize', placeRail);
   }
@@ -2517,6 +2519,7 @@
     rail.canonName = canonName;
     rail.profile = profile;
     rail.body = body;
+    rail.title = visibleTitle();
 
     rail.layer = document.createElement('div');
     rail.layer.id = 'rlx-gutter';
@@ -2619,10 +2622,22 @@
     const width = slim ? 8 : Math.min(CHIP_MAX, room);
     const left = Math.max(4, box.left - GUTTER_GAP - width);
 
+    /* The header sits level with the title, not with the top of the text.
+     *
+       It is the same object as the Lint button — something about the article
+       as a whole — so it belongs on the article's own top line, and putting it
+       there is not only tidiness. Every chip is kept below the header, and the
+       header standing on the first paragraph pushed the first chips down past
+       the section they belong beside: `Terminology` and `Usage` go above
+       `Epidemiology`, and an opening paragraph is usually two lines, so there
+       was never room. Level with the title there is a title's worth of margin
+       above the text, and they land where they mean. */
+    const crown = rail.title?.isConnected ? rail.title.getBoundingClientRect() : box;
+
     rail.layer.classList.toggle('rlx-rail-slim', slim);
     rail.head.style.left = `${left}px`;
     rail.head.style.width = slim ? 'auto' : `${width}px`;
-    rail.head.style.top = `${Math.max(8, Math.min(box.top, innerHeight - 40))}px`;
+    rail.head.style.top = `${Math.max(8, Math.min(crown.top, innerHeight - 40))}px`;
 
     /* A chip is beside a heading or it is nowhere.
      *
