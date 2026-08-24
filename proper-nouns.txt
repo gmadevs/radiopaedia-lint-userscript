@@ -17,6 +17,7 @@
 
 # ——— Proper nouns: eponyms, people, places, organisations ———
 
+Bickerstaff
 Alvarado
 American College of Chest Physicians
 British Thoracic Society
