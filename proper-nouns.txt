@@ -34,6 +34,7 @@ Schilder
 # Capitalised by the naming convention rather than by being anybody's name,
 # but just as wrong to lowercase: "aß peptide" is not a thing.
 
+IgA
 ABri
 ADan
 AGel
