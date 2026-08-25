@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      2.4.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time. In the margin beside the article, the sections this kind of article is supposed to have and hasn't got.
+// @version      3.0.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time. In the margin beside the article, the sections this kind of article is supposed to have and hasn't got. And beside every reference in the editor, a Lint citation chip: one press checks it against radiopaedia.work/cite and shows, word by word, what differs.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -76,6 +76,16 @@
  * right place for all of this, and it is not open to us: only Radiopaedia's
  * own editors can register one. This is the second best thing.
  *
+ * The references at the bottom of the article are checked by a second tool at
+ * the same host, `radiopaedia.work/cite`: it takes a reference, works out what
+ * to look up in it, asks Crossref or PubMed or Google Books, and gives back the
+ * canonical form. In the editor every reference gets a `Lint citation` chip
+ * beside it, and one press asks about that one reference — matches, differs,
+ * or nothing in there to look up. Where it differs the two forms are shown
+ * with the words that changed lit up, and the corrected line, numbered by
+ * where it stands in the list, goes to the clipboard for you to paste. The
+ * editor is never written to, here as everywhere else.
+ *
  * One request here is one request to Radiopaedia: the linter reads the article
  * on our behalf. This is a human clicking a button on one article at a time,
  * so that is fine — but it is why there is no prefetching and no automatic
@@ -103,6 +113,21 @@
   const AUTO_KEY = 'rlx-auto';      // the switch, remembered across sessions
 
   const API_URL = 'https://radiopaedia.work/api/v1/lint?article=';
+
+  /* The citation worker, and what one press of "Lint citation" costs.
+   *
+   * `?search=` takes the whole reference, works out for itself what to look up
+   * in it, and asks Crossref, PubMed, Google Books or Elsevier — somebody
+   * else's API at the far end of ours. So this is asked once, per click, per
+   * reference, and never on its own initiative: an article with thirty
+   * references checked on page load would be thirty lookups nobody sat down to
+   * read, and the whole point of a button is that a person pressed it. */
+  const CITE_URL = 'https://radiopaedia.work/cite?search=';
+  const CITE_TIMEOUT = 60_000;      // Crossref and PubMed are at the far end of it
+  const CITE_MAX = 1024 * 1024;     // a rendered page; anything bigger is not one
+  const CITE_KEY = 'rlx-cite:';     // one answer, for this tab's session
+  const CITES_KEY = 'rlx-cites';    // the chips on or off, remembered
+  const CITE_GAP = 8;               // between the reference and its chip
   const LINTER_TIMEOUT = 60_000;    // the linter still reads the article from Radiopaedia, but a second or two does it
   const EDITOR_TIMEOUT = 30_000;    // how long we wait for the WYSIWYG to initialise
   const PENDING_KEY = 'rlx-lint-pending';
@@ -1156,9 +1181,66 @@
       to   { opacity:1; transform:translate(-50%, 0); }
     }
 
+    /* ————— the citation chips, and what one has to say.
+
+       The same bargain the rail and the highlights make, for the same reason:
+       fixed-position elements in a layer of our own, their tops read off the
+       references they belong to on every frame that moves. Nothing is ever put
+       inside the editor — a button that lived in the text would be a button
+       saved into the article the first time somebody pressed Save. */
+    #rlx-cites { position:fixed; inset:0; pointer-events:none; z-index:99996; }
+    #rlx-cites .rlx-cite {
+      position:fixed; pointer-events:auto;
+      padding:2px 7px; border-radius:2px;
+      border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
+      background:#ededed; color:#6b7280;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05);
+      font:600 11px/16px system-ui,-apple-system,sans-serif;
+      letter-spacing:normal; text-transform:none; white-space:nowrap; cursor:pointer;
+      transition:opacity .12s ease;
+    }
+    #rlx-cites .rlx-cite:hover { background:#6b7280; color:#fff; }
+    /* No room to the right of the text: the chip stands on the reference's own
+       last inch instead, and gets out of the way until you go for it. */
+    #rlx-cites .rlx-cite-inside { opacity:.35; }
+    #rlx-cites .rlx-cite-inside:hover { opacity:1; }
+    #rlx-cites .rlx-cite-asking { opacity:.55; cursor:progress; }
+    #rlx-cites .rlx-cite-match   { background:rgba(5,150,105,.16); color:#059669; }
+    #rlx-cites .rlx-cite-match:hover { background:#059669; color:#fff; }
+    #rlx-cites .rlx-cite-differs { background:rgba(217,119,6,.18); color:#b45309; }
+    #rlx-cites .rlx-cite-differs:hover { background:#b45309; color:#fff; }
+    #rlx-cites .rlx-cite-unknown { background:rgba(107,114,128,.18); color:#6b7280; }
+
+    #rlx-cite-note {
+      position:fixed; z-index:99999; width:min(38em, 84vw);
+      padding:.7em .9em; border-radius:8px; border-left:4px solid #6b7280;
+      background:#fff; color:#111; box-shadow:0 6px 24px rgba(0,0,0,.22);
+      font:13px/1.5 system-ui,-apple-system,sans-serif;
+    }
+    #rlx-cite-note .rlx-cite-head { display:flex; gap:.5em; align-items:baseline;
+      font-size:11px; text-transform:uppercase; letter-spacing:.04em; opacity:.8; }
+    #rlx-cite-note .rlx-cite-why { margin-top:.35em; }
+    #rlx-cite-note .rlx-cite-label { margin-top:.7em; font-size:11px;
+      text-transform:uppercase; letter-spacing:.04em; opacity:.55; }
+    #rlx-cite-note .rlx-cite-text { margin-top:.15em; padding:.3em .5em; border-radius:6px;
+      background:rgba(127,127,127,.10); word-break:break-word; }
+    /* The two words that differ, rather than the two paragraphs that contain
+       them: a reference is eighty words long and the thing wrong with it is
+       usually one of them. */
+    #rlx-cite-note .rlx-was { background:rgba(220,38,38,.18); border-radius:2px; }
+    #rlx-cite-note .rlx-now { background:rgba(5,150,105,.20); border-radius:2px; }
+    #rlx-cite-note .rlx-cite-acts { display:flex; gap:.4em; margin-top:.7em; flex-wrap:wrap; }
+    #rlx-cite-note button {
+      padding:3px 8px; border-radius:2px; border:1px solid rgba(127,127,127,.35);
+      background:transparent; color:inherit; cursor:pointer;
+      font:600 11px/16px system-ui,-apple-system,sans-serif;
+    }
+    #rlx-cite-note button:hover { background:rgba(127,127,127,.18); }
+
     @media (prefers-color-scheme: dark) {
       #rlx-note { background:#1f2937; color:#f3f4f6; }
       #rlx-note .rlx-snippet { border-left-color:#4b5563; color:#d1d5db; }
+      #rlx-cite-note { background:#1f2937; color:#f3f4f6; }
     }
   `);
 
@@ -1928,7 +2010,7 @@
   }
   const inEditor = () => /\/edit\/?$/.test(location.pathname);
 
-  let group = null, button = null, toggle = null, railToggle = null;
+  let group = null, button = null, toggle = null, railToggle = null, citesToggle = null;
 
   /* What the last answer said about this article, in the colour of the boxes
    * it would draw on the text: red if anything is an error, amber if anything
@@ -2064,6 +2146,20 @@
 
     g.append(b, t, r);
 
+    /* The fourth, and only where it has anything to switch: the citation chips
+       live in the editor and nowhere else, so on an article page this control
+       would be a switch for something that is not there. */
+    let c = null;
+    if (inEditor()) {
+      c = document.createElement('button');
+      c.className = 'rlx-auto rlx-cites-toggle';
+      c.type = 'button';
+      c.textContent = '\u275d';
+      c.title = 'Show a Lint citation chip beside every reference';
+      c.addEventListener('click', () => setCitesOn(!citesOn()));
+      g.appendChild(c);
+    }
+
     const title = inEditor() ? null : visibleTitle();
     if (title) title.appendChild(g);
     else pinToCorner(g);
@@ -2075,10 +2171,11 @@
     const box = b.getBoundingClientRect();
     if (!box.width || !box.height) pinToCorner(g);
 
-    group = g; button = b; toggle = t; railToggle = r;
+    group = g; button = b; toggle = t; railToggle = r; citesToggle = c;
     paintButton();
     paintToggle();
     paintRailToggle();
+    paintCitesToggle();
   }
 
   /* The fallback spot: fixed at the top right, outside any branch of the site.
@@ -2881,6 +2978,617 @@
                          + ` M${tx - 4},${ty - 3} L${tx},${ty} L${tx - 4},${ty + 3}`);
   }
 
+  // ———————————————————————————————————————————————————————— the citations
+
+  /* The other half of a Radiopaedia article, and the half no linter check
+   * covers: the reference list at the bottom. A reference is right when it is
+   * word for word what the databases say about that paper, numbered in the
+   * order it appears — and there is a tool that knows, `radiopaedia.work/cite`,
+   * which takes a reference and gives back the canonical form of it.
+   *
+   * So: a `Lint citation` chip beside every reference in the editor, and one
+   * press asks that tool about that one reference. What comes back is a
+   * verdict — matches, differs, nothing to look up — and, when it differs, the
+   * two forms side by side with the words that changed lit up, and the
+   * corrected line on the clipboard. Nothing is ever written into the editor:
+   * you paste it yourself, which is also the last chance to disagree.
+   */
+
+  /* A reference, from the outside: a block that opens with its own number and
+   * carries one of the things a citation carries. Numbered by hand is the
+   * convention they are written in — it is also the number the worker reads
+   * back out of the front — and an `<li>` inside an `<ol>` is taken too, where
+   * the list does the numbering instead.
+   *
+   * Deliberately about the SHAPE of the text rather than about the field it
+   * sits in: Radiopaedia's editor is a WYSIWYG whose markup is not ours to
+   * depend on, and a paragraph that reads "12. Smith J. … doi:10.…/…" is a
+   * reference wherever it is standing. The cost of being wrong is a chip
+   * beside a paragraph that is not one; the cost of guessing the field wrong
+   * is no chips at all. */
+  const CITE_NUM = /^(\d{1,3})\s*[.)]\s+(?=\S)/;
+  const CITE_SIGNS =
+    /(?:\bdoi[:.]|10\.\d{4,9}\/|pubmed|ncbi\.nlm\.nih\.gov|\bisbn\b|books\.google|\b(?:19|20)\d{2}[;:(]|\((?:19|20)\d{2}\))/i;
+
+  function referenceBlocks() {
+    const rows = [];
+    for (const { root, frame } of editorRoots()) {
+      const found = [];
+      for (const el of root.querySelectorAll('p,li,div,td')) {
+        const text = tidy(el.textContent);
+        if (text.length < 24 || text.length > 1500) continue;
+        const numbered = CITE_NUM.exec(text);
+        const listed = el.tagName === 'LI' && el.parentElement?.tagName === 'OL';
+        if (!numbered && !listed) continue;
+        if (!CITE_SIGNS.test(text)) continue;
+        /* `typed` is the whole difference between the two shapes. A number
+         * somebody wrote can be the wrong number; a number an `<ol>` draws is
+         * its position by construction, and cannot be. */
+        found.push({ el, frame, text, typed: !!numbered,
+                     n: numbered ? +numbered[1] : ordinalIn(el) });
+      }
+      /* Innermost only. A `<div>` wrapping the paragraph matches everything the
+       * paragraph matches, and two chips on one reference is one chip too many. */
+      const inner = found.filter((row) => !found.some((o) => o !== row && row.el.contains(o.el)));
+      // Where it stands in the list, which is what its number ought to be.
+      inner.forEach((row, i) => { row.pos = rows.length + i + 1; });
+      rows.push(...inner);
+    }
+    return rows;
+  }
+
+  const ordinalIn = (li) => [...(li.parentElement?.children || [])].indexOf(li) + 1;
+
+  /* What gets sent, and why it is markup rather than text.
+   *
+   * The worker works out for itself what to look up — but WHICH identifier it
+   * finds decides which database answers, and they do not word things the same
+   * way. The GenBank reference sent with its Pubmed link comes back from
+   * PubMed as "Nucleic Acids Res. 2013;41(Database issue)" and matches; the
+   * same reference sent as plain text is resolved through its DOI instead and
+   * comes back from Crossref as "Nucleic Acids Research. 2012;41(D1)", which
+   * does not. So the links travel with it.
+   *
+   * Only the links, though: `<a href>` and text, everything else unwrapped. A
+   * WYSIWYG hangs its own furniture on everything it touches — `data-mce-…`, a
+   * `<span>` around a pasted word, a `<br>` where a line broke — and none of
+   * that is the citation. */
+  function citeMarkup(el) {
+    const out = [];
+    (function walk(node) {
+      for (const child of node.childNodes) {
+        if (child.nodeType === 3) { out.push(child.nodeValue); continue; }
+        if (child.nodeType !== 1) continue;
+        if (child.tagName === 'BR') { out.push(' '); continue; }
+        const href = child.tagName === 'A' ? child.getAttribute('href') : null;
+        if (href) out.push(`<a href="${href.replace(/"/g, '&quot;')}">`);
+        walk(child);
+        if (href) out.push('</a>');
+      }
+    })(el);
+    return fold(out.join(''));
+  }
+
+  /* Livewire keeps a component's state in a `wire:snapshot` attribute, as
+   * JSON, and the page `?search=…` renders already has the answer in it.
+   *
+   * `DOMParser` rather than a regular expression over the HTML: the document
+   * it builds is inert — nothing in there runs, loads or fetches — and it
+   * unescapes the attribute for us, which done by hand is exactly where this
+   * would quietly break.
+   *
+   * Four fields are taken and the rest ignored: `citation`, the canonical
+   * form; `error`, what it says when it could not resolve anything; and, off
+   * the result it worked out, `match` and `index`. Livewire tags its arrays as
+   * it serialises them — `[value, {"s":"arr"}]` — so the result is searched
+   * for the first object carrying a verdict rather than reached at down a
+   * fixed path that a version bump would move. */
+  function citeState(html) {
+    let node;
+    try {
+      node = new DOMParser().parseFromString(html, 'text/html')
+        .querySelector('[wire\\:snapshot]');
+    } catch { return null; }
+    if (!node) return null;
+    let snap;
+    try { snap = JSON.parse(node.getAttribute('wire:snapshot')); } catch { return null; }
+    const data = snap && typeof snap === 'object' ? snap.data : null;
+    if (!data || typeof data !== 'object') return null;
+    const item = deepFind(data.result, 'match') || {};
+    return {
+      citation: typeof data.citation === 'string' ? data.citation : null,
+      error: typeof data.error === 'string' ? data.error : null,
+      match: item.match === true,
+      index: item.index == null ? null : String(item.index),
+    };
+  }
+
+  /* The first object in there that has this key, however deep it was buried. */
+  function deepFind(node, key, depth = 0) {
+    if (!node || typeof node !== 'object' || depth > 6) return null;
+    if (!Array.isArray(node) && Object.prototype.hasOwnProperty.call(node, key)) return node;
+    for (const v of Array.isArray(node) ? node : Object.values(node)) {
+      const hit = deepFind(v, key, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  /* One request, one reference, one press. `@connect radiopaedia.work` already
+   * covers it: this is the same host the linter answers from, and this is
+   * still a GET — there is no POST anywhere in this file. */
+  function askCite(search) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: CITE_URL + encodeURIComponent(search),
+        timeout: CITE_TIMEOUT,
+        onload: (r) => {
+          const body = r.responseText || '';
+          if (CHALLENGE.some((m) => body.includes(m))) {
+            return reject(new Error(
+              'Cloudflare bot check. Open radiopaedia.work in a tab, clear the check, ' +
+              'then try again.'));
+          }
+          if (r.status >= 400) return reject(new Error(`The citation tool answered ${r.status}.`));
+          if (body.length > CITE_MAX) return reject(new Error('That answer was not a page.'));
+          const said = citeState(body);
+          if (!said) {
+            return reject(new Error(
+              'The citation tool answered with a page this script could not read. ' +
+              'Open it in a tab and check by hand.'));
+          }
+          resolve(said);
+        },
+        onerror: () => reject(new Error('The citation tool could not be reached.')),
+        ontimeout: () => reject(new Error('The citation tool took too long to answer.')),
+      });
+    });
+  }
+
+  /* Kept for the tab, under a short key made from what was asked. The worker
+   * caches behind the same URL — there is a "force regenerate" on its own page
+   * for when that is wrong — but this saves the round trip when you press the
+   * same chip twice, which is what happens the moment you go back to compare
+   * once more. */
+  function citeCached(search) {
+    try {
+      const raw = sessionStorage.getItem(CITE_KEY + shortHash(search));
+      const said = raw ? JSON.parse(raw) : null;
+      return said && typeof said === 'object' ? said : null;
+    } catch { return null; }
+  }
+
+  function rememberCite(search, said) {
+    try { sessionStorage.setItem(CITE_KEY + shortHash(search), JSON.stringify(said)); }
+    catch { /* quota: never mind, it is one more request */ }
+  }
+
+  // Not a checksum: a short, stable key for a long string.
+  function shortHash(text) {
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(36);
+  }
+
+  /* What to say about one reference.
+   *
+   * Three things can be wrong and they are not the same thing: nothing in it
+   * could be looked up, the words differ from what the database says, or the
+   * words are right and the NUMBER in front of them is not the one this
+   * reference is. The last is worth its own verdict — a list that runs
+   * 1, 2, 2, 4 sends every citation marker in the article to the wrong paper,
+   * and it is the one thing here that can be told without asking anybody. */
+  function citeVerdict(row, said) {
+    const misnumbered = row.typed && row.n != null && row.pos != null && row.n !== row.pos;
+    if (said.error || !said.citation) {
+      return { state: 'unknown', head: 'Nothing to look up',
+               why: said.error
+                 ? tidy(said.error)
+                 : 'The tool found no DOI, PMID, ISBN or URL in this reference.' };
+    }
+    if (said.match) {
+      return misnumbered
+        ? { state: 'differs', head: `Numbered ${row.n}, and it is the ${ordinal(row.pos)}`,
+            why: 'The reference itself is right; the number in front of it is not.' }
+        : { state: 'match', head: 'Matches',
+            why: 'Word for word what the citation tool returns for it.' };
+    }
+    return { state: 'differs', head: misnumbered ? `Differs, and numbered ${row.n}` : 'Differs',
+             why: misnumbered
+               ? `The tool returns this instead — and this is the ${ordinal(row.pos)} reference.`
+               : 'The tool returns this instead.' };
+  }
+
+  const ordinal = (n) => {
+    const tens = n % 100, ones = n % 10;
+    const suffix = tens >= 11 && tens <= 13 ? 'th'
+      : ones === 1 ? 'st' : ones === 2 ? 'nd' : ones === 3 ? 'rd' : 'th';
+    return `${n}${suffix}`;
+  };
+
+  /* The words that changed, not the paragraphs that contain them.
+   *
+   * A reference is eighty words long and what is wrong with it is usually one
+   * of them — a journal abbreviated where it should be spelled out, a year off
+   * by one, three authors where the style wants "et al". Printing both forms
+   * and leaving the reader to find the difference is printing the problem
+   * twice; this is the longest common subsequence of the two word lists, which
+   * turns them into runs of "same", "was" and "now".
+   *
+   * Quadratic, and capped for it: at 400 words a side the table is 160k cells
+   * and still under a millisecond, and a reference that long is not one. */
+  function wordDiff(before, after) {
+    const A = before.split(' '), B = after.split(' ');
+    const m = A.length, n = B.length;
+    if (!m || !n || m > 400 || n > 400) return null;
+
+    const L = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+    for (let i = m - 1; i >= 0; i--) {
+      for (let j = n - 1; j >= 0; j--) {
+        L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+      }
+    }
+
+    const runs = [];
+    const add = (kind, word) => {
+      const last = runs[runs.length - 1];
+      if (last && last.kind === kind) last.words.push(word);
+      else runs.push({ kind, words: [word] });
+    };
+    let i = 0, j = 0;
+    while (i < m && j < n) {
+      if (A[i] === B[j]) { add('same', A[i]); i++; j++; }
+      else if (L[i + 1][j] >= L[i][j + 1]) add('was', A[i++]);
+      else add('now', B[j++]);
+    }
+    while (i < m) add('was', A[i++]);
+    while (j < n) add('now', B[j++]);
+    return runs;
+  }
+
+  /* One of the two sides of the comparison, built out of the runs: the article
+   * shows what it has with the words that go highlighted, the tool shows what
+   * it says with the words that arrive highlighted. Text nodes and `<span>`s,
+   * never `innerHTML` — what is being displayed here came off somebody else's
+   * page. */
+  function diffLine(runs, keep, mark, fallback) {
+    const line = document.createElement('div');
+    line.className = 'rlx-cite-text';
+    if (!runs) { line.textContent = fallback; return line; }
+    for (const run of runs) {
+      if (run.kind !== 'same' && run.kind !== keep) continue;
+      const text = run.words.join(' ') + ' ';
+      if (run.kind === 'same') { line.appendChild(document.createTextNode(text)); continue; }
+      const hit = document.createElement('span');
+      hit.className = mark;
+      hit.textContent = text;
+      line.appendChild(hit);
+    }
+    if (!line.childNodes.length) line.textContent = fallback;
+    return line;
+  }
+
+  // ————————————————————————————————————————— the chips and their answer
+
+  const cites = { layer: null, note: null, rows: [], open: null, watch: null, settle: null };
+
+  const citesOn = () => localStorage.getItem(CITES_KEY) !== '0';
+  function setCitesOn(on) {
+    try { localStorage.setItem(CITES_KEY, on ? '1' : '0'); } catch { /* this session only */ }
+    paintCitesToggle();
+    if (on) citesSoon(); else closeCites();
+  }
+
+  function paintCitesToggle() {
+    citesToggle?.classList.toggle('rlx-on', citesOn());
+  }
+
+  /* The editor is not there when the page is: it mounts, and then it fills.
+   * `awaitEditor()` is the same wait the findings make, and the references are
+   * looked for after it — before that there is nothing to put a chip beside. */
+  let citesRun = 0;
+  async function citesSoon() {
+    if (!inEditor() || !citesOn()) return closeCites();
+    const run = ++citesRun;
+    await awaitEditor();
+    if (run !== citesRun || !citesOn()) return;
+    openCites();
+  }
+
+  function openCites() {
+    closeCites();
+    const rows = referenceBlocks();
+    if (!rows.length) return;
+
+    cites.rows = rows;
+    cites.layer = document.createElement('div');
+    cites.layer.id = 'rlx-cites';
+
+    for (const row of rows) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'rlx-cite';
+      chip.textContent = 'Lint citation';
+      chip.title = 'Check this reference against radiopaedia.work/cite' +
+        (row.typed ? ` (it is the ${ordinal(row.pos)} in the list)` : '');
+      chip.addEventListener('click', () => lintCitation(row));
+      row.chip = chip;
+      cites.layer.appendChild(chip);
+
+      // Answered before, in this tab: it comes back answered, at no cost.
+      const said = citeCached(citeMarkup(row.el));
+      if (said) setChip(row, citeVerdict(row, said).state);
+    }
+
+    document.body.appendChild(cites.layer);
+
+    /* References come and go while you work — one pasted in, one deleted — and
+     * chips left over would point at where they used to be. The editor is
+     * watched for it, well after the typing stops: every keystroke is a
+     * mutation, and rebuilding on each one would be a rebuild per character.
+     * Rebuilt only when the set of references actually changed, and then the
+     * verdicts come back out of the session cache with them. */
+    cites.watch = new MutationObserver(() => {
+      clearTimeout(cites.settle);
+      cites.settle = setTimeout(() => {
+        if (!cites.layer) return;
+        const now = referenceBlocks();
+        const same = now.length === cites.rows.length &&
+                     now.every((r, i) => r.el === cites.rows[i].el);
+        if (!same) openCites();
+      }, 1500);
+    });
+    for (const { root } of editorRoots()) {
+      cites.watch.observe(root, { childList: true, subtree: true, characterData: true });
+    }
+
+    addEventListener('scroll', placeCites, true);
+    addEventListener('resize', placeCites);
+    // A scroll inside the editor's own iframe never reaches the page above it.
+    for (const { frame } of editorRoots()) {
+      const w = frame?.contentWindow;
+      if (!w || w.__rlxCiteScroll) continue;
+      w.__rlxCiteScroll = true;
+      try { w.addEventListener('scroll', placeCites, true); } catch { /* not ours */ }
+    }
+    placeCites();
+  }
+
+  function closeCites() {
+    closeCiteNote();
+    cites.watch?.disconnect();
+    cites.watch = null;
+    clearTimeout(cites.settle);
+    cites.layer?.remove();
+    cites.layer = null;
+    cites.rows = [];
+    removeEventListener('scroll', placeCites, true);
+    removeEventListener('resize', placeCites);
+  }
+
+  let citePending = null;
+  function placeCites() {
+    if (citePending) return;
+    citePending = requestAnimationFrame(() => { citePending = null; layOutCites(); });
+  }
+
+  /* Beside the reference, outside the text if there is room and on its last
+   * inch if there is not — faded there until you go for it, because a chip
+   * standing on the words is a chip in the way of reading them. A reference
+   * scrolled out of the window, or out of the editor's own scroll, has no chip
+   * at all: it would be a button pointing at nothing. */
+  function layOutCites() {
+    if (!cites.layer) return;
+    /* A window that reports no size is not a window with nothing in it. It
+     * happens in odd contexts, and taken at face value every chip is "off the
+     * bottom edge" and the whole layer quietly empties. */
+    const vh = innerHeight || document.documentElement.clientHeight || 0;
+    const vw = innerWidth || document.documentElement.clientWidth || 0;
+    if (!vh || !vw) return;
+
+    for (const row of cites.rows) {
+      const chip = row.chip;
+      if (!row.el.isConnected) { chip.hidden = true; continue; }
+
+      const off = row.frame ? row.frame.getBoundingClientRect() : null;
+      const r = row.el.getBoundingClientRect();
+      const top = r.top + (off ? off.top : 0);
+      const right = r.right + (off ? off.left : 0);
+
+      const gone = top > vh - 6 || top + r.height < 6 ||
+                   (off && (top < off.top - 2 || top > off.bottom - 6));
+      if (gone) { chip.hidden = true; continue; }
+
+      chip.hidden = false;
+      const w = chip.offsetWidth || 84;
+      const outside = right + CITE_GAP + w < vw - 4;
+      chip.classList.toggle('rlx-cite-inside', !outside);
+      chip.style.left = `${Math.round(outside ? right + CITE_GAP : Math.max(4, right - w - 4))}px`;
+      chip.style.top = `${Math.round(Math.min(Math.max(2, top), vh - 22))}px`;
+    }
+    if (cites.open) placeCiteNote();
+  }
+
+  const CHIP_WORD = { asking: 'Lint citation', match: '✓ citation',
+                      differs: '≠ citation', unknown: '? citation' };
+
+  function setChip(row, state) {
+    const chip = row.chip;
+    if (!chip) return;
+    for (const k of ['asking', 'match', 'differs', 'unknown']) {
+      chip.classList.toggle(`rlx-cite-${k}`, k === state);
+    }
+    chip.textContent = CHIP_WORD[state] || 'Lint citation';
+    chip.disabled = state === 'asking';
+  }
+
+  /* The press. The reference goes to the clipboard on the way out — the tool
+   * is one tab away and sometimes what you want is to look at it yourself —
+   * and then one question is asked about it. */
+  async function lintCitation(row) {
+    const search = citeMarkup(row.el);
+    if (!search) return;
+    navigator.clipboard?.writeText(search).catch(() => { /* the chip still works */ });
+
+    const cached = citeCached(search);
+    if (cached) return void showCite(row, cached, search);
+
+    setChip(row, 'asking');
+    showCiteNote(row, { state: 'asking', head: 'Asking…',
+                        why: 'radiopaedia.work is looking this reference up.' }, null, search);
+    try {
+      const said = await askCite(search);
+      rememberCite(search, said);
+      showCite(row, said, search);
+    } catch (err) {
+      setChip(row, 'unknown');
+      showCiteNote(row, { state: 'unknown', head: 'Could not ask', why: err.message },
+                   null, search);
+    }
+  }
+
+  function showCite(row, said, search) {
+    const verdict = citeVerdict(row, said);
+    setChip(row, verdict.state);
+    showCiteNote(row, verdict, said, search);
+  }
+
+  /* The answer, beside the chip that asked for it. Built node by node: the
+   * canonical citation came off another site's page, and the one place it is
+   * ever allowed to be is inside a text node. */
+  function showCiteNote(row, verdict, said, search) {
+    closeCiteNote();
+
+    const note = document.createElement('div');
+    note.id = 'rlx-cite-note';
+    note.style.borderLeftColor =
+      verdict.state === 'match' ? '#059669'
+        : verdict.state === 'differs' ? '#b45309' : '#6b7280';
+
+    const head = document.createElement('div');
+    head.className = 'rlx-cite-head';
+    const what = document.createElement('strong');
+    what.textContent = verdict.head;
+    const where = document.createElement('span');
+    where.textContent = `reference ${row.pos}`;
+    head.append(what, where);
+
+    const why = document.createElement('div');
+    why.className = 'rlx-cite-why';
+    why.textContent = verdict.why;
+    note.append(head, why);
+
+    // The comparison, on the two occasions there is one to make.
+    if (said?.citation && verdict.state !== 'match') {
+      // Read off the editor now, not off the scan: you may have edited the
+      // reference between the chip being drawn and the chip being pressed.
+      const mine = fold(tidy(row.el.textContent).replace(CITE_NUM, ''));
+      const theirs = fold(plain(said.citation));
+      const runs = wordDiff(mine, theirs);
+
+      const a = document.createElement('div');
+      a.className = 'rlx-cite-label';
+      a.textContent = 'in the article';
+      const b = document.createElement('div');
+      b.className = 'rlx-cite-label';
+      b.textContent = 'radiopaedia.work/cite';
+      note.append(a, diffLine(runs, 'was', 'rlx-was', mine),
+                  b, diffLine(runs, 'now', 'rlx-now', theirs));
+    }
+
+    const acts = document.createElement('div');
+    acts.className = 'rlx-cite-acts';
+
+    if (said?.citation) {
+      const copy = document.createElement('button');
+      copy.textContent = row.typed ? `Copy as ${row.pos}.` : 'Copy citation';
+      copy.title = row.typed
+        ? 'The corrected reference, numbered by where it stands, on the clipboard — ' +
+          'links and all. Paste it over the old one yourself.'
+        : 'The corrected reference on the clipboard, links and all. The list draws its own ' +
+          'number, so none is added. Paste it over the old one yourself.';
+      copy.addEventListener('click', () => copyCitation(copy, row, said));
+      acts.appendChild(copy);
+    }
+
+    const open = document.createElement('button');
+    open.textContent = 'Open in cite';
+    open.title = 'The same question, in the tool’s own page';
+    open.addEventListener('click', () => {
+      window.open(CITE_URL + encodeURIComponent(search), '_blank', 'noopener');
+    });
+
+    const shut = document.createElement('button');
+    shut.textContent = 'Close';
+    shut.addEventListener('click', closeCiteNote);
+    acts.append(open, shut);
+    note.appendChild(acts);
+
+    document.body.appendChild(note);
+    cites.note = note;
+    cites.open = row;
+    placeCiteNote();
+    document.addEventListener('keydown', onCiteKey, true);
+  }
+
+  /* Under the chip, and inside the window: a note pushed off the bottom edge
+   * is a note nobody reads. */
+  function placeCiteNote() {
+    const note = cites.note, row = cites.open;
+    if (!note || !row?.chip || row.chip.hidden) return closeCiteNote();
+    const c = row.chip.getBoundingClientRect();
+    const box = note.getBoundingClientRect();
+    const left = Math.max(6, Math.min(c.left, innerWidth - box.width - 6));
+    const below = c.bottom + 6;
+    const top = below + box.height < innerHeight - 6
+      ? below
+      : Math.max(6, c.top - box.height - 6);
+    note.style.left = `${Math.round(left)}px`;
+    note.style.top = `${Math.round(top)}px`;
+  }
+
+  function closeCiteNote() {
+    cites.note?.remove();
+    cites.note = null;
+    cites.open = null;
+    document.removeEventListener('keydown', onCiteKey, true);
+  }
+
+  function onCiteKey(e) {
+    if (e.key === 'Escape' && cites.note) { e.preventDefault(); closeCiteNote(); }
+  }
+
+  /* The corrected reference on the clipboard, in both shapes: the markup, so
+   * that pasting it into the WYSIWYG lands real links, and the plain text
+   * under it for anywhere that wants text. The number is the one it ought to
+   * have — where it stands in the list — not the one it has.
+   *
+   * `ClipboardItem` where it exists, plain text where it does not. Writing
+   * into the editor ourselves would be the obvious next step and it is not
+   * taken: this script has never put a character inside those roots, and a
+   * citation is not the place to start. */
+  function copyCitation(button, row, said) {
+    const lead = row.typed ? `${row.pos}. ` : '';
+    const html = lead + said.citation;
+    const text = lead + plain(said.citation);
+    const done = () => {
+      const was = button.textContent;
+      button.textContent = 'Copied';
+      setTimeout(() => { button.textContent = was; }, 900);
+    };
+    try {
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([text], { type: 'text/plain' }),
+      });
+      navigator.clipboard.write([item]).then(done,
+        () => navigator.clipboard?.writeText(text).then(done, () => { /* nothing else to try */ }));
+    } catch {
+      navigator.clipboard?.writeText(text).then(done, () => { /* nothing else to try */ });
+    }
+  }
+
   // ————————————————————————————————————————————————————————————— wiring
 
   /* The rail waits for the linter, and asks it for nothing.
@@ -3079,6 +3787,10 @@
                      ? 'floating, top right' : 'next to the title')
                  : (currentSlug() ? 'NOT MOUNTED' : 'not needed here'),
                button ? button.getBoundingClientRect() : '');
+
+  // The chips do not wait for the linter: they are about the references, and
+  // the references are on the page whether anybody pressed Lint or not.
+  citesSoon();
 
   if (inEditor()) {
     const pending = sessionStorage.getItem(PENDING_KEY);

@@ -18,6 +18,10 @@ Two of the linter's checks never reach you at all: the proper nouns that may ope
 the acronyms that need no spelling out are **[two shared lists](#proper-nouns-and-acronyms)** in
 this repository, and <kbd>p</kbd> proposes the next one to them.
 
+And beside every reference in the editor, a **`Lint citation`** chip: one press asks
+[radiopaedia.work/cite](https://radiopaedia.work/cite) what that reference should say, and
+[tells you what differs](#linting-the-references) — down to the word.
+
 [![Install](https://img.shields.io/badge/Install-userscript-2ea44f?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js)
 
 [![Version](https://img.shields.io/github/v/release/gmadevs/radiopaedia-lint-userscript?color=blue)](https://github.com/gmadevs/radiopaedia-lint-userscript/releases/latest)
@@ -51,6 +55,7 @@ article_type                                            └─  the ones missing
 - [Nothing to lint](#nothing-to-lint)
 - [Working through the findings](#working-through-the-findings)
 - [Proper nouns and acronyms](#proper-nouns-and-acronyms)
+- [Linting the references](#linting-the-references)
 - [The sections that are missing](#the-sections-that-are-missing)
   - [Required and offered](#required-and-offered)
   - [Above it, or inside it](#above-it-or-inside-it)
@@ -258,6 +263,54 @@ the linter sent them.
 > These and [the canon](#the-sections-that-are-missing) are the only reasons the script talks to
 > a second host, `raw.githubusercontent.com`, and it only ever reads. Nothing is sent there: what
 > reaches the repository is what you type into GitHub yourself.
+
+---
+
+## Linting the references
+
+The linter checks the prose. Nothing checks the reference list at the bottom, which is where a
+journal gets abbreviated the wrong way, a year is off by one, three authors appear where the style
+wants *et al*, and two references end up numbered 2.
+
+There is a tool that knows: **[radiopaedia.work/cite](https://radiopaedia.work/cite)** takes a
+reference, works out what to look up in it — a DOI, a PMID, an ISBN, a URL — asks Crossref or
+PubMed or Google Books, and gives back the canonical form. So in the editor every reference gets
+a chip beside it:
+
+```
+1. Benson D, Cavanaugh M, … Nucleic Acids Res. 2013;41(Database issue):D36-42.  [ Lint citation ]
+                                                                                      │
+                              press it, and that one reference goes to the tool ──────┘
+
+   ✓ citation   word for word what the tool returns
+   ≠ citation   it differs — or the number in front of it does
+   ? citation   nothing in there to look up
+```
+
+Where it differs, the two forms are shown one under the other with **the words that changed lit
+up** — a reference is eighty words long and what is wrong with it is usually one of them — and
+**`Copy as 4.`** puts the corrected line on the clipboard, numbered by where it actually stands in
+the list, with its links intact. You paste it over the old one yourself: this script has never
+written a character inside the editor, and a citation is not the place to start. <kbd>Esc</kbd>
+closes the panel; the `❝` beside the **Lint** button turns the chips off.
+
+The number gets its own verdict. A reference whose text is perfect but which is numbered `2` in
+third place sends every `2` marker in the article to the wrong paper, and that is worth saying out
+loud rather than burying in a diff.
+
+> [!NOTE]
+> **One press, one lookup.** The tool asks somebody else's API at the far end of it — Crossref,
+> PubMed, Google Books — so nothing here is ever asked for on its own initiative: no lookup on
+> page load, none for the references you did not press. What came back is kept for the tab, so
+> pressing the same chip twice costs nothing.
+
+> [!WARNING]
+> **This one is scraping, and it is the only part of the script that is.** `/cite` has no JSON API
+> yet, so the answer is read out of the `wire:snapshot` attribute Livewire leaves in the page it
+> renders for `?search=…`. Four field names behind one attribute is a great deal better than the
+> Tailwind classes this script used to read the findings out of before v1.5.0 — but it is still a
+> thing that can change without warning, and when it does the chip will say so rather than lie.
+> A `GET /api/v1/cite?search=…` alongside the lint API would retire this caveat.
 
 ---
 
