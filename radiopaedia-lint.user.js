@@ -3453,10 +3453,10 @@
       const copy = document.createElement('button');
       copy.textContent = row.typed ? `Copy as ${row.pos}.` : 'Copy citation';
       copy.title = row.typed
-        ? 'The corrected reference, numbered by where it stands, on the clipboard — ' +
-          'links and all. Paste it over the old one yourself.'
-        : 'The corrected reference on the clipboard, links and all. The list draws its own ' +
-          'number, so none is added. Paste it over the old one yourself.';
+        ? 'The corrected reference on the clipboard exactly as the box holds it — tags and ' +
+          'all — numbered by where it stands. Paste it over the old one yourself.'
+        : 'The corrected reference on the clipboard exactly as the box holds it, tags and all. ' +
+          'It carries no number, so none is added. Paste it over the old one yourself.';
       copy.addEventListener('click', () => copyCitation(copy, row, said));
       acts.appendChild(copy);
     }
@@ -3512,34 +3512,30 @@
     if (e.key === 'Escape' && cites.note) { e.preventDefault(); closeCiteNote(); }
   }
 
-  /* The corrected reference on the clipboard, in both shapes: the markup, so
-   * that pasting it into the WYSIWYG lands real links, and the plain text
-   * under it for anywhere that wants text. The number is the one it ought to
-   * have — where it stands in the list — not the one it has.
+  /* The corrected reference on the clipboard, as source and nothing else.
    *
-   * `ClipboardItem` where it exists, plain text where it does not. Writing
-   * into the editor ourselves would be the obvious next step and it is not
-   * taken: this script has never put a character inside those roots, and a
+   * What it is being pasted into decides this. The box is a `<textarea>` that
+   * holds the citation the way it is stored — `<a href="…">doi:…</a>` spelled
+   * out, tags and all — so the thing to hand over is exactly the string the
+   * tool returned. Offering it as `text/html` too would be worse than useless
+   * here: a textarea takes the plain flavour of whatever is on the clipboard,
+   * and a "plain flavour" with the tags taken out is a reference with its
+   * links deleted, pasted by somebody who had every reason to think they were
+   * pasting the right thing.
+   *
+   * The number is the one it ought to have — where it stands in the list —
+   * and only where the reference carries one at all.
+   *
+   * Writing it into the box ourselves would be the obvious next step and it is
+   * not taken: this script has never put a character inside the editor, and a
    * citation is not the place to start. */
   function copyCitation(button, row, said) {
-    const lead = row.typed ? `${row.pos}. ` : '';
-    const html = lead + said.citation;
-    const text = lead + plain(said.citation);
-    const done = () => {
+    const text = (row.typed ? `${row.pos}. ` : '') + said.citation;
+    navigator.clipboard?.writeText(text).then(() => {
       const was = button.textContent;
       button.textContent = 'Copied';
       setTimeout(() => { button.textContent = was; }, 900);
-    };
-    try {
-      const item = new ClipboardItem({
-        'text/html': new Blob([html], { type: 'text/html' }),
-        'text/plain': new Blob([text], { type: 'text/plain' }),
-      });
-      navigator.clipboard.write([item]).then(done,
-        () => navigator.clipboard?.writeText(text).then(done, () => { /* nothing else to try */ }));
-    } catch {
-      navigator.clipboard?.writeText(text).then(done, () => { /* nothing else to try */ });
-    }
+    }, () => { /* no clipboard: the citation is on screen anyway */ });
   }
 
   // ————————————————————————————————————————————————————————————— wiring

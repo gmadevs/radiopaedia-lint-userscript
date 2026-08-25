@@ -293,9 +293,11 @@ it:
 
 Where it differs, the two forms are shown one under the other with **the words that changed lit
 up** — a reference is eighty words long and what is wrong with it is usually one of them — and
-**`Copy as 4.`** puts the corrected line on the clipboard, numbered by where it actually stands in
-the list, with its links intact. You paste it over the old one yourself: this script has never
-written a character inside the editor, and a citation is not the place to start. <kbd>Esc</kbd>
+**`Copy as 4.`** puts the corrected line on the clipboard **as source**, `<a href>` tags and all,
+which is what the box holds and what pasting into it needs; the number is the one the reference
+ought to have, taken from where it actually stands in the list. You paste it over the old one
+yourself: this script has never written a character inside the editor, and a citation is not the
+place to start. <kbd>Esc</kbd>
 closes the panel; the `❝` beside the **Lint** button turns the chips off.
 
 The number gets its own verdict. A reference whose text is perfect but which is numbered `2` in
