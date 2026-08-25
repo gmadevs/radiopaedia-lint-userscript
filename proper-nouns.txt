@@ -17,6 +17,7 @@
 
 # ——— Proper nouns: eponyms, people, places, organisations ———
 
+Chiari
 Baló
 Bickerstaff
 Alvarado
