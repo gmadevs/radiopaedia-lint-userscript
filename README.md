@@ -14,6 +14,10 @@ And in the grey margin beside the text, the sections **this kind of article is s
 and has not got** — each one beside the heading it would go under. The `⚑` next to the switch
 turns that off.
 
+Two of the linter's checks never reach you at all: the proper nouns that may open a list item and
+the acronyms that need no spelling out are **[two shared lists](#proper-nouns-and-acronyms)** in
+this repository, and <kbd>p</kbd> proposes the next one to them.
+
 [![Install](https://img.shields.io/badge/Install-userscript-2ea44f?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js)
 
 [![Version](https://img.shields.io/github/v/release/gmadevs/radiopaedia-lint-userscript?color=blue)](https://github.com/gmadevs/radiopaedia-lint-userscript/releases/latest)
