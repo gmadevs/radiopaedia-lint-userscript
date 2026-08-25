@@ -274,13 +274,17 @@ wants *et al*, and two references end up numbered 2.
 
 There is a tool that knows: **[radiopaedia.work/cite](https://radiopaedia.work/cite)** takes a
 reference, works out what to look up in it — a DOI, a PMID, an ISBN, a URL — asks Crossref or
-PubMed or Google Books, and gives back the canonical form. So in the editor every reference gets
-a chip beside it:
+PubMed or Google Books, and gives back the canonical form. The edit page keeps each reference in
+a box of its own with a **Format citation** link under it, and the chip goes right there, beside
+it:
 
 ```
-1. Benson D, Cavanaugh M, … Nucleic Acids Res. 2013;41(Database issue):D36-42.  [ Lint citation ]
-                                                                                      │
-                              press it, and that one reference goes to the tool ──────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│ 1. Benson D, Cavanaugh M, … Nucleic Acids Res. 2013;41(Database issue):… │
+└──────────────────────────────────────────────────────────────────────────┘
+  Format citation   [ Lint citation ]
+                            │
+    press it, and that one reference goes to the tool ──┘
 
    ✓ citation   word for word what the tool returns
    ≠ citation   it differs — or the number in front of it does
