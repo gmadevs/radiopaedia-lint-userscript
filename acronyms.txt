@@ -1,0 +1,51 @@
+# Acronyms that do not have to be spelled out.
+#
+# The linter's `Radiopaedia.Acronyms` check says "'ELISA' has no definition.
+# Spell it out if it's unfamiliar to the audience." — and on a radiology
+# article a good few of them are not unfamiliar to anybody, while others are
+# not abbreviations to expand at all but the name of a trial or of a scoring
+# system. This file is the list of those, and a finding on one of them is not
+# shown.
+#
+# One entry per line, and the whole acronym: matching is by WHOLE WORD, not by
+# prefix, so "PE" covers "PE" and nothing else — "PET" and "PE-RADS" each need
+# their own line. Case is ignored. '#' starts a comment, blank lines are
+# ignored, and a comment may follow an entry on its own line:
+#
+#     ELISA   # enzyme-linked immunosorbent assay
+#
+# An entry here hides the finding for EVERYBODY running the script, so the bar
+# is "no radiologist reading this article needs it spelled out", not "I know
+# what it means". Anything that means two things depending on the sentence —
+# ER, US, GE, NB, TX — belongs nowhere near this file: on those the linter is
+# doing its job, and the fix is in the article.
+#
+# To add one: the Lint bar offers it on the finding itself — press p, and the
+# acronym is copied and this file opens on GitHub, where you paste it in and
+# propose the change. Everyone using the script gets it once it is merged.
+
+# ——— Trials, scores, rules and criteria: names, not abbreviations ———
+
+PERC        # pulmonary embolism rule-out criteria
+YEARS       # YEARS algorithm for pulmonary embolism
+PIOPED      # prospective investigation of pulmonary embolism diagnosis
+RANO        # response assessment in neuro-oncology
+ECOG        # Eastern Cooperative Oncology Group performance status
+RTOG        # Radiation Therapy Oncology Group
+AJCC        # American Joint Committee on Cancer
+TNM         # tumour, node, metastasis
+BT-RADS
+PE-RADS
+
+# ——— Statistics ———
+
+PPV         # positive predictive value
+NPV         # negative predictive value
+
+# ——— Laboratory and molecular ———
+
+ELISA       # enzyme-linked immunosorbent assay
+EGFR        # epidermal growth factor receptor
+GFAP        # glial fibrillary acidic protein
+EBV         # Epstein-Barr virus
+BMI         # body mass index

@@ -46,7 +46,7 @@ article_type                                            └─  the ones missing
 - [The colour of the button](#the-colour-of-the-button)
 - [Nothing to lint](#nothing-to-lint)
 - [Working through the findings](#working-through-the-findings)
-- [Proper nouns](#proper-nouns)
+- [Proper nouns and acronyms](#proper-nouns-and-acronyms)
 - [The sections that are missing](#the-sections-that-are-missing)
   - [Required and offered](#required-and-offered)
   - [Above it, or inside it](#above-it-or-inside-it)
@@ -166,7 +166,7 @@ move to <kbd>Alt</kbd>.
 | Ignore | <kbd>x</kbd> | <kbd>Alt</kbd> + <kbd>Backspace</kbd> |
 | Undo the last verdict | <kbd>u</kbd> | — |
 | Copy the message | <kbd>c</kbd> | — |
-| Add a proper noun | <kbd>p</kbd> | — |
+| Add a name or an acronym | <kbd>p</kbd> | — |
 | Move the bar to the other edge | <kbd>t</kbd> | — |
 | Close | <kbd>Esc</kbd> | — |
 
@@ -209,34 +209,50 @@ Its own message is a keystroke away either way — <kbd>c</kbd>, or **Copy** on 
 
 ---
 
-## Proper nouns
+## Proper nouns and acronyms
 
-One of the linter's checks says *"in general, we don't start a list item with a capital letter.
-Exceptions are proper nouns."* On a radiology article a good half of those capitals **are** proper
-nouns — Alvarado, Meckel, Langerhans, the British Thoracic Society — and the linter has no way to
-know which. Radiopaedia's own exception mechanism exists but is open to their editors only, so
-this is the second best thing: [`proper-nouns.txt`](proper-nouns.txt), one name per line, read
-straight from this repository. A finding whose list item starts with one of those names is not
-shown at all, and the bar says how many were set aside — `1/18 · 1 error · 3 warning · 14 other ·
-2 known names` —
-because a decision to hide something belongs next to the numbers it changed, not behind them.
+Two of the linter's checks are right about the rule and blind to the exception, and both are
+answered by a file in this repository rather than shown to you.
 
-When the name is **not** in the file yet, the note says so and <kbd>p</kbd> adds it: the name goes
-to your clipboard and the file opens on GitHub, where you paste it in and press *Propose changes*.
-GitHub turns that into a fork and a pull request on its own, so no write access and no git are
-needed — and once it is merged, everybody running the script gets it. Names you have proposed are
-remembered locally, so the same one is not offered again on the next article while the pull
-request is still open.
+*"In general, we don't start a list item with a capital letter. Exceptions are proper nouns."* On
+a radiology article a good half of those capitals **are** proper nouns — Alvarado, Meckel,
+Langerhans, the British Thoracic Society — and the linter has no way to know which.
+[`proper-nouns.txt`](proper-nouns.txt) is the list of them, one name per line, matched by
+**prefix**: `Alvarado` covers "Alvarado score" and every other item that opens with it.
 
-The list is read once per tab and cached; **Re-lint** asks for it again. On top of that GitHub's
-raw CDN keeps its own copy for about five minutes, so a name that has just been merged takes a
-few minutes to arrive. If the file cannot be read at all, nothing is hidden and nothing is
-offered — an unreadable list is not an empty one, and the findings come through exactly as the
-linter sent them.
+*"'ELISA' has no definition. Spell it out if it's unfamiliar to the audience."* A good few are not
+unfamiliar to anybody reading the article, and others are not abbreviations to expand at all but
+the name of a trial or a scoring system — YEARS, PERC, PIOPED, RANO.
+[`acronyms.txt`](acronyms.txt) is the list of those, matched by **whole word**: `PE` covers "PE"
+and nothing else, so "PET" and "PE-RADS" each need their own line.
+
+Radiopaedia's own exception mechanism exists but is open to their editors only, so this is the
+second best thing. Either way the finding is not shown at all, and the bar says how many were set
+aside — `1/18 · 1 error · 3 warning · 14 other · 2 known names · 1 known acronym` — because a
+decision to hide something belongs next to the numbers it changed, not behind them.
+
+When the word is **not** in its file yet, the note says so and <kbd>p</kbd> adds it: the word goes
+to your clipboard and the right file opens on GitHub, where you paste it in and press *Propose
+changes*. GitHub turns that into a fork and a pull request on its own, so no write access and no
+git are needed — and once it is merged, everybody running the script gets it. Words you have
+proposed are remembered locally, so the same one is not offered again on the next article while
+the pull request is still open.
+
+> [!IMPORTANT]
+> An entry hides that finding for **everybody** running the script. The bar for `acronyms.txt` is
+> "no radiologist reading this article needs it spelled out", not "I know what it means" — and an
+> acronym that means two things depending on the sentence (ER, US, GE, NB, TX) belongs nowhere
+> near it. On those the linter is doing its job.
+
+The lists are read once per tab and cached; **Re-lint** asks for them again. On top of that
+GitHub's raw CDN keeps its own copy for about five minutes, so a word that has just been merged
+takes a few minutes to arrive. If a file cannot be read at all, nothing is hidden and nothing is
+offered for it — an unreadable list is not an empty one, and the findings come through exactly as
+the linter sent them.
 
 > [!NOTE]
-> This and [the canon](#the-sections-that-are-missing) are the only reasons the script talks to a
-> second host, `raw.githubusercontent.com`, and it only ever reads. Nothing is sent there: what
+> These and [the canon](#the-sections-that-are-missing) are the only reasons the script talks to
+> a second host, `raw.githubusercontent.com`, and it only ever reads. Nothing is sent there: what
 > reaches the repository is what you type into GitHub yourself.
 
 ---

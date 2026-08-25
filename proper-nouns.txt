@@ -14,6 +14,9 @@
 # To add one: the Lint bar offers it on the finding itself — press p, and the
 # name is copied and this file opens on GitHub, where you paste it in and
 # propose the change. Everyone using the script gets it once it is merged.
+#
+# Acronyms have a file of their own, `acronyms.txt`, and a rule of their own:
+# there the match is by whole word, not by prefix.
 
 # ——— Proper nouns: eponyms, people, places, organisations ———
 

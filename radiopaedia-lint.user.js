@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      2.3.1
+// @version      2.4.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work lint API says about the article: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings are highlighted on the text in the editor, one at a time. In the margin beside the article, the sections this kind of article is supposed to have and hasn't got.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -54,17 +54,23 @@
  * verified: as soon as a snippet can no longer be found in the text, its
  * finding closes itself — which is also how you see that a fix landed.
  *
- * One check of the linter's is answered here rather than shown: "we don't
- * start a list item with a capital letter. Exceptions are proper nouns." On a
- * radiology article half of those capitals ARE proper nouns — Alvarado,
- * Langerhans, the British Thoracic Society — and the linter has no way to know
- * which. `proper-nouns.txt`, next to this file in the repository, is the list
- * of the ones we have met; a finding whose list item starts with one of them
- * never reaches the stage. When the name is not in there yet, the bar offers
- * to add it: the name goes to the clipboard, the file opens on GitHub, and the
- * change is proposed from there. The list is shared, so a name added once is
- * added for everybody — which is the whole reason it is a file in a repository
- * and not a setting in a browser.
+ * Two checks of the linter's are answered here rather than shown, and for the
+ * same reason: the rule is right and the exception is something the linter has
+ * no way of knowing. "We don't start a list item with a capital letter.
+ * Exceptions are proper nouns." — on a radiology article half of those capitals
+ * ARE proper nouns: Alvarado, Langerhans, the British Thoracic Society. And
+ * "'ELISA' has no definition. Spell it out if it's unfamiliar to the
+ * audience." — where a good few are not unfamiliar to anybody reading a
+ * radiology article, and a few more are not abbreviations at all but the name
+ * of a trial (YEARS, PERC) or of a consortium (cIMPACT-NOW).
+ *
+ * `proper-nouns.txt` and `acronyms.txt`, next to this file in the repository,
+ * are the lists of the ones we have met; a finding one of them answers never
+ * reaches the stage. When the word is not in there yet, the bar offers to add
+ * it: the word goes to the clipboard, the right file opens on GitHub, and the
+ * change is proposed from there. The lists are shared, so a word added once is
+ * added for everybody — which is the whole reason they are files in a
+ * repository and not a setting in a browser.
  *
  * The exception mechanism the API itself carries (`supportsExceptions`) is the
  * right place for all of this, and it is not open to us: only Radiopaedia's
@@ -102,19 +108,59 @@
   const PENDING_KEY = 'rlx-lint-pending';
   const CACHE_KEY = 'rlx-lint-cache:';
 
-  /* The shared list of names that may start a list item, and the page you add
-   * to it. Raw for reading, the repository's own editor for writing: GitHub
-   * turns "edit a file you cannot write to" into a fork and a pull request on
-   * its own, so proposing a name costs a paste and a click and no account
-   * beyond the one the person already has. Nothing is ever sent from here —
-   * the script reads that file and nothing else, and the name travels through
-   * the clipboard, where you can see it. */
-  const NAMES_URL = 'https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/proper-nouns.txt';
-  const NAMES_EDIT_URL = 'https://github.com/gmadevs/radiopaedia-lint-userscript/edit/main/proper-nouns.txt';
-  const NAMES_TIMEOUT = 15_000;
-  const NAMES_MAX = 256 * 1024;     // a list of names; anything bigger is not one
-  const NAMES_KEY = 'rlx-names';    // the file, for this tab's session
-  const PROPOSED_KEY = 'rlx-proposed';   // {name: the day you proposed it}
+  /* The shared lists, and the pages you add to them. Raw for reading, the
+   * repository's own editor for writing: GitHub turns "edit a file you cannot
+   * write to" into a fork and a pull request on its own, so proposing a word
+   * costs a paste and a click and no account beyond the one the person already
+   * has. Nothing is ever sent from here — the script reads those files and
+   * nothing else, and the word travels through the clipboard, where you can
+   * see it. */
+  const RAW_URL = 'https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/';
+  const EDIT_URL = 'https://github.com/gmadevs/radiopaedia-lint-userscript/edit/main/';
+  const LIST_TIMEOUT = 15_000;
+  const LIST_MAX = 256 * 1024;      // a list of words; anything bigger is not one
+  const PROPOSED_KEY = 'rlx-proposed';   // {word: the day you proposed it}
+
+  /* One entry per check a list answers. `condition` is what the API calls the
+   * check; `match` is asked whether the word the linter quoted is already on
+   * the list and answers with the entry that covered it; `draft` is what gets
+   * offered to the clipboard when it is not. The rest is wording — the bar and
+   * the note say "names list" or "acronyms list" out of this table, so the two
+   * differ in one place rather than in a dozen sentences.
+   *
+   * A third one would be three lines here and nothing anywhere else, which is
+   * the only reason this is a table and not two copies of the same code. */
+  const LISTS = {
+    names: {
+      condition: 'Radiopaedia.ListCaps',
+      file: 'proper-nouns.txt',
+      cache: 'rlx-names',           // the file, for this tab's session
+      what: 'name', plural: 'names', of: 'names list', button: '+ Name',
+      /* By prefix: the file says "Alvarado" and the item is "Alvarado score";
+       * the file says "British Thoracic Society" and the item runs on for
+       * another twenty words. */
+      match: (text, entries) => startsWithEntry(text, entries),
+      draft: (text) => properName(text),
+    },
+    acronyms: {
+      condition: 'Radiopaedia.Acronyms',
+      file: 'acronyms.txt',
+      cache: 'rlx-acronyms',
+      what: 'acronym', plural: 'acronyms', of: 'acronyms list', button: '+ Acronym',
+      /* Whole word: this check quotes the acronym and nothing else, so there
+       * is no longer phrase for a prefix to stand in for — and 'PE' is not
+       * 'PET', which a prefix match would have to be told. */
+      match: (text, entries) => sameAsEntry(text, entries),
+      draft: (text) => fold(text) || null,
+    },
+  };
+  for (const [key, list] of Object.entries(LISTS)) {
+    list.key = key;
+    list.url = RAW_URL + list.file;
+    list.editUrl = EDIT_URL + list.file;
+    list.entries = null;    // what the file said, or `null` for "we could not read it"
+    list.asked = null;      // the request in flight, so two callers make one
+  }
 
   // What a Cloudflare interstitial carries instead of the results.
   const CHALLENGE = ['start_challenge', 'bot_management', 'Verifying you are human'];
@@ -257,8 +303,9 @@
    * The same point, counted twice. */
   const CONJUNCTION = /\s+(?:or|and|nor)\b/gi;
 
-  // The one check the names list answers.
-  const LIST_CAPS = 'Radiopaedia.ListCaps';
+  // Which list, if any, has something to say about this check.
+  const listFor = (condition) =>
+    Object.values(LISTS).find((l) => l.condition === condition) || null;
 
   function insertion(lint) {
     if (lint.condition !== 'Radiopaedia.OxfordComma') return null;
@@ -314,34 +361,35 @@
       if (!copy) copies.set(snippet, copy = { line: lint.line, n: 1 });
       else if (copy.line !== lint.line) { copy.line = lint.line; copy.n++; }
 
-      /* The capital at the start of a list item, weighed against the names.
-       * A hit is a finding that never gets shown; a miss is one that carries
-       * the name to propose. Both only when the list was actually read — see
-       * `KNOWN`. The item is `matched`, which for this check is the list item
-       * itself, from its first word to its last. */
-      const item = lint.condition === LIST_CAPS ? plain(lint.matched) : '';
-      const known = item ? knownName(item) : null;
-      const propose = item && !known && KNOWN ? properName(item) : null;
+      /* The capital at the start of a list item, and the acronym with no
+       * definition, weighed against their lists. A hit is a finding that never
+       * gets shown; a miss is one that carries the word to propose. Both only
+       * when the file was actually read — see `entries`. The word is `matched`,
+       * which for `ListCaps` is the list item itself, from its first word to
+       * its last, and for `Acronyms` is the acronym on its own. */
+      const on = listFor(lint.condition);
+      const quoted = on ? plain(lint.matched) : '';
+      const known = quoted ? on.match(quoted, on.entries) : null;
+      const propose = quoted && !known && on.entries ? on.draft(quoted) : null;
 
       out.push({ check, severity, line: where, message, snippet,
                  target: flat(plain(lint.matched)), targetNth: nthInLine(lint),
-                 point: insertion(lint), known, propose,
+                 point: insertion(lint), known, propose, list: on ? on.key : null,
                  occurrence: copy.n, fp: `${check}|${message}|${snippet}|${where}` });
     }
     return out;
   }
 
-  // ————————————————————————————————————————————————— the names
+  // ———————————————————————————————————————————————— the lists
 
-  /* The list, as it was last read. `null` is not "no names": it is "we do not
-   * know", which is what an unreachable file leaves behind — and the two have
-   * to be told apart. On `null` nothing is hidden and nothing is offered,
-   * because both would be a claim about a file we could not read: hiding a
-   * finding would say it is a known name, and offering to add one would invite
-   * a second pull request for a name that may well be in there already. The
-   * findings simply come through as the linter sent them. */
-  let KNOWN = null;
-  let namesAsked = null;
+  /* A list, as it was last read, lives on its own entry in `LISTS`. `entries`
+   * of `null` is not "nothing on it": it is "we do not know", which is what an
+   * unreachable file leaves behind — and the two have to be told apart. On
+   * `null` nothing is hidden and nothing is offered, because both would be a
+   * claim about a file we could not read: hiding a finding would say the word
+   * is a known one, and offering to add it would invite a second pull request
+   * for a word that may well be in there already. The findings simply come
+   * through as the linter sent them. */
 
   const NAME_CHAR = /[\p{L}\p{N}]/u;
 
@@ -349,7 +397,7 @@
    * this dull on purpose: the file is edited by hand, in a browser, by people
    * in the middle of fixing an article — a format with a syntax to get wrong
    * would be a second thing to get right. */
-  function parseNames(text) {
+  function parseList(text) {
     const out = [];
     for (const line of String(text ?? '').split(/\r?\n/)) {
       const entry = fold(line.replace(/#.*$/, ''));
@@ -360,16 +408,16 @@
 
   /* The file itself. Plain text, one GET, no headers of ours: this is the only
    * host besides the linter the script ever talks to, and it is read-only.
-   * A failure is silent by design — see `KNOWN` above. */
-  function askNames() {
+   * A failure is silent by design — see above. */
+  function askList(list) {
     return new Promise((resolve) => {
       GM_xmlhttpRequest({
         method: 'GET',
-        url: NAMES_URL,
-        timeout: NAMES_TIMEOUT,
+        url: list.url,
+        timeout: LIST_TIMEOUT,
         onload: (r) => {
           const body = r.responseText || '';
-          if (r.status >= 400 || body.length > NAMES_MAX) return resolve(null);
+          if (r.status >= 400 || body.length > LIST_MAX) return resolve(null);
           resolve(body);
         },
         onerror: () => resolve(null),
@@ -384,24 +432,30 @@
    * per article. `force` is what a merged pull request needs — that, or a new
    * tab. GitHub's raw CDN keeps its own copy for about five minutes on top of
    * this, which no amount of asking from here will shorten. */
-  async function names({ force } = {}) {
-    if (!force && KNOWN) return KNOWN;
-    if (!force && namesAsked) return namesAsked;
+  async function readList(list, { force } = {}) {
+    if (!force && list.entries) return list.entries;
+    if (!force && list.asked) return list.asked;
 
-    namesAsked = (async () => {
-      let text = force ? null : sessionStorage.getItem(NAMES_KEY);
+    list.asked = (async () => {
+      let text = force ? null : sessionStorage.getItem(list.cache);
       if (text == null) {
-        text = await askNames();
+        text = await askList(list);
         if (text != null) {
-          try { sessionStorage.setItem(NAMES_KEY, text); } catch { /* quota: never mind */ }
+          try { sessionStorage.setItem(list.cache, text); } catch { /* quota: never mind */ }
         }
       }
-      KNOWN = text == null ? null : parseNames(text);
-      if (KNOWN) forgetProposed(KNOWN);
-      return KNOWN;
+      list.entries = text == null ? null : parseList(text);
+      if (list.entries) forgetProposed(list.entries);
+      return list.entries;
     })();
-    return namesAsked;
+    return list.asked;
   }
+
+  /* All of them, side by side. Two files is two requests rather than one, and
+   * they are made at the same time, cached the same way and read once per tab:
+   * the second one costs the wait it takes to arrive alongside the first,
+   * which is none. */
+  const lists = (opts) => Promise.all(Object.values(LISTS).map((l) => readList(l, opts)));
 
   /* Is this list item one of the names? By prefix, at a word boundary: the
    * file says "Alvarado" and the item is "Alvarado score"; the file says
@@ -410,16 +464,26 @@
    * ignored because a name typed lowercase into the file by somebody in a
    * hurry should still work — the check only ever fires on a capital, so there
    * is no lowercase word here for it to swallow by mistake. */
-  function knownName(item) {
+  function startsWithEntry(item, entries) {
     const text = fold(item);
-    if (!text || !KNOWN) return null;
-    for (const entry of KNOWN) {
+    if (!text || !entries) return null;
+    for (const entry of entries) {
       if (text.length < entry.length) continue;
       if (text.slice(0, entry.length).toLowerCase() !== entry.toLowerCase()) continue;
       if (NAME_CHAR.test(text.charAt(entry.length))) continue;
       return entry;
     }
     return null;
+  }
+
+  /* And the whole-word one, which is what the acronyms list wants: the check
+   * quotes 'PE' and the entry says 'PE', or nothing happens. Case is ignored
+   * here too, for the same reason and with the same safety — this check only
+   * fires on capitals, so a lowercase entry has no lowercase word to swallow. */
+  function sameAsEntry(word, entries) {
+    const text = fold(word);
+    if (!text || !entries) return null;
+    return entries.find((e) => e.toLowerCase() === text.toLowerCase()) || null;
   }
 
   /* What to propose, when it is not in there yet: the run of capitalised words
@@ -441,7 +505,9 @@
     return run.join(' ').replace(/[.,:;]+$/, '') || null;
   }
 
-  /* The names you have already proposed, and the day you did.
+  /* The words you have already proposed, and the day you did. One store for
+   * both lists: what it answers is "have I already sent this one off?", and
+   * that question does not care which file the answer went to.
    *
    * Between the click and the merge there is a pull request, and after the
    * merge there is GitHub's cache: minutes at best, and however long a review
@@ -472,6 +538,18 @@
     if (!changed) return;
     try { localStorage.setItem(PROPOSED_KEY, JSON.stringify(all)); } catch { /* never mind */ }
   }
+
+  /* How many findings each list answered, and how to say it: "2 known names",
+   * "1 known acronym". Counted per list rather than added up, because "3
+   * findings were set aside" invites the question this answers. */
+  function knownTally(findings) {
+    const tally = {};
+    for (const f of findings) if (f.known && f.list) tally[f.list] = (tally[f.list] || 0) + 1;
+    return tally;
+  }
+
+  const knownSaid = (tally) => Object.entries(tally).map(
+    ([key, n]) => `${n} known ${n > 1 ? LISTS[key].plural : LISTS[key].what}`);
 
   // ——————————————————————————————————————————————————— network
 
@@ -1087,7 +1165,7 @@
   const stage = {
     slug: null,
     findings: [],
-    hidden: 0,        // known names, kept out of the walk but not out of the count
+    hidden: {},       // what the lists answered: out of the walk, not out of the count
     roots: [],
     i: -1,
     history: [],      // for "undo": {i, state}
@@ -1121,7 +1199,7 @@
       <button data-act="undo" title="Undo the last one (u)">Undo</button>
       <span class="rlx-sep rlx-sep-tools"></span>
       <button data-act="copy" title="Copy the message (c)">Copy</button>
-      <button data-act="propose" title="Add this name to the shared list (p)">+ Name</button>
+      <button data-act="propose" title="Add this to the shared list (p)">+ Name</button>
       <button data-act="reload" title="Ask the linter again">Re-lint</button>
       <button data-act="flip" class="rlx-flip" title="Move the bar to the other edge (t)">&#8645;</button>
       <button data-act="close" class="rlx-close" title="Close (Esc)">&times;</button>
@@ -1166,7 +1244,7 @@
     removeEventListener('resize', scheduleDraw);
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('mousemove', onMove, true);
-    stage.findings = []; stage.hidden = 0; stage.i = -1; stage.history = [];
+    stage.findings = []; stage.hidden = {}; stage.i = -1; stage.history = [];
   }
 
   // ———————————————————————————————————————————————— the all-clear banner
@@ -1411,20 +1489,21 @@
       stage.note.appendChild(fix);
     }
 
-    /* The names line. A `ListCaps` finding on a capital that is a name is not
-     * a finding, and the only thing standing between the two is a file — so
-     * the note says which state this one is in: not in the file, or proposed
-     * and waiting for it. The words, not a button: the note fades and lets the
+    /* The list line. A `ListCaps` finding on a capital that is a name is not
+     * a finding, nor is an `Acronyms` finding on an acronym nobody spells out,
+     * and the only thing standing between the two is a file — so the note says
+     * which state this one is in: not in the file, or proposed and waiting. The words, not a button: the note fades and lets the
      * pointer through the moment the mouse comes near it, which is what makes
      * the text underneath selectable and what makes anything clickable in here
      * unclickable. The click lives on the bar, where the actions live. */
     if (f.propose && !settled) {
+      const on = LISTS[f.list];
       const when = proposed()[fold(f.propose)];
       const line = document.createElement('div');
       line.className = 'rlx-hint';
       line.textContent = when
-        ? `'${f.propose}' was proposed for the names list on ${when} — waiting for it to land.`
-        : `'${f.propose}' is not in the names list. Press p to add it.`;
+        ? `'${f.propose}' was proposed for the ${on.of} on ${when} — waiting for it to land.`
+        : `'${f.propose}' is not in the ${on.of}. Press p to add it.`;
       stage.note.appendChild(line);
     }
 
@@ -1654,9 +1733,7 @@
       if (done) word(`${done} fixed`);
       if (ignored) word(`${ignored} ignored`);
     }
-    if (stage.hidden) {
-      word(`${stage.hidden} known ${stage.hidden > 1 ? 'names' : 'name'}`, 'rlx-known');
-    }
+    for (const said of knownSaid(stage.hidden || {})) word(said, 'rlx-known');
 
     let status = '';
     if (!stage.findings.length) status = 'No findings: the article is clean.';
@@ -1689,14 +1766,17 @@
     for (const b of ['prev', 'next', 'done', 'ignore', 'copy']) show(b, walking);
     stage.bar.querySelector('.rlx-sep-nav').hidden = !walking;
 
-    // Offered only where there is a name to offer: a `ListCaps` finding whose
-    // opening words are in neither the file nor your own list of things
-    // already proposed. Hidden otherwise — it appears exactly when it works.
-    const name = f && f.state === 'open' && !proposed()[fold(f.propose || '')] ? f.propose : null;
+    // Offered only where there is a word to offer: a finding one of the lists
+    // could have answered, whose word is in neither that file nor your own
+    // list of things already proposed. Hidden otherwise — it appears exactly
+    // when it works, and it says which list it would go to.
+    const offer = f && f.state === 'open' && !proposed()[fold(f.propose || '')] ? f.propose : null;
+    const on = offer ? LISTS[f.list] : null;
     const add = stage.bar.querySelector('[data-act="propose"]');
     if (add) {
-      add.hidden = !name;
-      add.title = name ? `Add '${name}' to the shared list of names (p)` : '';
+      add.hidden = !on;
+      add.textContent = on ? on.button : '+ Name';
+      add.title = on ? `Add '${offer}' to the shared ${on.of} (p)` : '';
     }
   }
 
@@ -1776,7 +1856,7 @@
         if (!f?.propose) return;
         navigator.clipboard?.writeText(f.propose);
         rememberProposed(f.propose);
-        window.open(NAMES_EDIT_URL, '_blank', 'noopener');
+        window.open(LISTS[f.list].editUrl, '_blank', 'noopener');
         updateBar();
         placeNote();
         return;
@@ -2878,7 +2958,7 @@
    * up: a button that counts a finding the stage refuses to show is a button
    * that lies. */
   async function findingsFor(slug, opts = {}) {
-    const [data] = await Promise.all([lintResult(slug, opts), names(opts)]);
+    const [data] = await Promise.all([lintResult(slug, opts), lists(opts)]);
     // The kind of article travels in the lint answer, so the rail rides along
     // on a request that was going to be made anyway. Not awaited: the findings
     // are what the caller is waiting for.
@@ -2886,10 +2966,11 @@
     return fromApi(data);
   }
 
-  /* The ones there is something to do about. A known name is not one of them:
-   * the linter is right that the item starts with a capital and right that it
-   * cannot tell which capitals are names — this file can, and the answer is
-   * "that one is fine". */
+  /* The ones there is something to do about. A word one of the lists knows is
+   * not one of them: the linter is right that the item starts with a capital,
+   * right that the acronym is nowhere spelled out, and right that it cannot
+   * tell which of those are names and which acronyms every reader already
+   * reads — these files can, and the answer is "that one is fine". */
   const actionable = (findings) => findings.filter((f) => !f.known);
 
   /* Zero findings is now simply zero findings. Reading the linter's HTML page,
@@ -2899,13 +2980,15 @@
    * far is an article with nothing wrong with it. */
   const ALL_CLEAR = 'Nothing to lint.';
 
-  /* "No issues" is not quite true when the only findings were names sitting in
-   * `proper-nouns.txt`, and the difference is worth a clause: the linter did
-   * say something, and what became of it is not a mystery. */
-  const allClearSub = (slug, hidden = 0) =>
-    `The linter found no issues in "${slug}".` +
-    (hidden ? ` (${hidden} ${hidden > 1 ? 'findings were names' : 'finding was a name'} ` +
-              'already in the list.)' : '');
+  /* "No issues" is not quite true when the only findings were words sitting in
+   * `proper-nouns.txt` or `acronyms.txt`, and the difference is worth a
+   * clause: the linter did say something, and what became of it is not a
+   * mystery. */
+  const allClearSub = (slug, tally = {}) => {
+    const said = knownSaid(tally);
+    return `The linter found no issues in "${slug}".` +
+           (said.length ? ` (Set aside: ${said.join(', ')}.)` : '');
+  };
 
   /* Outside the editor the linter is asked *before* navigating. An article
    * with nothing wrong with it used to cost you the trip to the edit page and
@@ -2919,7 +3002,7 @@
       const all = await findingsFor(slug);
       const findings = actionable(all);
       if (!findings.length) {
-        showBanner(ALL_CLEAR, allClearSub(slug, all.length - findings.length));
+        showBanner(ALL_CLEAR, allClearSub(slug, knownTally(all)));
         return;
       }
       // Go to the editor and let the lint start there — this way navigation
@@ -2941,7 +3024,7 @@
     try {
       const all = await findingsFor(slug, { force });
       const findings = actionable(all).map((f) => ({ ...f, state: 'open', range: null, frame: null }));
-      const hidden = all.length - findings.length;
+      const hidden = knownTally(all);
 
       // Also the answer to "Re-lint" on an article you have just finished
       // fixing: no stage, one sentence.
