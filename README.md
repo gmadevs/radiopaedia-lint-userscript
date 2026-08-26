@@ -23,12 +23,14 @@ And beside every reference in the editor, a **`Lint citation`** chip: one press 
 [tells you what differs](#linting-the-references) — down to the word.
 
 [![Install](https://img.shields.io/badge/Install-userscript-2ea44f?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js)
+[![Greasy Fork](https://img.shields.io/badge/or%20from-Greasy%20Fork-670000?style=for-the-badge)](https://greasyfork.org/en/scripts/592112-radiopaedia-lint)
 
 [![Version](https://img.shields.io/github/v/release/gmadevs/radiopaedia-lint-userscript?color=blue)](https://github.com/gmadevs/radiopaedia-lint-userscript/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
 [![Userscript](https://img.shields.io/badge/userscript-Tampermonkey-00485B?logo=tampermonkey&logoColor=white)](https://www.tampermonkey.net/)
 [![No build step](https://img.shields.io/badge/dependencies-none-lightgrey)](radiopaedia-lint.user.js)
 [![One file](https://img.shields.io/github/size/gmadevs/radiopaedia-lint-userscript/radiopaedia-lint.user.js?label=one%20file&color=lightgrey)](radiopaedia-lint.user.js)
+[![Installs](https://img.shields.io/greasyfork/dt/592112?label=greasy%20fork%20installs&color=670000)](https://greasyfork.org/en/scripts/592112-radiopaedia-lint)
 [![Last commit](https://img.shields.io/github/last-commit/gmadevs/radiopaedia-lint-userscript?color=blue)](https://github.com/gmadevs/radiopaedia-lint-userscript/commits/main)
 
 <img src="docs/lint-and-sections.png" alt="A Radiopaedia article with the Lint button, the auto switch and the structure flag beside its title, all red for an article with errors, and four missing sections listed down the left margin" width="900">
@@ -102,6 +104,9 @@ of them: it asks for `GM_xmlhttpRequest` and `GM_addStyle` and nothing else.
 The manager recognises any URL ending in `.user.js` and offers to install it; from then on it
 checks the same URL for updates on its own. Failing that: Dashboard → **+** (new script) → paste
 the file → save.
+
+The [Greasy Fork page](https://greasyfork.org/en/scripts/592112-radiopaedia-lint) installs the same file — it syncs from this
+repository, so the two are never different versions of anything. Take whichever you prefer.
 
 **3. Chrome and Edge only — turn on user scripts.**
 
