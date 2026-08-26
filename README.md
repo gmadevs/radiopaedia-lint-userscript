@@ -70,10 +70,36 @@ article_type                                            └─  the ones missing
 
 ## Installing
 
-**1. Install [Tampermonkey](https://www.tampermonkey.net/).**
+This is a **userscript**, not an extension. You install a userscript manager once — every major
+browser has one, Safari included — and from then on the script updates itself from this repository
+and the manager stays out of the way. That is also why there is nothing to install per browser
+here: it is the same one file everywhere.
+
+**1. Install a userscript manager.**
+
+<div align="center">
+
+[![Chrome](https://img.shields.io/badge/Chrome-Tampermonkey-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
+[![Edge](https://img.shields.io/badge/Edge-Tampermonkey-0078D7?style=for-the-badge&logo=microsoftedge&logoColor=white)](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)
+[![Firefox](https://img.shields.io/badge/Firefox-Tampermonkey-FF7139?style=for-the-badge&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/firefox/addon/tampermonkey/)
+[![Safari](https://img.shields.io/badge/Safari-Userscripts-1B9AF7?style=for-the-badge&logo=safari&logoColor=white)](https://apps.apple.com/app/userscripts/id1463298887)
+
+</div>
+
+| browser | what to install | worth knowing |
+| :-- | :-- | :-- |
+| Chrome | [Tampermonkey](https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo) | needs step 3 |
+| Edge | [Tampermonkey](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd) | needs step 3 |
+| Firefox | [Tampermonkey](https://addons.mozilla.org/firefox/addon/tampermonkey/) | nothing extra |
+| Safari | [Userscripts](https://apps.apple.com/app/userscripts/id1463298887) — free, macOS and iOS | enable it in Safari → Settings → Extensions, and give it permission on `radiopaedia.org` |
+
+[Violentmonkey](https://violentmonkey.github.io/) works just as well on the first three, and
+Safari also has [Tampermonkey Classic](https://apps.apple.com/app/tampermonkey/id1482490089) if
+you would rather stay with the same name everywhere. Nothing in this script is particular to one
+of them: it asks for `GM_xmlhttpRequest` and `GM_addStyle` and nothing else.
 
 **2. Open [`radiopaedia-lint.user.js`](https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js).**
-Tampermonkey recognises any URL ending in `.user.js` and offers to install it; from then on it
+The manager recognises any URL ending in `.user.js` and offers to install it; from then on it
 checks the same URL for updates on its own. Failing that: Dashboard → **+** (new script) → paste
 the file → save.
 
