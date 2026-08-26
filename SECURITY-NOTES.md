@@ -186,12 +186,15 @@ answer to "why is there no button".
 
 ## Open
 
-**The screenshots in `docs/`.** They show Radiopaedia content: in `findings-in-editor.png` the
-*Striatocapsular infarct* article with its case images, and in `lint-and-sections.png` the
-*Radiation colitis* article — including its "Last revised by" line, which names a real editor. The
-repository is public, so these are already published, and the pages themselves are public on
-Radiopaedia. Asking is therefore a courtesy after the fact rather than before it, and it belongs
-in the same email as everything above.
+**The screenshots in `docs/`.** They show Radiopaedia content: `findings-in-editor.png` the
+*Striatocapsular infarct* article with its case images, `lint-and-sections.png` the *Radiation
+colitis* article. **No editor is named in either** — the "Last revised by" line in the second one
+carried a real name and was cleared before the script went into any catalogue, which is the point
+at which a picture stops being seen by one person.
+
+What remains is article text and case images, all of it public on Radiopaedia and all of it
+already published here, since the repository is public. Asking is a courtesy after the fact rather
+than before it, and it belongs in the same email as everything above.
 
 ## Closed
 
