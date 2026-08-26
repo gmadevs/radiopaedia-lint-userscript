@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/logo.png" alt="" width="128">
+
 # Radiopaedia Lint
 
 **A `Lint` button next to the title of any [radiopaedia.org](https://radiopaedia.org) article.**
