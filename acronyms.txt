@@ -26,6 +26,7 @@
 
 # ——— Trials, scores, rules and criteria: names, not abbreviations ———
 
+SMART       # Stroke-like Migraine Attacks after Radiation Therapy
 PERC        # pulmonary embolism rule-out criteria
 YEARS       # YEARS algorithm for pulmonary embolism
 PIOPED      # prospective investigation of pulmonary embolism diagnosis
