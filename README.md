@@ -289,7 +289,8 @@ the linter sent them.
 > [!NOTE]
 > These and [the canon](#the-sections-that-are-missing) are the only reasons the script talks to
 > a second host, `raw.githubusercontent.com`, and it only ever reads. Nothing is sent there: what
-> reaches the repository is what you type into GitHub yourself.
+> reaches the repository is what you type into GitHub yourself. Every request the script makes,
+> and everything it stores, is written out in [SECURITY-NOTES.md](SECURITY-NOTES.md).
 
 ---
 
