@@ -57,6 +57,7 @@ article_type                                            └─  the ones missing
 - [Nothing to lint](#nothing-to-lint)
 - [Working through the findings](#working-through-the-findings)
 - [Proper nouns and acronyms](#proper-nouns-and-acronyms)
+  - [Adding one](#adding-one)
 - [Linting the references](#linting-the-references)
 - [The sections that are missing](#the-sections-that-are-missing)
   - [Required and offered](#required-and-offered)
@@ -272,12 +273,32 @@ second best thing. Either way the finding is not shown at all, and the bar says 
 aside — `1/18 · 1 error · 3 warning · 14 other · 2 known names · 1 known acronym` — because a
 decision to hide something belongs next to the numbers it changed, not behind them.
 
-When the word is **not** in its file yet, the note says so and <kbd>p</kbd> adds it: the word goes
-to your clipboard and the right file opens on GitHub, where you paste it in and press *Propose
-changes*. GitHub turns that into a fork and a pull request on its own, so no write access and no
-git are needed — and once it is merged, everybody running the script gets it. Words you have
-proposed are remembered locally, so the same one is not offered again on the next article while
-the pull request is still open.
+### Adding one
+
+When the word is **not** in its file yet, the note says so and <kbd>p</kbd> starts it off. **You do
+not need write access to this repository, a fork of it, or git.** GitHub does that part itself; the
+whole thing is a paste and two buttons:
+
+1. <kbd>p</kbd> puts the word on your clipboard and opens the right file — `proper-nouns.txt` or
+   `acronyms.txt` — in GitHub's own editor, in a new tab.
+2. **Paste it on a line of its own**, in the group it belongs to. The file is a list with comments
+   in it and the comments say what goes where; order does not matter beyond that, and neither does
+   case.
+3. Press **Commit changes**. Since you cannot write here, GitHub offers to *"create a new branch
+   and start a pull request"* instead — that is the fork, made for you, and the button that
+   follows says **Propose changes**.
+4. **Create pull request**, with a sentence about what the word is if it is not obvious. That is
+   the end of your part.
+
+Once it is merged everybody running the script has it, within about five minutes — see the caching
+note below. Words you have proposed are remembered locally, so the same one is not offered again
+on the next article while the pull request is still open.
+
+<img src="docs/proper-nouns.png" alt="proper-nouns.txt open on GitHub: a comment block explaining that the file lists names which may legitimately start a list item, how matching works by prefix at a word boundary, and how to add one by pressing p; below it the first entries, Kniest, Chiari, Baló, Bickerstaff, Alvarado, American College of Chest Physicians." width="900">
+
+The file explains itself at the top, which is deliberate: it is read by somebody in the middle of
+fixing an article, in a browser, and a format with a syntax to get wrong would be a second thing
+to get right.
 
 > [!IMPORTANT]
 > An entry hides that finding for **everybody** running the script. The bar for `acronyms.txt` is
@@ -311,18 +332,15 @@ PubMed or Google Books, and gives back the canonical form. The edit page keeps e
 a box of its own with a **Format citation** link under it, and the chip goes right there, beside
 it:
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ 1. Benson D, Cavanaugh M, … Nucleic Acids Res. 2013;41(Database issue):… │
-└──────────────────────────────────────────────────────────────────────────┘
-  Format citation   [ Lint citation ]
-                            │
-    press it, and that one reference goes to the tool ──┘
+<img src="docs/citation-lint.png" alt="The references section of the Radiopaedia editor, each reference in its own box with a Lint citation chip beside its Format citation link. The first chip is green and reads a tick and citation; a panel below it says MATCHES, REFERENCE 1, word for word what the citation tool returns for it, with buttons to copy it as 1, open it in cite, or close." width="900">
 
-   ✓ citation   word for word what the tool returns
-   ≠ citation   it differs — or the number in front of it does
-   ? citation   nothing in there to look up
-```
+The chip carries the verdict once it has one:
+
+| | |
+| :-- | :-- |
+| `✓ citation` | word for word what the tool returns |
+| `≠ citation` | it differs — or the number in front of it does |
+| `? citation` | nothing in there to look up |
 
 Where it differs, the two forms are shown one under the other with **the words that changed lit
 up** — a reference is eighty words long and what is wrong with it is usually one of them — and
