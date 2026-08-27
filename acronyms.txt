@@ -26,6 +26,7 @@
 
 # ——— Trials, scores, rules and criteria: names, not abbreviations ———
 
+RAO         # Right anterior oblique (x-ray)
 NHS         # National health service
 UK          # United Kingdom
 SMART       # Stroke-like Migraine Attacks after Radiation Therapy
