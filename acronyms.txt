@@ -26,6 +26,10 @@
 
 # ——— Trials, scores, rules and criteria: names, not abbreviations ———
 
+AHA         # American Heart Society
+ASCOD       # Atherosclerosis, Small vessel disease, Cardiac pathology, Other causes, and Dissection
+TOAST       # Trial of Org 10172 in Acute Stroke Treatment
+STRIVE      # STandards for ReportIng Vascular changes on nEuroimaging
 RAO         # Right anterior oblique (x-ray)
 NHS         # National health service
 UK          # United Kingdom
@@ -38,8 +42,8 @@ ECOG        # Eastern Cooperative Oncology Group performance status
 RTOG        # Radiation Therapy Oncology Group
 AJCC        # American Joint Committee on Cancer
 TNM         # tumour, node, metastasis
-BT-RADS
-PE-RADS
+BT-RADS     # Brain Tumor Reporting and Data System 
+PE-RADS     # Pulmonary Embolism Reporting and Data System
 
 # ——— Statistics ———
 
