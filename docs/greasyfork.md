@@ -52,11 +52,14 @@ You need to be signed in to Radiopaedia with edit rights, since the point of it 
 
 Worth stating plainly for a script that runs on a whole site:
 
-- **Four GET requests, no POST anywhere.** To `radiopaedia.work` (the lint API, and the citation
-  tool when you press a chip) and to `raw.githubusercontent.com` (the two word lists and the
-  structure file, all constant URLs, read-only). Both hosts are named in `@connect`.
+- **Four GET requests, and one POST you press.** The GETs go to `radiopaedia.work` (the lint API,
+  and the citation tool when you press a chip) and to `raw.githubusercontent.com` (the two word
+  lists and the structure file, all constant URLs, read-only). The POST is the `↻` beside the
+  button: it presses the same `forceReload` the ⟳ on radiopaedia.work/lint/linter presses, by
+  sending that page's own token and state back to it. Both hosts are named in `@connect`.
 - **What leaves the browser**: the article's slug, which is already in the URL you are standing on
-  — and, only when you press a `Lint citation` chip, that one reference.
+  — and, only when you press a `Lint citation` chip, that one reference. The `↻` sends nothing of
+  yours: the slug, and the linter page's own token and snapshot, back to the page they came from.
 - **No analytics, no telemetry, no third-party code, no remote code of any kind.** The script
   fetches *data* — JSON and two text files — and never executes anything it downloads.
 - **It never writes into the editor.** Highlights and chips are drawn over the page, or put in the

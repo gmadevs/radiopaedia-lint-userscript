@@ -12,6 +12,9 @@ severity, with the message alongside, and keys to walk through them one at a tim
 [radiopaedia.work lint API](https://radiopaedia.work/api/v1/lint?article=epilepsy) and the button
 takes the colour of what came back, so you know before clicking.
 
+The `↻` beside it is for after you have fixed something: the linter answers from what it last
+read, and that press makes it **read the article again** before answering.
+
 And in the grey margin beside the text, the sections **this kind of article is supposed to have
 and has not got** — each one beside the heading it would go under. The `⚑` next to the switch
 turns that off.
@@ -168,6 +171,31 @@ grey button it does not even need the editor: the *nothing to lint* banner comes
 > button that could not ask looks exactly like one that has not been asked. The switch turns it
 > off for good; `PREVIEW_ON_LOAD` at the top of the script decides what a browser that has never
 > touched the switch does.
+
+---
+
+## Reading it again
+
+The linter answers from what it last read. Fix an article, save it, press **Lint** again, and the
+same findings can come straight back — out of the copy the linter is answering from, not out of
+the text you just changed.
+
+The `↻` next to the button is what clears that. It presses the same forced reload as the `⟳` on
+[the linter's own page](https://radiopaedia.work/lint/linter?slug=epilepsy), waits while the
+article is read from Radiopaedia again, then forgets what this tab had cached and asks for the new
+answer. In the editor the findings are redrawn on the text; on the article page the button simply
+takes its new colour. It is the one press in the script that costs two requests, so it is the one
+press the script never makes on its own.
+
+> [!NOTE]
+> This is also the only POST in the file. The API has no parameter that clears the linter's copy —
+> `force`, `refresh` and `nocache` are all taken and ignored — and the `⟳` on the linter's page is
+> a Livewire action rather than a link. So the script does what pressing it does: it reads that
+> page, takes the token and the state of its `lint` component out of the HTML, and posts them
+> straight back. Nothing of yours travels with them, and nothing is posted at all unless all three
+> parts are there and the state really is that component's. It is somebody's page and not an API —
+> so when it cannot find what it needs it says so in an alert, rather than let you believe the
+> article was read again.
 
 ---
 

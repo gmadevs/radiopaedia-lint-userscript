@@ -10,20 +10,22 @@ step and no dependencies. Where something is named — `askLinter()`, `plain()`,
 it is a function you can search for. Line numbers are deliberately not used: they go stale, and a
 stale line number in a document like this is worse than none.
 
-Current as of **v3.0.0**.
+Current as of **v3.1.0**.
 
 ## The short version
 
-Nothing here is unsafe to hand to a reviewer. No secrets in the file or in the history. Four GET
-requests, no POST anywhere, no analytics, no telemetry, no third-party code. The one thing that
-genuinely costs Radiopaedia something is **how often it asks** — see *The automatic request* —
-and that is the first thing to talk about rather than the last.
+Nothing here is unsafe to hand to a reviewer. No secrets in the file or in the history. Five
+requests to two hosts — four of them GET, and one POST that presses a button on the linter's own
+page and carries nothing of yours — no analytics, no telemetry, no third-party code. The one
+thing that genuinely costs Radiopaedia something is **how often it asks** — see *The automatic
+request* — and that is the first thing to talk about rather than the last.
 
 ## Network
 
-Four `GM_xmlhttpRequest` calls, all GET, to two hosts. No `fetch`, no `XMLHttpRequest`, no beacon,
-no websocket, no remote image, font or stylesheet, no analytics. `@connect` names both hosts in
-the header, which is also what confines the script to them.
+Five `GM_xmlhttpRequest` calls to two hosts — four GET, and one POST, which is the ⟳ and is set
+out in full below. No `fetch`, no `XMLHttpRequest`, no beacon, no websocket, no remote image, font
+or stylesheet, no analytics. `@connect` names both hosts in the header, which is also what
+confines the script to them.
 
 **1. The linter** — `GET https://radiopaedia.work/api/v1/lint?article=<slug>`, one header,
 `Accept: application/json` (`askLinter()`). The only thing that leaves the browser is the article
@@ -57,10 +59,36 @@ which is what the lint side stopped doing in v1.5.0; it fails loudly rather than
 **4. The canon** — `GET raw.githubusercontent.com/…/main/article-structure.json`, the same shape
 as the lists: a constant URL, read-only, cached for the session.
 
-**Nothing is ever written to a server.** Proposing a name or an acronym copies a word to the
+**5. The forced re-read** — `GET https://radiopaedia.work/lint/linter?slug=<slug>` followed by
+`POST https://radiopaedia.work/livewire-<n>/update` (`forceLinter()`, `forceParts()`,
+`postForce()`). This is the ↻ beside the button, and it goes only when somebody presses it.
+
+The linter answers the API from what it last read, and no query parameter clears that copy —
+`force`, `refresh` and `nocache` are all taken and ignored. What does clear it is the ⟳ on
+`radiopaedia.work/lint/linter`, which is not a link but a Livewire action, `forceReload`. So the
+script does what pressing it does: it reads that page, takes three things out of the HTML — the
+`csrf-token` meta, the `wire:snapshot` of the `lint` component, and the update endpoint, whose
+path carries a number that changes with every deploy — and posts them back with one call,
+`forceReload`, no arguments.
+
+What leaves the browser is the slug, plus that page's own token and snapshot, sent back to the
+page they came from. Nothing of yours, nothing out of the article you are editing, no credential
+of ours: the session cookie that makes the token valid is the browser's own, for a host you were
+already talking to. The snapshot is posted back as the exact string it was read as — a checksum
+travels inside it — and it is only ever the `lint` component's: any of the three parts missing,
+or a snapshot that is not that component, and nothing is posted at all. The answer is read for
+one thing, whether Livewire accepted the call; the HTML in it is not parsed, not shown and not
+kept.
+
+The fragile part, stated rather than buried: this is somebody's page and not an API. Rebuild the
+linter on something other than Livewire and the ↻ stops working — loudly, in an alert, because a
+refresh that quietly did not happen would be worse than no button.
+
+**Nothing of yours is ever written to a server.** Proposing a name or an acronym copies a word to the
 clipboard and opens `https://github.com/…/edit/main/proper-nouns.txt` in a new tab with
 `window.open(url, '_blank', 'noopener')`; the paste and the pull request are yours, in GitHub's
-own interface, under your own account. No token, no credential, no POST.
+own interface, under your own account. No token, no credential of yours, and the one POST in the
+file is the ↻ above, which sends the linter's own page back to itself.
 
 ## The automatic request
 

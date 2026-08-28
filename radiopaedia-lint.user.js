@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.0.1
+// @version      3.1.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -114,6 +114,20 @@
   const AUTO_KEY = 'rlx-auto';      // the switch, remembered across sessions
 
   const API_URL = 'https://radiopaedia.work/api/v1/lint?article=';
+
+  /* Forcing a fresh read, and where the ↻ beside the button goes.
+   *
+   * The API answers from what the linter last read. Ask twice for the same
+   * article and the second answer arrives in a third of the time, word for
+   * word the same, however much the text moved on in between — and there is
+   * no parameter that clears that copy: `force`, `refresh`, `nocache` are all
+   * taken and ignored. The one control that does clear it is the ⟳ on the
+   * linter's own page, which is not a link but a Livewire action posted back
+   * to the server. So this button presses that one, on the page it lives on,
+   * rather than inventing a query string the API has never had. */
+  const LINT_PAGE_URL = 'https://radiopaedia.work/lint/linter?slug=';
+  const FORCE_TIMEOUT = 60_000;       // a forced run reads the article from Radiopaedia again
+  const FORCE_MAX = 4 * 1024 * 1024;  // the linter's page, findings table and all
 
   /* The citation worker, and what one press of "Lint citation" costs.
    *
@@ -620,6 +634,142 @@
     });
   }
 
+  /* The forced run: two requests, and the only POST in the file.
+   *
+   * `forceReload` is a Livewire method on the linter's own page — the ⟳ there
+   * is `wire:click="forceReload"` and nothing else — so pressing it from here
+   * means sending back what that page would have sent. Three things are
+   * needed and all three exist only in its HTML: the CSRF token, the snapshot
+   * of the `lint` component, and the endpoint, whose path carries a number
+   * that changes with every deploy of the site. Read them, check them, post
+   * once, and let `askLinter` pick the new answer up.
+   *
+   * Worth saying plainly, because it is the fragile part: this is somebody's
+   * page and not an API. The day the linter is rebuilt on something other
+   * than Livewire, or the component is renamed, this stops working — and it
+   * stops loudly. A refresh that quietly did not happen would be worse than
+   * no button at all, since being sure of what comes back is the whole reason
+   * for pressing it. */
+  function forceLinter(slug) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: LINT_PAGE_URL + encodeURIComponent(slug),
+        timeout: FORCE_TIMEOUT,
+        onload: (r) => {
+          const page = r.responseText || '';
+          if (CHALLENGE.some((m) => page.includes(m))) {
+            return reject(new Error(
+              'Cloudflare bot check. Open radiopaedia.work in a tab, clear the check, ' +
+              'then try again.'));
+          }
+          if (r.status >= 400) return reject(new Error(`The linter page answered ${r.status}.`));
+          if (page.length > FORCE_MAX) return reject(new Error('That answer was not the linter page.'));
+          const parts = forceParts(page, slug);
+          if (!parts) {
+            return reject(new Error(
+              'The linter page is not built the way this button expects any more. ' +
+              'Press the ⟳ on radiopaedia.work/lint/linter instead.'));
+          }
+          postForce(parts, slug).then(resolve, reject);
+        },
+        onerror: () => reject(new Error('The linter page could not be reached.')),
+        ontimeout: () => reject(new Error('The linter page took too long to arrive.')),
+      });
+    });
+  }
+
+  /* Nothing is posted on a guess: either all three parts are there and the
+   * snapshot really is the `lint` component's, or this answers null and the
+   * press is refused out loud. */
+  function forceParts(page, slug) {
+    const token = /<meta name="csrf-token" content="([^"]+)"/.exec(page)?.[1];
+    const path = /\/(livewire[\w-]*)\/update\b/.exec(page)?.[1];
+    const snapshot = lintSnapshot(page, slug);
+    if (!token || !path || !snapshot) return null;
+    return { token, url: `https://radiopaedia.work/${path}/update`, snapshot };
+  }
+
+  /* The page carries a snapshot per component, and most of them are the
+   * `lint-summary` of some related article. The one wanted is the `lint`
+   * itself — the one with `force` in its state, which is what `forceReload`
+   * sets — and, where the page holds more than one, the one about the
+   * article being asked about.
+   *
+   * Returned as the string it was written as, unescaped and not re-encoded: a
+   * checksum of it travels inside it, and JSON that has been through
+   * `parse` and `stringify` is not the same bytes. */
+  function lintSnapshot(page, slug) {
+    let fallback = null;
+    for (const m of page.matchAll(/wire:snapshot="([^"]*)"/g)) {
+      const raw = unescapeAttribute(m[1]);
+      let snap = null;
+      try { snap = JSON.parse(raw); } catch { continue; }
+      if (snap?.memo?.name !== 'lint' || !snap.data || !('force' in snap.data)) continue;
+      if (typeof snap.data.slug === 'string' &&
+          snap.data.slug.toLowerCase() === String(slug).toLowerCase()) return raw;
+      fallback ??= raw;
+    }
+    return fallback;
+  }
+
+  /* An attribute read out of HTML source, without handing the source to a
+   * parser. The value is JSON that was escaped on the way out, so five
+   * entities cover it — and `&amp;` is undone last, or an `&amp;quot;` that was
+   * written as text would come back as a quotation mark that was never there. */
+  const unescapeAttribute = (s) => s
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+
+  /* The press itself. The session cookie the page was served with is the one
+   * the token belongs to, and `GM_xmlhttpRequest` sends it because it is the
+   * browser's own — nothing of ours is stored, sent or read here beyond the
+   * slug, which was already in the URL of the page you are standing on. */
+  function postForce({ token, url, snapshot }, slug) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'POST',
+        url,
+        timeout: FORCE_TIMEOUT,
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-Livewire': '1',
+          'X-CSRF-TOKEN': token,
+          Referer: LINT_PAGE_URL + encodeURIComponent(slug),
+        },
+        data: JSON.stringify({
+          _token: token,
+          components: [{
+            snapshot,
+            updates: {},
+            calls: [{ path: '', method: 'forceReload', params: [] }],
+          }],
+        }),
+        onload: (r) => {
+          // 419 is Laravel for a token that has gone stale between the two
+          // requests, which one more press fixes.
+          if (r.status === 419) {
+            return reject(new Error('The linter page\'s session had expired. Press it once more.'));
+          }
+          if (r.status >= 400) return reject(new Error(`The forced run answered ${r.status}.`));
+          let data = null;
+          try { data = JSON.parse(r.responseText || ''); } catch { /* said below */ }
+          if (!data || !Array.isArray(data.components)) {
+            return reject(new Error('The forced run answered something that is not a Livewire response.'));
+          }
+          resolve(true);
+        },
+        onerror: () => reject(new Error('The forced run could not be sent (network, or @connect).')),
+        ontimeout: () => reject(new Error('The forced run did not finish within a minute.')),
+      });
+    });
+  }
+
   // ————————————————————————————— finding the editor and anchoring snippets in it
 
   /* Radiopaedia edits in a WYSIWYG: the text may live in an iframe (TinyMCE)
@@ -914,6 +1064,15 @@
     .rlx-auto:hover { color:#555; }
     .rlx-auto.rlx-on { background:var(--rlx-ink, #2563eb); border-color:transparent; color:#fff; }
     .rlx-auto.rlx-on:hover { color:#fff; opacity:.85; }
+
+    /* The ↻. Shaped like the switches beside it, because it sits with them,
+       but it never lights up: it switches nothing, it does something, and the
+       only state it has is the second or two it takes to do it. The glyph
+       turns rather than the button, or the border would spin with it. */
+    .rlx-force-glyph { display:inline-block; }
+    .rlx-force[disabled] { opacity:.55; cursor:progress; }
+    .rlx-force.rlx-busy .rlx-force-glyph { animation:rlx-turn .9s linear infinite; }
+    @keyframes rlx-turn { to { transform:rotate(360deg); } }
 
     .rlx-btn-float { position:fixed; top:14px; right:14px; z-index:99999; margin:0;
       padding:4px 6px; border-radius:2px;
@@ -2007,6 +2166,7 @@
   const inEditor = () => /\/edit\/?$/.test(location.pathname);
 
   let group = null, button = null, toggle = null, railToggle = null, citesToggle = null;
+  let forceBtn = null;
 
   /* What the last answer said about this article, in the colour of the boxes
    * it would draw on the text: red if anything is an error, amber if anything
@@ -2018,6 +2178,7 @@
    * its own page and takes the button with it: the next `mountButton()` paints
    * the new one from this. */
   let verdict = null;
+  let forcing = false;
   const SEVEREST = ['error', 'warning', 'suggestion'];
 
   /* Automatic or manual, as last chosen here. `localStorage` and not the
@@ -2077,11 +2238,11 @@
    * ever put an alert in front of you. A linter that cannot be reached leaves
    * a button that looks exactly like one that has not been asked yet, which is
    * the truth. */
-  async function preview(slug) {
+  async function preview(slug, opts = {}) {
     verdict = 'asking';
     paintButton();
     try {
-      const findings = actionable(await findingsFor(slug));
+      const findings = actionable(await findingsFor(slug, opts));
       const counts = { error: 0, warning: 0, suggestion: 0, other: 0 };
       for (const f of findings) counts[f.severity in counts ? f.severity : 'other']++;
       const worst = SEVEREST.find((sev) => counts[sev]);
@@ -2099,6 +2260,44 @@
       verdict = null;
     }
     paintButton();
+  }
+
+  const FORCE_TITLE =
+    'Have the linter read the article again rather than answer from what it ' +
+    'read last time — the ⟳ on radiopaedia.work/lint/linter, from here';
+
+  function paintForce() {
+    if (!forceBtn) return;
+    forceBtn.classList.toggle('rlx-busy', forcing);
+    forceBtn.disabled = forcing;
+    forceBtn.title = forcing ? 'The linter is reading the article again…' : FORCE_TITLE;
+  }
+
+  /* Pressing it: the linter first, this tab second, and in that order for a
+   * reason. Forgetting what this tab remembers and asking again would come
+   * straight back with the same words out of the linter's own copy; forcing
+   * the linter and keeping the copy here would leave the fresh answer unread.
+   * So — force, forget, ask — and then show whichever of the two things this
+   * page can show: the findings on the text in the editor, the colour of the
+   * button outside it.
+   *
+   * Loud on failure, unlike `preview`. Nobody is surprised by an alert they
+   * pressed a button for, and a ↻ that goes round once and changes nothing
+   * would be a lie about what the linter has read. */
+  async function forceRefresh(slug) {
+    if (!slug || forcing) return;
+    forcing = true;
+    paintForce();
+    try {
+      await forceLinter(slug);
+      if (inEditor()) await runLint(slug, { force: true });
+      else await preview(slug, { force: true });
+    } catch (err) {
+      alert(`Could not have the linter read the article again.\n\n${err.message}`);
+    } finally {
+      forcing = false;
+      paintForce();
+    }
   }
 
   function mountButton() {
@@ -2122,6 +2321,19 @@
       return preflight(slug);
     });
 
+    /* Next to `Lint` rather than out at the end, because it is the other
+       thing this group DOES: the two beyond it are switches, and a press that
+       goes off and asks the linter something belongs beside the press that
+       already does. */
+    const f = document.createElement('button');
+    f.className = 'rlx-auto rlx-force';
+    f.type = 'button';
+    const glyph = document.createElement('span');
+    glyph.className = 'rlx-force-glyph';
+    glyph.textContent = '\u21bb';
+    f.appendChild(glyph);
+    f.addEventListener('click', () => forceRefresh(slug));
+
     // The switch. A word rather than a symbol: this one decides whether every
     // article you open becomes a request, and that deserves to be readable.
     const t = document.createElement('button');
@@ -2140,7 +2352,7 @@
     r.title = 'Show the sections this kind of article is missing, in the margin';
     r.addEventListener('click', () => setRailOn(!railOn()));
 
-    g.append(b, t, r);
+    g.append(b, f, t, r);
 
     /* The fourth, and only where it has anything to switch: the citation chips
        live in the editor and nowhere else, so on an article page this control
@@ -2168,7 +2380,9 @@
     if (!box.width || !box.height) pinToCorner(g);
 
     group = g; button = b; toggle = t; railToggle = r; citesToggle = c;
+    forceBtn = f;
     paintButton();
+    paintForce();
     paintToggle();
     paintRailToggle();
     paintCitesToggle();
@@ -3117,8 +3331,8 @@
   }
 
   /* One request, one reference, one press. `@connect radiopaedia.work` already
-   * covers it: this is the same host the linter answers from, and this is
-   * still a GET — there is no POST anywhere in this file. */
+   * covers it: this is the same host the linter answers from, and this is a
+   * GET — the one POST in the file is the ↻, and it is up in `postForce`. */
   function askCite(search) {
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
