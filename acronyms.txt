@@ -26,6 +26,7 @@
 
 # ——— Trials, scores, rules and criteria: names, not abbreviations ———
 
+AHA         # American Heart Society
 ASCOD       # Atherosclerosis, Small vessel disease, Cardiac pathology, Other causes, and Dissection
 TOAST       # Trial of Org 10172 in Acute Stroke Treatment
 STRIVE      # STandards for ReportIng Vascular changes on nEuroimaging
