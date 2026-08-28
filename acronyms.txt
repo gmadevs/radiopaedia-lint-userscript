@@ -26,6 +26,7 @@
 
 # ——— Trials, scores, rules and criteria: names, not abbreviations ———
 
+TOAST       # Trial of Org 10172 in Acute Stroke Treatment
 STRIVE      # STandards for ReportIng Vascular changes on nEuroimaging
 RAO         # Right anterior oblique (x-ray)
 NHS         # National health service
