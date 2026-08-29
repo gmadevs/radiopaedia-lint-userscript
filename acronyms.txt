@@ -52,6 +52,7 @@ NPV         # negative predictive value
 
 # ——— Laboratory and molecular ———
 
+GABA        # gamma-aminobutyric acid
 ELISA       # enzyme-linked immunosorbent assay
 EGFR        # epidermal growth factor receptor
 GFAP        # glial fibrillary acidic protein
