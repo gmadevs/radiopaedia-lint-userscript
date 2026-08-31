@@ -26,6 +26,7 @@
 
 # ——— Trials, scores, rules and criteria: names, not abbreviations ———
 
+PHASES      # Population Hypertension Age Size Earlier Site (aneurysm score)
 ABC         # Volume calculation formula
 NIHSS       # National Institutes of Health Stroke Scale
 AHA         # American Heart Society
