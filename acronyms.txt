@@ -26,6 +26,7 @@
 
 # ——— Trials, scores, rules and criteria: names, not abbreviations ———
 
+ABC         # Volume calculation formula
 NIHSS       # National Institutes of Health Stroke Scale
 AHA         # American Heart Society
 ASCOD       # Atherosclerosis, Small vessel disease, Cardiac pathology, Other causes, and Dissection
