@@ -59,6 +59,7 @@ NPV         # negative predictive value
 
 # ——— Laboratory and molecular ———
 
+ESR         # erythrocyte sedimentation rate
 GABA        # gamma-aminobutyric acid
 ELISA       # enzyme-linked immunosorbent assay
 EGFR        # epidermal growth factor receptor
