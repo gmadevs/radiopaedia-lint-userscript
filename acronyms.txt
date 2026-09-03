@@ -26,6 +26,7 @@
 
 # ——— Trials, scores, rules and criteria: names, not abbreviations ———
 
+PNS         # Peripheral nervous system
 FEV         # Forced expiratory volume
 SS-VRT      # Shaded surface display volume rendering 
 NB          # Pay attention (Nota Bene)
@@ -41,10 +42,10 @@ RAO         # Right anterior oblique (x-ray)
 NHS         # National health service
 UK          # United Kingdom
 SMART       # Stroke-like Migraine Attacks after Radiation Therapy
-PERC        # pulmonary embolism rule-out criteria
+PERC        # Pulmonary embolism rule-out criteria
 YEARS       # YEARS algorithm for pulmonary embolism
-PIOPED      # prospective investigation of pulmonary embolism diagnosis
-RANO        # response assessment in neuro-oncology
+PIOPED      # Prospective investigation of pulmonary embolism diagnosis
+RANO        # Response assessment in neuro-oncology
 ECOG        # Eastern Cooperative Oncology Group performance status
 RTOG        # Radiation Therapy Oncology Group
 AJCC        # American Joint Committee on Cancer
@@ -54,15 +55,15 @@ PE-RADS     # Pulmonary Embolism Reporting and Data System
 
 # ——— Statistics ———
 
-PPV         # positive predictive value
-NPV         # negative predictive value
+PPV         # Positive predictive value
+NPV         # Negative predictive value
 
 # ——— Laboratory and molecular ———
 
-ESR         # erythrocyte sedimentation rate
-GABA        # gamma-aminobutyric acid
-ELISA       # enzyme-linked immunosorbent assay
-EGFR        # epidermal growth factor receptor
-GFAP        # glial fibrillary acidic protein
+ESR         # Erythrocyte sedimentation rate
+GABA        # Gamma-aminobutyric acid
+ELISA       # Enzyme-linked immunosorbent assay
+EGFR        # Epidermal growth factor receptor
+GFAP        # Glial fibrillary acidic protein
 EBV         # Epstein-Barr virus
-BMI         # body mass index
+BMI         # Body mass index
