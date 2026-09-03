@@ -20,6 +20,7 @@
 
 # ——— Proper nouns: eponyms, people, places, organisations ———
 
+Klumpke
 Delphian
 Kniest
 Chiari
