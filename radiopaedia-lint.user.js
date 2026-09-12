@@ -1262,6 +1262,12 @@
       background:rgba(127,127,127,.14); font-weight:600; }
     #rlx-note .rlx-snippet { margin-top:.4em; padding-left:.6em; border-left:2px solid #e5e7eb;
       color:#4b5563; font-style:italic; }
+    /* Said only when the words cannot be found in the editor: the note has
+       nothing to point at, so it stands in the corner and this explains why
+       it is there and what to press. */
+    #rlx-note .rlx-alert { margin-top:.5em; padding:.35em .55em; border-radius:6px;
+      border:1px solid rgba(180,83,9,.35); background:rgba(245,158,11,.14);
+      color:#92400e; font-size:12px; line-height:1.35; }
 
     /* One row, always. Wrapping put the status on a second line as soon as the
        sentence grew, and the bar changed height under the pointer while you
@@ -1395,6 +1401,8 @@
     @media (prefers-color-scheme: dark) {
       #rlx-note { background:#1f2937; color:#f3f4f6; }
       #rlx-note .rlx-snippet { border-left-color:#4b5563; color:#d1d5db; }
+      #rlx-note .rlx-alert { border-color:rgba(251,191,36,.4); background:rgba(245,158,11,.18);
+        color:#fcd34d; }
       #rlx-cite-note { background:#1f2937; color:#f3f4f6; }
     }
   `);
@@ -1761,6 +1769,20 @@
       s.className = 'rlx-snippet';
       s.textContent = f.snippet;
       stage.note.appendChild(s);
+    }
+
+    /* Nothing to anchor to. The note is about to park itself in the corner
+     * with no highlight under it, and the commonest reason is a stale cached
+     * run: the findings are from the text as it was, the editor has moved on.
+     * The bar says "snippet not found" in four words; this says what to do
+     * about it, next to the finding it happened to. */
+    if (!f.range && !settled) {
+      const stale = document.createElement('div');
+      stale.className = 'rlx-alert';
+      stale.textContent = 'The snippet for this finding could not be found in the editor text. '
+                        + 'These results may come from an expired cache — press the Re-lint '
+                        + 'button on the bar to check the article again.';
+      stage.note.appendChild(stale);
     }
 
     const spot = highlightBounds(f);
