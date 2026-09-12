@@ -10,7 +10,7 @@ step and no dependencies. Where something is named — `askLinter()`, `plain()`,
 it is a function you can search for. Line numbers are deliberately not used: they go stale, and a
 stale line number in a document like this is worse than none.
 
-Current as of **v3.1.0**.
+Current as of **v3.1.1**.
 
 ## The short version
 
