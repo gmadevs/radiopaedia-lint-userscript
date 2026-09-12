@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.2.0
+// @version      3.3.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -1219,6 +1219,40 @@
     .rlx-rail-slim .rlx-rail-more { display:none; }
     .rlx-rail-slim .rlx-chip-sub { margin-left:6px; }
     .rlx-rail-slim .rlx-rail-head { padding:2px 3px; gap:2px; }
+
+    /* The line the copied heading goes on, drawn on the editor text itself.
+       The chip's amber, because it is the same fact the chip was stating: a
+       section Radiopaedia asks for that is not there yet. Fixed like
+       everything else of ours — the article DOM is never written to, not even
+       here, where what you are looking at is somebody's unsaved work. */
+    #rlx-paste { position:fixed; inset:0; pointer-events:none; z-index:99996;
+      font-family:"Open Sans", system-ui, -apple-system, sans-serif; }
+    #rlx-paste[hidden] { display:none; }
+    #rlx-paste .rlx-paste-line {
+      position:fixed; height:2px; border-radius:1px;
+      background:var(--rlx-miss, #d97706);
+    }
+    /* The label hangs under its line and at the END of it. Over the line it
+       covered the last sentence of the paragraph the new section comes after —
+       the one that tells you whether this is really the right place — and at
+       the near end it covered the heading the line is measured against, which
+       is the landmark the whole thing is about. Headings are short and the
+       column is wide, so the far end is the one place on that line where there
+       is usually nothing at all. */
+    #rlx-paste .rlx-paste-tag {
+      position:fixed; display:flex; align-items:center; gap:6px;
+      max-width:min(34em, 86vw); padding:3px 4px 3px 7px; border-radius:2px;
+      background:var(--rlx-miss, #d97706); color:#fff; pointer-events:auto;
+      box-shadow:0 1px 3px rgba(0,0,0,.25);
+      font-size:12px; line-height:16px; font-weight:600;
+    }
+    #rlx-paste .rlx-paste-what { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #rlx-paste .rlx-paste-where { font-weight:400; opacity:.85; white-space:nowrap; }
+    #rlx-paste .rlx-paste-off {
+      flex:0 0 auto; padding:0 3px; border:0; background:transparent; color:#fff;
+      opacity:.75; font:inherit; font-size:13px; line-height:14px; cursor:pointer;
+    }
+    #rlx-paste .rlx-paste-off:hover { opacity:1; }
 
     #rlx-layer { position:fixed; inset:0; pointer-events:none; z-index:99997; }
     .rlx-mark { position:fixed; border-radius:2px; }
@@ -3094,13 +3128,90 @@
 
   /* The heading, on the clipboard, ready to be pasted into the editor. The
    * modality row has no name to copy — `‹any imaging modality›` is a question,
-   * not a heading — so it offers its parent instead. */
+   * not a heading — so it offers its parent instead.
+   *
+   * Two things travel with it. The MARKUP, so that what lands in the editor is
+   * a heading of the right level and not a paragraph you then have to promote
+   * by hand; and the PLACE, so that the editor can go on saying what the chip
+   * said — see the paste marker below. */
   function copyHeading(chip, row) {
     const text = row.modality ? 'Radiographic features' : row.title;
-    navigator.clipboard?.writeText(text).then(() => {
+    const level = row.modality ? 1 : row.level;
+    rememberPaste({
+      slug: currentSlug(), text, level, modality: !!row.modality,
+      anchor: row.anchor ? tidy(row.anchor.textContent) : null,
+      inside: !!row.inside, at: Date.now(),
+    });
+    copyAsHeading(text, level).then((ok) => {
+      if (!ok) return;                  // no clipboard: the name is on screen anyway
       chip.classList.add('rlx-chip-copied');
       setTimeout(() => chip.classList.remove('rlx-chip-copied'), 900);
-    }, () => { /* no clipboard: the name is on screen anyway */ });
+    });
+  }
+
+  /* Heading levels as the editor keeps them. Radiopaedia's toolbar calls them
+   * H1, H2 and H3; what it writes — and what the article renders — is h4, h5
+   * and h6, the page's own h1 being the title. */
+  const LEVEL_TAG = ['h4', 'h5', 'h6'];
+
+  /* The heading on the clipboard as BOTH flavours: the words for anywhere
+   * else, and one tag of HTML for the editor, which is a WYSIWYG and pastes
+   * what it is given. Plain text alone arrived as a paragraph in the middle of
+   * the article and had to be made a heading by hand every single time — the
+   * one manual step in a gesture whose whole point was not having any.
+   *
+   * Two ways of doing it because neither is everywhere. `ClipboardItem` is the
+   * one that is meant for this; the old `execCommand` over a hidden selection
+   * is what Firefox needed until recently and what a page served over plain
+   * http still needs, since the async clipboard is a secure-context API. If
+   * the editor is set to paste as text the html flavour is dropped and you get
+   * exactly what you got before, which is why it is worth trying at all. */
+  async function copyAsHeading(text, level) {
+    const tag = LEVEL_TAG[Math.min(Math.max(level || 1, 1), LEVEL_TAG.length) - 1];
+    const el = document.createElement(tag);
+    el.textContent = text;
+    const html = el.outerHTML;
+
+    if (window.ClipboardItem && navigator.clipboard?.write) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' }),
+        })]);
+        return true;
+      } catch { /* refused, or no such flavour here: the old way below */ }
+    }
+    if (copyByHand(html)) return true;
+    try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+  }
+
+  /* The hidden-selection copy. A `contenteditable` off the left edge rather
+   * than a `textarea`, because a textarea has no html flavour to offer — and
+   * the selection you had is put back, since taking it and not giving it back
+   * is how a copy button loses you the sentence you had highlighted. */
+  function copyByHand(html) {
+    const holder = document.createElement('div');
+    holder.contentEditable = 'true';
+    holder.style.cssText = 'position:fixed; left:-9999px; top:0; opacity:0;';
+    holder.innerHTML = html;
+    document.body.appendChild(holder);
+
+    const sel = getSelection();
+    const had = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+    let ok = false;
+    try {
+      const r = document.createRange();
+      r.selectNodeContents(holder);
+      sel.removeAllRanges();
+      sel.addRange(r);
+      ok = document.execCommand('copy');
+    } catch { ok = false; }
+    try {
+      sel.removeAllRanges();
+      if (had) sel.addRange(had);
+    } catch { /* nothing was selected to begin with */ }
+    holder.remove();
+    return ok;
   }
 
   let placePending = null;
@@ -3219,6 +3330,253 @@
     rail.thread.classList.toggle('rlx-thread-offered', !row.required);
     path.setAttribute('d', `M${cx},${cy} H${mx} V${ty} H${tx}`
                          + ` M${tx - 4},${ty - 3} L${tx},${ty} L${tx - 4},${ty + 3}`);
+  }
+
+  // ————————————————————————————— where the copied heading goes, in the editor
+
+  /* The chip in the margin says where a missing section belongs — above
+   * `Pathology`, inside `Radiographic features` — and then you press it, and
+   * the next page you are looking at is the editor, which the rail cannot
+   * follow you into: it reads the article as the site renders it, and there is
+   * no rendered article here. You arrive holding the heading with nothing left
+   * that says where to put it.
+   *
+   * So the placement travels with the copy. The chip writes down the heading
+   * it was standing beside; the editor looks for that heading in the text you
+   * are editing and draws the line the new one goes on.
+   *
+   * One line, for the one heading you copied. A marker on every missing
+   * section would be the rail again, drawn this time over the words you are
+   * trying to type.
+   *
+   * It lives in `sessionStorage` because the article page and the edit page
+   * are two page loads of one tab, and nothing in memory survives that. It is
+   * dropped when you paste, when you dismiss it, and when it goes stale. */
+  const PASTE_KEY = 'rlx-paste';
+  const PASTE_LIFE = 60 * 60 * 1000;   // the trip to the editor, not a bookmark
+  const PASTE_HEADINGS = 'h1,h2,h3,h4,h5,h6';
+
+  function rememberPaste(memo) {
+    try { sessionStorage.setItem(PASTE_KEY, JSON.stringify(memo)); }
+    catch { /* no storage: the marker is the thing that does not happen */ }
+  }
+
+  function pasteMemo() {
+    try {
+      const m = JSON.parse(sessionStorage.getItem(PASTE_KEY) || 'null');
+      if (!m || !m.text || m.slug !== currentSlug()) return null;
+      return Date.now() - (m.at || 0) > PASTE_LIFE ? null : m;
+    } catch { return null; }
+  }
+
+  function forgetPaste() {
+    try { sessionStorage.removeItem(PASTE_KEY); } catch { /* never mind */ }
+  }
+
+  const pasteMark = { layer: null, line: null, tag: null,
+                      spot: null, memo: null, body: null, was: 0 };
+
+  async function pasteMarkSoon() {
+    if (!inEditor() || !pasteMemo()) return;
+    const roots = await awaitEditor();
+    const memo = pasteMemo();            // the wait is long: it may be stale now
+    if (!roots.length || !memo) return;
+
+    /* The article body is the longest of the editor's fields. An article has
+     * several — the title, the tags, a caption — and a heading pasted into any
+     * of the others is not a section of anything. */
+    const body = roots.reduce((a, b) =>
+      (b.root.textContent || '').length > (a.root.textContent || '').length ? b : a);
+    openPasteMark(memo, findPasteSpot(memo, body), body);
+  }
+
+  /* The place in the editor the chip was pointing at. `inside` puts the new
+   * heading under that one — a subsection starts where its section's text does
+   * — and everything else puts it above. A heading the editor has not got, and
+   * a chip that had nothing after it to stand beside, come to the same answer:
+   * the end of the text. */
+  function findPasteSpot(memo, body) {
+    const want = memo.anchor ? normaliseHeading(memo.anchor) : null;
+    if (want) {
+      for (const el of body.root.querySelectorAll(PASTE_HEADINGS)) {
+        if (normaliseHeading(el.textContent) !== want) continue;
+        return { el, frame: body.frame, at: memo.inside ? 'bottom' : 'top', lost: false };
+      }
+    }
+    const last = body.root.lastElementChild;
+    return last ? { el: last, frame: body.frame, at: 'bottom', lost: !!want } : null;
+  }
+
+  function openPasteMark(memo, spot, body) {
+    closePasteMark();
+    if (!spot) return;
+    pasteMark.memo = memo;
+    pasteMark.spot = spot;
+    pasteMark.body = body;
+    pasteMark.was = countPasted(body, memo.text);
+
+    const layer = document.createElement('div');
+    layer.id = 'rlx-paste';
+    layer.style.setProperty('--rlx-miss', MISS.ink);
+    layer.innerHTML = `
+      <div class="rlx-paste-line"></div>
+      <div class="rlx-paste-tag">
+        <span class="rlx-paste-what"></span>
+        <span class="rlx-paste-where"></span>
+        <button class="rlx-paste-off" title="Dismiss">&times;</button>
+      </div>`;
+
+    layer.querySelector('.rlx-paste-off').addEventListener('click', () => {
+      forgetPaste();
+      closePasteMark();
+    });
+
+    document.body.appendChild(layer);
+    pasteMark.layer = layer;
+    pasteMark.line = layer.querySelector('.rlx-paste-line');
+    pasteMark.tag = layer.querySelector('.rlx-paste-tag');
+    sayPasteMark();
+
+    addEventListener('scroll', placePasteMark, true);
+    addEventListener('resize', placePasteMark);
+    const w = spot.frame?.contentWindow;
+    if (w) {
+      w.addEventListener('scroll', placePasteMark, true);
+      w.document.addEventListener('input', pastedYet, true);
+    } else {
+      body.root.addEventListener('input', pastedYet, true);
+    }
+    placePasteMark();
+  }
+
+  function closePasteMark() {
+    const { layer, spot, body } = pasteMark;
+    layer?.remove();
+    removeEventListener('scroll', placePasteMark, true);
+    removeEventListener('resize', placePasteMark);
+    try {
+      const w = spot?.frame?.contentWindow;
+      if (w) {
+        w.removeEventListener('scroll', placePasteMark, true);
+        w.document.removeEventListener('input', pastedYet, true);
+      } else body?.root?.removeEventListener('input', pastedYet, true);
+    } catch { /* the frame went with the page */ }
+    pasteMark.layer = pasteMark.line = pasteMark.tag = null;
+    pasteMark.spot = pasteMark.memo = pasteMark.body = null;
+  }
+
+  let pastePending = null;
+  function placePasteMark() {
+    if (pastePending) return;
+    pastePending = requestAnimationFrame(() => { pastePending = null; layOutPasteMark(); });
+  }
+
+  /* Fixed, like the highlights and the chips, and for the same reason: the
+   * editor holds unsaved work and nothing of ours is ever put inside it.
+   *
+   * Inside an iframe a rectangle is measured against the iframe's own
+   * viewport, so the frame's position goes back in — and the frame's edges
+   * become the second thing to hide behind, since text scrolled out of the
+   * editor is still inside the window. */
+  function layOutPasteMark() {
+    const { layer, spot } = pasteMark;
+    if (!layer) return;
+    if (!spot?.el?.isConnected) return reseatPasteMark();
+
+    const frame = spot.frame?.isConnected ? spot.frame.getBoundingClientRect() : null;
+    const off = frame || { left: 0, top: 0 };
+    const r = spot.el.getBoundingClientRect();
+    const y = (spot.at === 'bottom' ? r.bottom : r.top) + off.top;
+    const x = r.left + off.left;
+
+    const top = frame ? Math.max(0, frame.top) : 0;
+    const bottom = frame ? Math.min(innerHeight, frame.bottom) : innerHeight;
+    layer.hidden = y < top + 4 || y > bottom - 4;
+    if (layer.hidden) return;
+
+    pasteMark.line.style.left = `${Math.round(x)}px`;
+    pasteMark.line.style.top = `${Math.round(y) - 1}px`;
+    pasteMark.line.style.width = `${Math.round(Math.max(80, r.width))}px`;
+
+    pasteMark.tag.style.top = `${Math.round(y) + 3}px`;
+    // Measured where it has been put: the label wraps to the width it is given
+    // and nothing knows how wide that is until it is on the page.
+    pasteMark.tag.style.left = `${Math.round(x)}px`;
+    const t = pasteMark.tag.getBoundingClientRect();
+    const end = x + Math.max(80, r.width) - t.width;
+    pasteMark.tag.style.left =
+      `${Math.round(Math.min(Math.max(6, end), innerWidth - 6 - t.width))}px`;
+  }
+
+  /* What the chip said, said again in the place it was about.
+   *
+   * Written from the spot rather than from the memo, and written again
+   * whenever the spot changes: the one clause that matters is the one for the
+   * case that can go wrong — the heading it was measured against is not in the
+   * editor, the line is standing at the end of the text instead, and saying so
+   * is the difference between a guess and a mistake.
+   *
+   * The modality row is the one chip whose clipboard is not the heading you
+   * are going to write: there is no name to copy, only a question — which
+   * modality does this article have images of? — so the marker asks it rather
+   * than telling you to paste the section's own title into itself. */
+  function sayPasteMark() {
+    const { tag, memo, spot } = pasteMark;
+    if (!tag || !memo || !spot) return;
+    tag.querySelector('.rlx-paste-what').textContent = memo.modality
+      ? 'An imaging subheading (CT, MRI, …) goes here'
+      : `Paste “${memo.text}” here`;
+    tag.querySelector('.rlx-paste-where').textContent =
+        spot.lost ? `— at the end: “${memo.anchor}” is not in the text`
+      : !memo.anchor ? '— at the end of the article'
+      : memo.inside ? `— inside “${memo.anchor}”`
+      : `— above “${memo.anchor}”`;
+  }
+
+  /* The heading the line was measured against is gone from the page — not
+   * necessarily from the text. The editor replaces nodes as you type and an
+   * undo can replace whole blocks, and a marker that gave up the first time
+   * that happened would be a marker you lost by editing the paragraph above
+   * it. So it is looked for again, and only a text that really no longer has
+   * it closes the thing. */
+  function reseatPasteMark() {
+    const { memo, body } = pasteMark;
+    if (!memo || !body?.root?.isConnected) return closePasteMark();
+    const spot = findPasteSpot(memo, body);
+    if (!spot) return closePasteMark();
+    pasteMark.spot = spot;
+    sayPasteMark();
+    layOutPasteMark();
+  }
+
+  /* How many headings in the editor read like this one. Counted rather than
+   * looked for, because the modality chip copies `Radiographic features` —
+   * a heading that is already there — and "is it there?" would answer yes
+   * before you had pasted anything. One more than there were is the paste. */
+  function countPasted(body, text) {
+    const want = normaliseHeading(text);
+    let n = 0;
+    for (const el of body.root.querySelectorAll(PASTE_HEADINGS)) {
+      if (normaliseHeading(el.textContent) === want) n++;
+    }
+    return n;
+  }
+
+  /* Pasted: the marker has said what it had to say and goes, and the memo goes
+   * with it so that the next edit page does not put it back. Anything else you
+   * type moves the text under the line, so the line moves with it. */
+  let pastedPending = null;
+  function pastedYet() {
+    clearTimeout(pastedPending);
+    pastedPending = setTimeout(() => {
+      const { memo, body } = pasteMark;
+      if (!memo || !body?.root?.isConnected) return;
+      if (countPasted(body, memo.text) > pasteMark.was) {
+        forgetPaste();
+        return closePasteMark();
+      }
+      placePasteMark();
+    }, 500);
   }
 
   // ———————————————————————————————————————————————————————— the citations
@@ -3987,6 +4345,10 @@
   // The chips do not wait for the linter: they are about the references, and
   // the references are on the page whether anybody pressed Lint or not.
   citesSoon();
+
+  // Nor does the paste marker wait for it: you came here to add a section, and
+  // whether the prose also needs work is a different question.
+  pasteMarkSoon();
 
   if (inEditor()) {
     const pending = sessionStorage.getItem(PENDING_KEY);

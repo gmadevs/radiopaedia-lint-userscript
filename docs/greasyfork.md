@@ -40,7 +40,8 @@ It also answers three questions the linter leaves open:
 - **The sections that are missing.** The linter checks the headings that *are* there. In the grey
   margin beside the article, one chip for each section this kind of article is supposed to have and
   has not got — each beside the heading it would go under, from Radiopaedia's own recommended
-  structure for all twenty-three kinds of article.
+  structure for all twenty-three kinds of article. Press one and the heading is on your clipboard
+  at the right level; open the editor and a marker is waiting on the text where it goes.
 - **The references.** Beside every reference in the editor, a `Lint citation` chip: one press asks
   radiopaedia.work/cite what that reference should say and shows, word by word, what differs — the
   wrong journal abbreviation, the year off by one, the two references numbered 2. The corrected

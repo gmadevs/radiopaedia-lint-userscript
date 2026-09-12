@@ -65,6 +65,7 @@ article_type                                            └─  the ones missing
   - [Adding one](#adding-one)
 - [Linting the references](#linting-the-references)
 - [The sections that are missing](#the-sections-that-are-missing)
+  - [What the clipboard carries](#what-the-clipboard-carries)
   - [Required and offered](#required-and-offered)
   - [Above it, or inside it](#above-it-or-inside-it)
   - [When the sections are out of order](#when-the-sections-are-out-of-order)
@@ -456,6 +457,25 @@ required is missing: the rail is the one thing that has looked, so it says so.
 Click a chip and the heading is on your clipboard, ready to paste into the editor. The `×` on it
 says *this article does not need that one*, and it is remembered for that article; the `↺` in the
 header brings them all back.
+
+### What the clipboard carries
+
+Two things, because the gesture only finishes in the editor and the rail cannot follow you there.
+
+**The level.** The clipboard gets the words *and* one tag of HTML — `<h4>`, `<h5>` or `<h6>`, which
+is what Radiopaedia's toolbar calls *H1*, *H2* and *H3*. The editor is a WYSIWYG and pastes what it
+is given, so the heading arrives as a heading of the right level rather than as a paragraph you
+then promote by hand.
+
+**The place.** The chip also writes down the heading it was standing beside. Go to the edit page
+and the marker is waiting on the text itself: an amber rule where the new heading goes, labelled
+with what you copied and where it belongs — *above "Radiographic features"*, *inside* it, or *at the
+end of the article*. Nothing is written into the editor; the rule is drawn over it, like the
+highlights. It goes when you paste, when you press its `×`, or after an hour.
+
+<sub>If the heading it was measured against is not in the editor text at all — you deleted it, or
+you are on a different draft — the marker says so and stands at the end of the text rather than
+guessing.</sub>
 
 ### Required and offered
 

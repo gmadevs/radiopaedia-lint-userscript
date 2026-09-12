@@ -10,7 +10,7 @@ step and no dependencies. Where something is named — `askLinter()`, `plain()`,
 it is a function you can search for. Line numbers are deliberately not used: they go stale, and a
 stale line number in a document like this is worse than none.
 
-Current as of **v3.2.0**.
+Current as of **v3.3.0**.
 
 ## The short version
 
@@ -139,9 +139,18 @@ credentials, no `GM_setValue`, no `unsafeWindow`.
 ## The clipboard
 
 Written to, never read. Three things go on it and each one needs a press: a proper noun or acronym
-(`p`), a heading (a rail chip), and a corrected reference (`Copy as N.`). All three are plain
-text; the last is the citation string the tool returned, unchanged and with its `<a href>` tags
-intact, because the reference box holds source and that is what pasting into it needs.
+(`p`), a heading (a rail chip), and a corrected reference (`Copy as N.`). Two of them are plain
+text; the reference is the citation string the tool returned, unchanged and with its `<a href>`
+tags intact, because the reference box holds source and that is what pasting into it needs.
+
+A heading goes on as **two flavours**: the words as `text/plain`, and one tag of HTML —
+`<h4>Pathology</h4>` — as `text/html`, so that the editor pastes it at the level it belongs at.
+The html is built from the canon's own text with `textContent`, so what it can contain is one
+heading tag and the characters of a heading, and nothing else.
+
+Where `ClipboardItem` is unavailable that copy falls back to the old `execCommand` over a hidden
+`contenteditable` off the left edge of the page. It is the one thing in the script that touches
+your selection, and it puts back the selection it found.
 
 ## The editor
 
@@ -156,6 +165,10 @@ link, as `<button type="button">` — never a submit, never inside an editor roo
 article. The reference itself is only ever read, out of the textarea's value, and a corrected one
 reaches the article only by a person pasting it.
 
+The paste marker is the same bargain in the other direction: it says where a missing section goes
+by drawing a rule over the editor at that place, reading the heading's rectangle and writing
+nothing. What you copied reaches the article only by your pressing paste.
+
 ## Storage
 
 `sessionStorage`, cleared when the tab closes:
@@ -167,6 +180,7 @@ reaches the article only by a person pasting it.
 | `rlx-names`, `rlx-acronyms` | the two shared lists as fetched |
 | `rlx-structure` | the canon, as fetched |
 | `rlx-cite:<hash>` | one citation answer per reference asked about |
+| `rlx-paste` | the heading you last copied and where it goes, for the marker on the edit page |
 
 `localStorage`, which survives closing the browser. All of it is a preference or a note to self:
 
