@@ -228,14 +228,18 @@ Findings are highlighted in place, one is always current, and the bottom bar kee
 ### Keyboard
 
 While you are typing in the editor those letters have to stay letters — so there, the shortcuts
-move to <kbd>Alt</kbd>.
+move to <kbd>Alt</kbd>, the same letter each time.
+
+Not the arrows: <kbd>Alt</kbd> + <kbd>→</kbd> is how you move a word at a time on macOS and
+<kbd>Alt</kbd> + <kbd>Backspace</kbd> is how you delete one, and those are the last two keys a
+linter should take from you while you are rewriting the sentence it is complaining about.
 
 | Action | On the page | While typing in the editor |
 | :-- | :-- | :-- |
-| Next finding | <kbd>j</kbd> | <kbd>Alt</kbd> + <kbd>→</kbd> |
-| Previous finding | <kbd>k</kbd> | <kbd>Alt</kbd> + <kbd>←</kbd> |
-| Mark done | <kbd>s</kbd> | <kbd>Alt</kbd> + <kbd>Enter</kbd> |
-| Ignore | <kbd>x</kbd> | <kbd>Alt</kbd> + <kbd>Backspace</kbd> |
+| Next finding | <kbd>j</kbd> | <kbd>Alt</kbd> + <kbd>j</kbd> |
+| Previous finding | <kbd>k</kbd> | <kbd>Alt</kbd> + <kbd>k</kbd> |
+| Mark done | <kbd>s</kbd> | <kbd>Alt</kbd> + <kbd>s</kbd> (or <kbd>Alt</kbd> + <kbd>Enter</kbd>) |
+| Ignore | <kbd>x</kbd> | <kbd>Alt</kbd> + <kbd>x</kbd> |
 | Undo the last verdict | <kbd>u</kbd> | — |
 | Copy the message | <kbd>c</kbd> | — |
 | Add a name or an acronym | <kbd>p</kbd> | — |
@@ -693,7 +697,7 @@ reopens it.
 
 **Closing it does not move you.** The note stays on the paragraph you are working on, turns green
 and says *✓ fixed*; the highlight goes, the count drops, and nothing scrolls. Going to the next
-finding is a key you press — <kbd>Alt</kbd> + <kbd>→</kbd> while you are typing — never something
+finding is a key you press — <kbd>Alt</kbd> + <kbd>j</kbd> while you are typing — never something
 your typing does to you.
 
 Verdicts are **not kept**: close the tab and they are gone. That is deliberate rather than

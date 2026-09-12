@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.1.1
+// @version      3.2.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -1437,10 +1437,10 @@
       <span class="rlx-title">Lint</span>
       <span class="rlx-count"></span>
       <span class="rlx-sep rlx-sep-nav"></span>
-      <button data-act="prev" class="rlx-step" title="Previous (k)">&lsaquo;</button>
-      <button data-act="next" class="rlx-step" title="Next (j)">&rsaquo;</button>
-      <button data-act="done" class="rlx-primary" title="Done (s)">&#10003; Done</button>
-      <button data-act="ignore" title="Ignore (x)">Ignore</button>
+      <button data-act="prev" class="rlx-step" title="Previous (k, or Alt+K while typing)">&lsaquo;</button>
+      <button data-act="next" class="rlx-step" title="Next (j, or Alt+J while typing)">&rsaquo;</button>
+      <button data-act="done" class="rlx-primary" title="Done (s, or Alt+S while typing)">&#10003; Done</button>
+      <button data-act="ignore" title="Ignore (x, or Alt+X while typing)">Ignore</button>
       <button data-act="undo" title="Undo the last one (u)">Undo</button>
       <span class="rlx-sep rlx-sep-tools"></span>
       <button data-act="copy" title="Copy the message (c)">Copy</button>
@@ -1756,7 +1756,7 @@
     if (settled) {
       const hint = document.createElement('div');
       hint.className = 'rlx-hint';
-      hint.textContent = 'Alt + → for the next one, Alt + ← to go back.';
+      hint.textContent = 'Alt + j for the next one, Alt + k to go back.';
       stage.note.appendChild(hint);
     }
 
@@ -1998,7 +1998,7 @@
     if (!stage.findings.length) status = 'No findings: the article is clean.';
     // A settled finding has no snippet in the text by definition — saying it
     // "cannot be found" about the one you have just fixed reads as a fault.
-    else if (f && f.state !== 'open' && open.length) status = 'Alt + → for the next one';
+    else if (f && f.state !== 'open' && open.length) status = 'Alt + j for the next one';
     else if (f && f.state === 'open' && !f.range) status = 'snippet not found in the editor text';
     stage.bar.querySelector('.rlx-status').textContent = status;
     placeBar();
@@ -2137,9 +2137,20 @@
     if (!stage.live) return;
     if (e.metaKey || e.ctrlKey) return;
 
-    // With Alt the shortcuts work even while you are typing in the editor.
+    /* With Alt the shortcuts work even while you are typing in the editor.
+     *
+     * The same letters as on the page, not the arrows. Alt + arrow is how you
+     * move a word at a time on macOS and Alt + Backspace is how you delete
+     * one, and a linter that eats both takes the two keys you use most while
+     * rewriting the sentence it is complaining about.
+     *
+     * Keyed on `e.code`, the physical key, because `e.key` is the composed
+     * character: on macOS Option+j arrives as '∆' and Option+k as '˚', so a
+     * lookup by `e.key` would never match. `preventDefault` is what stops
+     * those characters from being typed. */
     if (e.altKey) {
-      const m = { ArrowRight: 'next', ArrowLeft: 'prev', Enter: 'done', Backspace: 'ignore' }[e.key];
+      const m = { KeyJ: 'next', KeyK: 'prev', KeyS: 'done', KeyX: 'ignore',
+                  Enter: 'done', NumpadEnter: 'done' }[e.code];
       if (m) { e.preventDefault(); act(m); }
       return;
     }
