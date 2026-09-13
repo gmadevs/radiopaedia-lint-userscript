@@ -61,6 +61,7 @@ NPV         # Negative predictive value
 
 # ——— Laboratory and molecular ———
 
+NAA         # N-Acetylaspartic acid
 PNET        # Primitive Neuroectodermal Tumor
 TERT        # Telomerase Reverse Transcriptase
 ESR         # Erythrocyte sedimentation rate
