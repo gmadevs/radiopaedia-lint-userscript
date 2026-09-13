@@ -60,6 +60,7 @@ NPV         # Negative predictive value
 
 # ——— Laboratory and molecular ———
 
+PNET        # Primitive Neuroectodermal Tumor
 TERT        # Telomerase Reverse Transcriptase
 ESR         # Erythrocyte sedimentation rate
 GABA        # Gamma-aminobutyric acid
