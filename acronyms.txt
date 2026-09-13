@@ -60,6 +60,7 @@ NPV         # Negative predictive value
 
 # ——— Laboratory and molecular ———
 
+TERT        # Telomerase Reverse Transcriptase
 ESR         # Erythrocyte sedimentation rate
 GABA        # Gamma-aminobutyric acid
 ELISA       # Enzyme-linked immunosorbent assay
