@@ -26,6 +26,7 @@
 
 # ——— Trials, scores, rules and criteria: names, not abbreviations ———
 
+AC-PC       # Anterior commissure - Posterior commissure
 US          # United States
 GE          # Gradient Echo / General Electrics
 PNS         # Peripheral nervous system
