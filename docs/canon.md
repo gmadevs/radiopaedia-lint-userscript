@@ -14,17 +14,18 @@ happens when there is no margin to put it in — is in the README, under
 ## One canon per kind of article
 
 Radiopaedia does not have one structure, it has **twenty-three**. Its own *standard article
-structure* page gives the fixed order of the sections — Terminology, Epidemiology, Clinical
-presentation, Pathology, Radiographic features, Treatment and prognosis, History and etymology,
-Differential diagnosis, and the rest — and then says that holds "in most instances, except for the
+structure* page gives the fixed order of the sections — Terminology, Epidemiology, Diagnosis,
+Clinical presentation, Pathology, Radiographic features, Treatment and prognosis, History and
+etymology, Differential diagnosis, and the rest — and then says that holds "in most instances, except for the
 following specific special purpose articles", and lists eighteen of them. An anatomy article wants
 `Gross anatomy` and `Variant anatomy` and has no business being asked for `Epidemiology`.
 
-All twenty-three are in [`article-structure.json`](../article-structure.json): 327 headings, each
+All twenty-three are in [`article-structure.json`](../article-structure.json): 331 headings, each
 with the level it belongs at and the heading it belongs under, the 84 ways those headings are
 found written in real articles (`etiology`, `plain film`, `CT scan`), and which of them each kind
 of article is actually required to have. They are **Radiopaedia's recommendations, not ours**,
-transcribed from `radiopaedia.org/articles/<type>-article-structure` on 2026-08-04 — when they
+transcribed from `radiopaedia.org/articles/<type>-article-structure` on 2026-08-04 (the standard
+structure was re-read against the per-section pages on 2026-10-06) — when they
 change theirs, this is an old transcription until somebody re-runs the export.
 
 Two things in there are worth stating plainly, because they are the parts that look like details

@@ -543,7 +543,7 @@ that article are approximate, and that is worth saying where the placements are.
 
 Radiopaedia does not have one structure, it has **twenty-three**: an anatomy article wants `Gross
 anatomy` and `Variant anatomy` and has no business being asked for `Epidemiology`. All of them are
-in [`article-structure.json`](article-structure.json) — 327 headings, their levels and their
+in [`article-structure.json`](article-structure.json) — 331 headings, their levels and their
 parents, and which of them each kind of article is actually required to have. They are
 **Radiopaedia's recommendations, not ours**, transcribed from their own article-structure pages.
 

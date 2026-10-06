@@ -274,6 +274,7 @@ check('a present section opens its own subsections', {
             'Pathology/Aetiology', 'Pathology/Location', 'Pathology/Classification',
             'Pathology/Macroscopic appearance', 'Pathology/Microscopic appearance',
             'Pathology/Immunophenotype', 'Pathology/Markers', 'Pathology/Genetics',
+            'Pathology/Associations', 'Pathology/Staging',
             'Radiology report', 'History and etymology', 'Practical points', 'See also']
            .map((v) => v.split('/').pop()),
 });
@@ -364,7 +365,8 @@ check('a subsection anchors to the section it belongs under', {
     Genetics: 'in Pathology',
     // A top-level row still anchors to the sections it comes before.
     Terminology: 'Epidemiology',
-    Diagnosis: 'Pathology',
+    // Diagnosis comes before Clinical presentation in Radiopaedia's order.
+    Diagnosis: 'Clinical presentation',
     'Differential diagnosis': null,
   },
 });
