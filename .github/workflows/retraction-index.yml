@@ -1,0 +1,76 @@
+# Keep retraction-index.txt current without anybody remembering to.
+#
+# The script reads the index from `main` rather than from a release, so a commit
+# here IS the update: every installed copy has it on the next press. That is also
+# why this job is allowed to fail loudly and change nothing — tools/retraction-
+# index.py refuses to write an index that has lost entries, lost its columns, or
+# forgotten three papers that have been retracted for years, and a week of
+# staleness is a great deal cheaper than a broken index published to everyone.
+#
+# The database itself is never committed: 68 MB, in .gitignore, and it is
+# fetched fresh here every time.
+
+name: Retraction index
+
+on:
+  schedule:
+    # Mondays, early. `cron` here is UTC and GitHub run it late when the
+    # minute is busy, which for a weekly data refresh is nobody's problem.
+    - cron: '17 5 * * 1'
+  workflow_dispatch:        # and the Actions tab, for when you want it now
+
+permissions:
+  contents: write
+
+concurrency:
+  group: retraction-index
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild it from the current database
+        run: python3 tools/retraction-index.py --download
+
+      - name: Commit it
+        run: |
+          set -euo pipefail
+          # Counted over the ENTRIES, not the file. The header carries the day
+          # it was built, so the file changes every single week whether or not
+          # anything was retracted — and "the index was checked today" is worth
+          # committing and worth showing, since the panel in the editor prints
+          # that date. What is not worth printing is "+1 -1" as though
+          # something had happened.
+          added=$(git diff -U0 -- retraction-index.txt | grep -c '^+[^#+]' || true)
+          gone=$(git diff -U0 -- retraction-index.txt | grep -c '^-[^#-]' || true)
+          held=$(grep -c -v '^#' retraction-index.txt || true)
+
+          if git diff --quiet -- retraction-index.txt; then
+            echo "### The database has not moved" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            if [ "$added" = 0 ] && [ "$gone" = 0 ]; then
+              echo "### Nothing new — the index was checked and is current"
+            else
+              echo "### Index updated"
+              echo
+              echo "- $added entries added, $gone removed"
+            fi
+            echo
+            echo "- $held entries in all"
+            grep '^#         CC BY' retraction-index.txt | sed 's/^# */- /' || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add retraction-index.txt
+          if [ "$added" = 0 ] && [ "$gone" = 0 ]; then
+            git commit -m "Check the retraction index against the database (nothing new)"
+          else
+            git commit -m "Rebuild the retraction index ($added added, $gone removed)"
+          fi
+          git push
