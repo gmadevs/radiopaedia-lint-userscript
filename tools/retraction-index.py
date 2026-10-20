@@ -50,9 +50,12 @@ and the file this writes carries that attribution in its header.
 import argparse
 import csv
 import datetime as dt
+import http.client
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -80,6 +83,11 @@ PMID = re.compile(r'^\d{1,8}$')
 # of them end in an index that is far too small rather than slightly wrong.
 CSV_HEADER = 'Record ID,Title,'
 CSV_MIN = 40 * (1 << 20)       # 68 MB today, and a database of retractions only grows
+# Crossref send it chunked, with no length to check the end against, and a
+# weekly unattended job will meet a connection that stops early — the first run
+# of this did, at 659 kB of 68 MB. So the end is checked another way and a
+# truncated read is retried rather than reported.
+WAITS = (5, 20, 60)            # seconds between attempts; four attempts in all
 ROWS_MIN = 60_000              # 73,315 today
 NEEDED = ('RetractionNature', 'RetractionDate', 'OriginalPaperDOI',
           'OriginalPaperPubMedID', 'RetractionDOI', 'RetractionPubMedID')
@@ -91,30 +99,68 @@ SHRINK = 0.95                  # of the entries the index already had
 CANARIES = ('10.1016/s0140-6736(97)11096-0', '9500320', '10.1016/j.radcr.2024.07.009')
 
 
-def download(path):
-    """The current database, fetched beside the old one and moved over it last.
+class Truncated(Exception):
+    """The connection stopped before the database did. Worth another go."""
 
-    Written to `.part` and renamed, so a download that fails or arrives as an
-    error page leaves the copy that was already there — which still builds a
-    correct index, one week staler."""
-    url = SOURCE.format(mailto=MAILTO)
-    print(f'fetching {url}', file=sys.stderr)
-    part = f'{path}.part'
-    with urllib.request.urlopen(url, timeout=1800) as r, open(part, 'wb') as f:
-        got = 0
-        while chunk := r.read(1 << 20):
-            f.write(chunk)
-            got += len(chunk)
-    with open(part, encoding='utf-8', errors='replace') as f:
-        head = f.read(len(CSV_HEADER))
+
+def fetch(url, part):
+    """One attempt, straight to `part`. Returns the bytes written.
+
+    Raised rather than returned when the answer stops early, because that is
+    the one failure here that another attempt fixes."""
+    got = 0
+    try:
+        with urllib.request.urlopen(url, timeout=1800) as r, open(part, 'wb') as f:
+            while chunk := r.read(1 << 20):
+                f.write(chunk)
+                got += len(chunk)
+    except (http.client.IncompleteRead, urllib.error.URLError,
+            TimeoutError, ConnectionError) as stopped:
+        raise Truncated(f'{type(stopped).__name__} after {got // 1024} kB') from stopped
+
+    with open(part, 'rb') as f:
+        head = f.read(len(CSV_HEADER)).decode('utf-8', 'replace')
+        f.seek(max(0, got - 1))
+        tail = f.read(1)
+
+    # The wrong file is not a thing to retry: an error page served where a CSV
+    # was asked for will be served again.
     if head != CSV_HEADER:
         os.remove(part)
         sys.exit(f'that was not the database: it begins {head!r}, not {CSV_HEADER!r}')
+    # These two are: both are what a connection that stopped early looks like
+    # when it managed to stop politely. The database ends with a newline, and
+    # a truncation that happens to clear CSV_MIN would not.
     if got < CSV_MIN:
-        os.remove(part)
-        sys.exit(f'that was {got // (1 << 20)} MB, and the database is not that small')
-    os.replace(part, path)
-    print(f'{got // (1 << 20)} MB written to {path}', file=sys.stderr)
+        raise Truncated(f'{got // (1 << 20)} MB, and the database is not that small')
+    if tail != b'\n':
+        raise Truncated(f'it ends {tail!r}, mid-row')
+    return got
+
+
+def download(path):
+    """The current database, fetched beside the old one and moved over it last.
+
+    Written to `.part` and renamed, so a download that fails, arrives as an
+    error page or stops early leaves the copy that was already there — which
+    still builds a correct index, one week staler."""
+    url = SOURCE.format(mailto=MAILTO)
+    part = f'{path}.part'
+    for attempt, wait in enumerate((*WAITS, None), start=1):
+        print(f'fetching {url} (attempt {attempt})', file=sys.stderr)
+        try:
+            got = fetch(url, part)
+        except Truncated as short:
+            print(f'  stopped early: {short}', file=sys.stderr)
+            if wait is None:
+                if os.path.exists(part):
+                    os.remove(part)
+                sys.exit(f'the database could not be fetched whole in {attempt} attempts')
+            time.sleep(wait)
+            continue
+        os.replace(part, path)
+        print(f'{got // (1 << 20)} MB written to {path}', file=sys.stderr)
+        return
 
 
 def a_date(raw):
