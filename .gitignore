@@ -4,3 +4,6 @@
 # The Retraction Watch database itself: 68 MB, and tools/retraction-index.py
 # regenerates it with --download. The index derived from it is what ships.
 retraction_watch.csv
+
+# Python, from importing the generator in a test
+__pycache__/
