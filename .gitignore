@@ -1,2 +1,6 @@
 # macOS
 .DS_Store
+
+# The Retraction Watch database itself: 68 MB, and tools/retraction-index.py
+# regenerates it with --download. The index derived from it is what ships.
+retraction_watch.csv
