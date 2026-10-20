@@ -498,8 +498,8 @@ far less than a broken index — which is also the second reason PubMed is asked
 A download that stops early is a different thing from a download of the wrong file, and is treated
 as one. The database arrives chunked, with no length to check the end against, so it is checked
 another way — it has to begin with the database's header and end with a newline — and a read
-that stops short is retried three times before the job gives up. The first unattended run of this met
-exactly that, a connection that closed after 659 kB of 68 MB. An error page served in its place is
+that stops short is retried three times before the job gives up. The first unattended run of
+this met exactly that, a connection that closed after 659 kB of 68 MB. An error page served in its place is
 not retried: it will be served again.
 
 ---
