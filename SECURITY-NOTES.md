@@ -14,17 +14,18 @@ Current as of **v3.3.1**.
 
 ## The short version
 
-Nothing here is unsafe to hand to a reviewer. No secrets in the file or in the history. Five
-requests to two hosts — four of them GET, and one POST that presses a button on the linter's own
-page and carries nothing of yours — no analytics, no telemetry, no third-party code. The one
+Nothing here is unsafe to hand to a reviewer. No secrets in the file or in the history. Seven
+requests to three hosts — five of them GET, one POST that presses a button on the linter's own
+page and carries nothing of yours, and one POST to PubMed carrying the identifiers of the
+references you asked about — no analytics, no telemetry, no third-party code. The one
 thing that genuinely costs Radiopaedia something is **how often it asks** — see *The automatic
 request* — and that is the first thing to talk about rather than the last.
 
 ## Network
 
-Five `GM_xmlhttpRequest` calls to two hosts — four GET, and one POST, which is the ⟳ and is set
+Seven `GM_xmlhttpRequest` calls to three hosts — five GET and two POST, both of which are set
 out in full below. No `fetch`, no `XMLHttpRequest`, no beacon, no websocket, no remote image, font
-or stylesheet, no analytics. `@connect` names both hosts in the header, which is also what
+or stylesheet, no analytics. `@connect` names all three hosts in the header, which is also what
 confines the script to them.
 
 **1. The linter** — `GET https://radiopaedia.work/api/v1/lint?article=<slug>`, one header,
@@ -83,6 +84,38 @@ kept.
 The fragile part, stated rather than buried: this is somebody's page and not an API. Rebuild the
 linter on something other than Livewire and the ↻ stops working — loudly, in an alert, because a
 refresh that quietly did not happen would be worse than no button.
+
+**6. The retraction index** — `GET raw.githubusercontent.com/…/main/retraction-index.txt`
+(`retractionIndex()`), the same shape as the lists and the canon: a constant URL, read-only, no
+headers of ours, no query string, nothing about you in the request. It is 4.5 MB, so it is the one
+fetched file that is **not** put in `sessionStorage` — the quota is five megabytes for the whole
+origin and the lint answer already lives there — and it is held in a variable for as long as the
+page does. GitHub serve it gzipped with `max-age=300`, which is what covers a second press.
+Nothing is fetched until somebody presses `⊘`. A failure resolves to `null` and the panel says the
+index could not be read.
+
+**7. PubMed** — `POST https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi` then
+`efetch.fcgi` (`eutils()`, `esearch()`, `efetch()`), one header,
+`Content-Type: application/x-www-form-urlencoded`. This is the other half of `⊘`, and it goes only
+when somebody presses it.
+
+What leaves the browser is a list of identifiers — the DOIs and PubMed IDs found in the reference
+boxes of the article you are editing — and `tool=radiopaedia-lint`, which NCBI ask for so that a
+misbehaving client can be told apart from a busy one. **No address and no key**: NCBI accept an
+email beside the tool name, the person pressing this is an editor on somebody else's site, and
+their address is not ours to hand to a third party. No reference text, no article slug, nothing
+else out of the article. POST rather than GET because forty quoted DOIs are longer than a URL
+should be, and NCBI document POST for exactly that.
+
+Every DOI goes into the query quoted. A DOI like `10.1016/S0140-6736(97)11096-0` has brackets in
+it, and unquoted those brackets are PubMed's own grouping syntax — which does not fail, it
+silently turns one identifier into two halves of a query and matches neither. Quoted, it matches.
+
+What comes back is MEDLINE: tagged plain text, capped at 8 MB, split on newlines and read for six
+tags (`PMID`, `PT`, `AID`/`LID`, `RIN`, `ECI`, `ROF`). It is never parsed as HTML, never assigned
+to `innerHTML`, and never written into the editor; every value that reaches the screen does so as
+the `textContent` of a node this script built. A failure is caught and the panel says PubMed could
+not be asked — the index still answers, and an answer from one source says so.
 
 **Nothing of yours is ever written to a server.** Proposing a name or an acronym copies a word to the
 clipboard and opens `https://github.com/…/edit/main/proper-nouns.txt` in a new tab with
@@ -181,6 +214,9 @@ nothing. What you copied reaches the article only by your pressing paste.
 | `rlx-structure` | the canon, as fetched |
 | `rlx-cite:<hash>` | one citation answer per reference asked about |
 | `rlx-paste` | the heading you last copied and where it goes, for the marker on the edit page |
+
+The retraction index is the one fetched file with no key here: at 4.5 MB it would not fit beside
+the rest, so it is held in memory for the life of the page and fetched again on the next one.
 
 `localStorage`, which survives closing the browser. All of it is a preference or a note to self:
 

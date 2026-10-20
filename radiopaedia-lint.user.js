@@ -6,11 +6,12 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.3.1
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs.
+// @version      3.4.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
+// @connect      eutils.ncbi.nlm.nih.gov
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @run-at       document-idle
@@ -1406,6 +1407,20 @@
     .rlx-cite-differs:hover { background:#b45309; color:#fff; }
     .rlx-cite-unknown { background:rgba(107,114,128,.18); color:#6b7280; }
 
+    /* The retraction chips. The same chip as above — same box, same place in
+       the form — in the three colours it can mean something in. There is no
+       fourth for "fine": a clean reference gets no chip at all, because forty
+       greens are what teaches a person to stop reading the one red. */
+    .rlx-flag-retracted  { background:rgba(220,38,38,.18); color:#dc2626; }
+    .rlx-flag-retracted:hover { background:#dc2626; color:#fff; }
+    .rlx-flag-concern    { background:rgba(217,119,6,.18); color:#b45309; }
+    .rlx-flag-concern:hover { background:#b45309; color:#fff; }
+    .rlx-flag-reinstated { background:rgba(37,99,235,.16); color:#2563eb; }
+    .rlx-flag-reinstated:hover { background:#2563eb; color:#fff; }
+    /* The count in the toolbar, which is red only when there is something to
+       be red about: a sweep that found nothing is still a sweep that ran. */
+    .rlx-sweep-toggle.rlx-flagged { background:rgba(220,38,38,.18); color:#dc2626; }
+
     #rlx-cite-note {
       position:fixed; z-index:99999; width:min(38em, 84vw);
       padding:.7em .9em; border-radius:8px; border-left:4px solid #6b7280;
@@ -2233,6 +2248,7 @@
   const inEditor = () => /\/edit\/?$/.test(location.pathname);
 
   let group = null, button = null, toggle = null, railToggle = null, citesToggle = null;
+  let sweepToggle = null;
   let forceBtn = null;
 
   /* What the last answer said about this article, in the colour of the boxes
@@ -2435,6 +2451,20 @@
       g.appendChild(c);
     }
 
+    /* And the fifth, beside it and for the same reason. Not a switch: a
+       question, asked when it is pressed and answered in the margin of the
+       reference list. Nothing is checked until somebody presses it — this one
+       reaches two databases, and an article being opened is not a reason to
+       ask them anything. */
+    let w = null;
+    if (inEditor()) {
+      w = document.createElement('button');
+      w.className = 'rlx-auto rlx-sweep-toggle';
+      w.type = 'button';
+      w.addEventListener('click', () => sweepRetractions());
+      g.appendChild(w);
+    }
+
     const title = inEditor() ? null : visibleTitle();
     if (title) title.appendChild(g);
     else pinToCorner(g);
@@ -2447,12 +2477,14 @@
     if (!box.width || !box.height) pinToCorner(g);
 
     group = g; button = b; toggle = t; railToggle = r; citesToggle = c;
+    sweepToggle = w;
     forceBtn = f;
     paintButton();
     paintForce();
     paintToggle();
     paintRailToggle();
     paintCitesToggle();
+    paintSweepToggle();
   }
 
   /* The fallback spot: fixed at the top right, outside any branch of the site.
@@ -3917,6 +3949,9 @@
 
   function openCites(rows) {
     closeCites();
+    // The flags were drawn against the list as it was; a list that has grown a
+    // reference is a list whose flags are pointing at the wrong boxes.
+    clearRetractions();
     if (!rows.length) return;
     cites.rows = rows;
 
@@ -4141,6 +4176,670 @@
       button.textContent = 'Copied';
       setTimeout(() => { button.textContent = was; }, 900);
     }, () => { /* no clipboard: the citation is on screen anyway */ });
+  }
+
+
+  // ———————————————————————— and whether anybody has withdrawn it since
+
+  /* A reference can be word for word right and still be the wrong thing to
+   * cite, because the paper behind it has been withdrawn. The citation check
+   * above cannot see that: it compares the words in the box against the words
+   * a database returns for that identifier, and a retracted paper's words do
+   * not change. The retraction is a second record pointing at the first.
+   *
+   * So this asks the other question, about the same references, and asks it of
+   * two places that disagree in a useful direction:
+   *
+   *   The Retraction Watch database, which is the one that reaches past
+   *   PubMed. It is 68 MB of CSV and not a thing to hand to an editor, so
+   *   `tools/retraction-index.py` reduces it to the four columns that answer
+   *   this — identifier, what happened, when, and the notice — and that file
+   *   is read here. It costs one fetch and no round trip per reference, and it
+   *   is exactly as current as the day it was last regenerated.
+   *
+   *   PubMed, live, which is never stale and which is the one that says what
+   *   the notice actually is. It is also the one that catches the papers the
+   *   index was built too early to know about: of the references tried while
+   *   writing this, two sat in the index as expressions of concern and came
+   *   back from PubMed as retracted, the retraction having landed in between.
+   *
+   * Neither alone would do. PubMed does not index every journal that retracts
+   * things, and an index in a file is a photograph of a moving target — so
+   * where they both speak, the live answer governs and the disagreement is
+   * printed rather than hidden; where only one speaks, it says so.
+   *
+   * Two requests for the whole article, not two per reference. PubMed's
+   * E-utilities take the OR of every identifier in one `esearch` — DOIs as
+   * `[aid]`, PubMed IDs as `[uid]` — and `efetch` then returns all the records
+   * at once. A thirty-reference article costs the same as a two-reference one.
+   *
+   * And this is a WARNING, never a verdict and never a block. Citing a
+   * retracted paper is sometimes exactly what an article means to do — the
+   * history of a sign, a fabrication that mattered — so nothing is corrected,
+   * nothing is written into the editor, and the chip says what was found and
+   * where it was found. The decision stays with the person who pressed it. */
+
+  const INDEX_URL = RAW_URL + 'retraction-index.txt';
+  const INDEX_TIMEOUT = 60_000;
+  const INDEX_MAX = 16 * 1024 * 1024;   // 4.5 MB of it today, and it only grows
+
+  /* NCBI ask for a tool name on every request so that a misbehaving client can
+   * be told apart from a busy one, and they take an address beside it. The
+   * name is sent and the address is not: the person pressing this is an editor
+   * on somebody else's site, and their address is not ours to hand to a third
+   * party. Three requests a second is the unkeyed limit; two per press is not
+   * close to it, and `EUTILS_GAP` keeps the chunks of a very long reference
+   * list apart anyway. */
+  const EUTILS = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/';
+  const EUTILS_TOOL = 'radiopaedia-lint';
+  const EUTILS_TIMEOUT = 60_000;
+  const EUTILS_MAX = 8 * 1024 * 1024;   // MEDLINE records run ~6 kB each, abstracts and all
+  const EUTILS_CHUNK = 60;              // identifiers per request
+  const EUTILS_GAP = 400;               // ms between chunks
+
+  /* A DOI, as it appears inside the markup of a reference box.
+   *
+   * Stopped at whitespace and at the characters that can only be the markup
+   * around it — quotes, angle brackets, an entity's `&` — because the DOI is
+   * usually inside an `href`. Not stopped at a bracket: `(97)` is part of
+   * every Lancet DOI of that decade, and a pattern that ended there would cut
+   * two thirds of them off. What that costs is a trailing bracket picked up
+   * from prose, and `oneDoi` takes it back off. */
+  const REF_DOI = /\b10\.\d{4,9}\/[^\s"'<>&]+/;
+  /* And a PubMed ID: in a link, in a `PMID:` the way a reference writes it,
+   * and bare in neither case. Five digits at least — a four-digit number
+   * beside the word is a page range often enough to matter. */
+  const REF_PMID = /(?:pubmed\.ncbi\.nlm\.nih\.gov\/|\/pubmed\/|\bpmid\s*[:.—-]?\s*)(\d{5,8})\b/i;
+
+  function oneDoi(markup) {
+    const found = REF_DOI.exec(String(markup ?? ''));
+    if (!found) return '';
+    let doi = found[0].replace(/[.,;:]+$/, '');
+    // A bracket that closes nothing was the prose's, not the DOI's.
+    let open = 0;
+    for (const ch of doi) open += ch === '(' ? 1 : ch === ')' ? -1 : 0;
+    while (open < 0 && doi.endsWith(')')) { doi = doi.slice(0, -1); open++; }
+    // The index holds them folded to lower case, and a DOI does not care.
+    return doi.length > 7 ? doi.toLowerCase() : '';
+  }
+
+  const onePmid = (markup) => REF_PMID.exec(String(markup ?? ''))?.[1].replace(/^0+/, '') || '';
+
+  /* What there is to look this reference up by. Read off the markup rather
+   * than the text: the identifier is usually in an `href`, and `plain()` would
+   * have thrown the hrefs away before we got here. */
+  function refIds(row) {
+    const markup = row.input.value;
+    return { doi: oneDoi(markup), pmid: onePmid(markup) };
+  }
+
+  const hasId = (ids) => !!(ids.doi || ids.pmid);
+
+  // ————————————————————————————————————— the index, as a file to search
+
+  const retractions = { index: null, asked: null, chips: [], run: 0, summary: null };
+
+  /* The file, once, and kept for as long as the page lives.
+   *
+   * Not put in `sessionStorage` like the other fetched lists: it is four and a
+   * half megabytes, the quota is five for the whole origin, and the lint
+   * answer already lives in there. GitHub serves it with `max-age=300` and
+   * gzipped — 900 kB on the wire — so the browser's own cache covers the
+   * second press, and a press is what this costs. Nothing is fetched until
+   * somebody asks. */
+  function retractionIndex() {
+    if (retractions.index !== null) return Promise.resolve(retractions.index);
+    if (retractions.asked) return retractions.asked;
+    retractions.asked = new Promise((resolve) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: INDEX_URL,
+        timeout: INDEX_TIMEOUT,
+        onload: (r) => {
+          const body = r.responseText || '';
+          if (r.status >= 400 || body.length > INDEX_MAX || !body.startsWith('#')) {
+            return resolve(null);
+          }
+          retractions.index = body;
+          resolve(body);
+        },
+        onerror: () => resolve(null),
+        ontimeout: () => resolve(null),
+      });
+    }).finally(() => { retractions.asked = null; });
+    return retractions.asked;
+  }
+
+  /* The day the index was built, off its own header, for the note to print.
+   * An answer from a file is worth exactly what its date says it is. */
+  function indexDate(index) {
+    return /^# Built:\s+(\d{4}-\d{2}-\d{2})/m.exec(index || '')?.[1] || '';
+  }
+
+  const EVENTS = {
+    R: { state: 'retracted', word: 'Retracted' },
+    E: { state: 'concern', word: 'Expression of concern' },
+    I: { state: 'reinstated', word: 'Reinstated' },
+  };
+
+  /* One line of the index, found by the identifier that starts it.
+   *
+   * `indexOf` over four megabytes of string, which takes about a millisecond
+   * and allocates nothing. The newline in front anchors it to the start of a
+   * line and the tab behind it to the end of the identifier, so a DOI cannot
+   * match a longer DOI that begins with it. */
+  function indexLine(index, id) {
+    if (!index || !id) return null;
+    const at = index.indexOf(`\n${id}\t`);
+    if (at < 0) return null;
+    const end = index.indexOf('\n', at + 1);
+    const [, code, when, notice] =
+      (end < 0 ? index.slice(at + 1) : index.slice(at + 1, end)).split('\t');
+    const event = EVENTS[code];
+    return event ? { ...event, when: when || '', notice: notice || '', by: id } : null;
+  }
+
+  const askIndex = (index, ids) =>
+    indexLine(index, ids.doi) || indexLine(index, ids.pmid);
+
+  // ————————————————————————————————————————————— and PubMed, as it is now
+
+  /* One `esearch`, as a POST.
+   *
+   * POST because the term is as long as the reference list — forty DOIs is
+   * well past what a URL should carry — and NCBI document POST for exactly
+   * this. Every DOI goes in quoted: a DOI like
+   * `10.1016/S0140-6736(97)11096-0` has brackets in it, and unquoted those
+   * brackets are PubMed's own grouping syntax, which silently turns one
+   * identifier into two halves of a query and finds neither. */
+  function eutils(path, body) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'POST',
+        url: EUTILS + path,
+        timeout: EUTILS_TIMEOUT,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        data: `tool=${EUTILS_TOOL}&${body}`,
+        onload: (r) => {
+          if (r.status === 429) return reject(new Error('PubMed asked us to slow down.'));
+          if (r.status >= 400) return reject(new Error(`PubMed answered ${r.status}.`));
+          const text = r.responseText || '';
+          if (text.length > EUTILS_MAX) return reject(new Error('PubMed answered more than we asked for.'));
+          resolve(text);
+        },
+        onerror: () => reject(new Error('PubMed could not be reached (network, or @connect).')),
+        ontimeout: () => reject(new Error('PubMed took too long to answer.')),
+      });
+    });
+  }
+
+  const quoted = (doi) => `"${doi.replace(/"/g, '')}"[aid]`;
+
+  async function esearch(ids) {
+    const term = ids.map((id) => (/^\d+$/.test(id) ? `${id}[uid]` : quoted(id))).join(' OR ');
+    const said = await eutils('esearch.fcgi',
+      `db=pubmed&retmode=json&retmax=500&term=${encodeURIComponent(`(${term})`)}`);
+    let json = null;
+    try { json = JSON.parse(said); } catch { /* answered below */ }
+    const list = json?.esearchresult?.idlist;
+    if (!Array.isArray(list)) throw new Error('PubMed answered something that was not a search result.');
+    return list;
+  }
+
+  /* The records themselves, in MEDLINE rather than XML.
+   *
+   * MEDLINE is the tagged text format, and it carries the four tags this
+   * whole feature turns on: `PT` holds "Retracted Publication" where the paper
+   * has been withdrawn, `RIN` the notice that withdrew it — journal, date,
+   * DOI and PubMed ID, which is the citation an editor wants in its place —
+   * `ECI` an expression of concern about it, and `ROF` marks a record that IS
+   * a retraction notice rather than a paper with one.
+   *
+   * It is also the only format that answers the second question. The `[pt]`
+   * search filter finds retracted papers and nothing else: in PubMed an
+   * expression of concern is a tag on the NOTICE, not on the paper it is about,
+   * so a search can never find the paper by it. Fetching the records finds it,
+   * because `ECI` is on the record. */
+  const efetch = (ids) =>
+    eutils('efetch.fcgi', `db=pubmed&rettype=medline&retmode=text&id=${ids.join(',')}`);
+
+  /* MEDLINE into records. Four-letter tag, a dash, the value; continuation
+   * lines are indented, and a tag can repeat — a paper with two retraction
+   * notices has two `RIN` lines, which happens. */
+  function medline(text) {
+    const records = [];
+    let record = null, tag = null;
+    for (const line of String(text ?? '').split('\n')) {
+      const started = /^([A-Z]{2,4})\s*-\s?(.*)$/.exec(line);
+      if (started) {
+        [, tag] = started;
+        if (tag === 'PMID') { record = { PMID: [] }; records.push(record); }
+        if (!record) continue;
+        (record[tag] = record[tag] || []).push(started[2]);
+      } else if (record && tag && /^\s+\S/.test(line)) {
+        const held = record[tag];
+        held[held.length - 1] += ` ${line.trim()}`;
+      }
+    }
+    return records.map((r) => ({
+      pmid: tidy(r.PMID?.[0]),
+      // `AID` and `LID` both carry it, and on most records they carry the
+      // same one, so this is a set rather than a list of two identical DOIs.
+      dois: [...new Set([...(r.AID || []), ...(r.LID || [])]
+        .filter((v) => /\[doi\]\s*$/.test(v))
+        .map((v) => tidy(v.replace(/\s*\[doi\]\s*$/, '')).toLowerCase()))],
+      types: (r.PT || []).map(tidy),
+      retractedIn: (r.RIN || []).map(tidy),
+      concernIn: (r.ECI || []).map(tidy),
+      isNotice: !!(r.ROF || r.ECF),
+    }));
+  }
+
+  /* What one PubMed record says about itself. `null` is the useful answer
+   * here — PubMed knows this paper and has nothing against it — and it is not
+   * the same as PubMed never having heard of it.
+   *
+   * `RIN` and `ECI` arrive as a citation with the notice's own identifiers
+   * inside them: `Lancet. 2010 Feb 6;375(9713):445. doi: 10.1016/… PMID:
+   * 20137807`. The whole line is worth printing, and the identifiers are worth
+   * pulling out of it, because that is what makes the notice openable. */
+  const NOTICE_DOI = /\bdoi:\s*(10\.\d{4,9}\/\S+?)[.\s]*(?:PMID|$)/i;
+  const NOTICE_PMID = /\bPMID:\s*(\d{5,8})\b/i;
+
+  /* Where there are two of them, the later one. A paper retracted in part in
+   * 2004 and in full in 2010 carries both notices, and the one worth reading
+   * is the one that finished the job. */
+  const latestNotice = (lines) => lines
+    .map((line) => [/\b((?:19|20)\d{2})\b/.exec(line)?.[1] || '', line])
+    .sort((a, b) => b[0].localeCompare(a[0]))[0];
+
+  function pubmedEvent(record) {
+    const retracted = record.types.some((t) => /^Retracted Publication$/i.test(t));
+    const says = (latestNotice(record.retractedIn.length ? record.retractedIn
+      : record.concernIn) || ['', ''])[1];
+    const event = retracted ? EVENTS.R : record.concernIn.length ? EVENTS.E : null;
+    if (!event) return null;
+    return {
+      ...event,
+      when: /\b((?:19|20)\d{2})\b/.exec(says)?.[1] || '',
+      notice: NOTICE_PMID.exec(says)?.[1] || NOTICE_DOI.exec(says)?.[1]?.replace(/[.,;]+$/, '') || '',
+      says,
+      by: record.pmid,
+    };
+  }
+
+  /* Every reference PubMed can be asked about, in chunks, and the answers
+   * filed under both of the identifiers they can be claimed by. A reference
+   * that went in as a DOI comes back as a PubMed record, and the DOI on that
+   * record is how it finds its way home. */
+  async function askPubmed(wanted) {
+    const found = new Map();
+    const chunks = [];
+    for (let i = 0; i < wanted.length; i += EUTILS_CHUNK) {
+      chunks.push(wanted.slice(i, i + EUTILS_CHUNK));
+    }
+    for (const [n, chunk] of chunks.entries()) {
+      if (n) await new Promise((r) => setTimeout(r, EUTILS_GAP));
+      const pmids = await esearch(chunk);
+      if (!pmids.length) continue;
+      await new Promise((r) => setTimeout(r, EUTILS_GAP));
+      for (const record of medline(await efetch(pmids))) {
+        if (record.isNotice) continue;    // the notice itself is not the paper
+        const event = pubmedEvent(record);
+        if (record.pmid) found.set(record.pmid, event);
+        for (const doi of record.dois) found.set(doi, event);
+      }
+    }
+    return found;
+  }
+
+  // ——————————————————————————————————————————————————— the two together
+
+  /* One reference, both answers, one thing to say.
+   *
+   * `heard` holds what PubMed returned, and a key being absent from it is
+   * itself an answer: PubMed has never heard of this identifier, so its
+   * silence means nothing and the index is all there is. Where PubMed does
+   * know the paper, it governs — it is today's record and the index is a
+   * photograph — and where the two then differ, both are printed. An editor
+   * reading "the index says expression of concern, PubMed says retracted" has
+   * learnt something true; an editor shown one of those with the other quietly
+   * dropped has not. */
+  const WORSE = { retracted: 3, concern: 2, reinstated: 1 };
+
+  function retractionVerdict(ids, index, heard) {
+    const filed = askIndex(index, ids);
+    const key = [ids.doi, ids.pmid].find((id) => id && heard.has(id));
+    const known = key !== undefined;
+    const live = known ? heard.get(key) : null;
+
+    /* Either source flagging it is enough, and the more serious of the two
+     * names the chip.
+     *
+     * Not "the live answer governs", which is what this did first and was
+     * wrong: PubMed tags a retraction some weeks after the notice appears, so
+     * an index entry PubMed has not caught up with is a real retraction, and
+     * letting PubMed's silence cancel it would turn the safer source into a
+     * reason to say nothing. PubMed governs the WORDING, where both speak and
+     * they differ — it is the later record — and that disagreement is printed
+     * rather than resolved out of sight. */
+    const event = [live, filed]
+      .filter(Boolean)
+      .sort((a, b) => WORSE[b.state] - WORSE[a.state])[0] || null;
+    const sources = sourceLine(index, filed, known, live);
+
+    if (!event) {
+      return {
+        state: 'clean',
+        head: known ? 'Not retracted' : 'Nothing against it',
+        why: known
+          ? 'PubMed holds this paper with no retraction and no expression of concern '
+            + 'against it, and it is not in the Retraction Watch index either.'
+          : 'It is not in the Retraction Watch index, and PubMed has never heard of this '
+            + 'identifier — so there was only one place to look, and it had nothing.',
+        sources, filed, live, known,
+      };
+    }
+    return {
+      state: event.state,
+      head: event.word,
+      why: retractionWhy(event, filed, live),
+      sources, filed, live, known, event,
+    };
+  }
+
+  function retractionWhy(event, filed, live) {
+    if (event.state === 'reinstated') {
+      return 'This paper was retracted and the retraction was itself withdrawn. It stands, '
+        + 'and citing it is not a mistake — but the history is worth knowing.';
+    }
+    const when = event.when ? ` in ${event.when}` : '';
+    const head = event.state === 'retracted'
+      ? `The paper behind this reference was withdrawn${when}.`
+      : `A journal has published an expression of concern about this paper${when}.`;
+    if (filed && live && filed.state !== live.state) {
+      return `${head} The two sources do not agree on which: the index has it as `
+        + `${filed.word.toLowerCase()}, PubMed as ${live.word.toLowerCase()}, and PubMed `
+        + 'is the later record.';
+    }
+    if (filed && !live) {
+      return `${head} It is the index that says so; PubMed `
+        + 'has nothing against it, which is also what it looks like when a notice has '
+        + 'appeared and PubMed has not tagged it yet.';
+    }
+    return `${head} Citing it may still be what this article means to do — nothing here `
+      + 'changes the reference.';
+  }
+
+  function sourceLine(index, filed, known, live) {
+    const parts = [];
+    parts.push(index
+      ? `Retraction Watch index of ${indexDate(index) || 'unknown date'}: `
+        + (filed ? filed.word.toLowerCase() : 'nothing')
+      : 'Retraction Watch index: could not be read');
+    parts.push(`PubMed, live: ${!known ? 'does not hold this identifier'
+      : live ? live.word.toLowerCase() : 'nothing against it'}`);
+    return parts.join(' · ');
+  }
+
+  // ————————————————————————————————————————————————————— the chips and the press
+
+  const RETRACTION_WORD = {
+    retracted: '⊘ retracted',
+    concern: '⚠ concern',
+    reinstated: '↺ reinstated',
+  };
+
+  /* A chip only where there is something to say.
+   *
+   * The other chips in this file sit beside every reference because every
+   * reference has a wording to check. This one would be thirty-nine greens and
+   * one red, and the thirty-nine would be what you learned to stop reading.
+   * So the clean ones get nothing, the toolbar carries the count, and a chip
+   * on the page means a paper to look at. */
+  function markRetraction(row, verdict) {
+    if (!RETRACTION_WORD[verdict.state]) return null;
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = `rlx-cite rlx-flag rlx-flag-${verdict.state}`;
+    chip.textContent = RETRACTION_WORD[verdict.state];
+    chip.title = verdict.why;
+    chip.addEventListener('click', (e) => {
+      e.preventDefault();
+      showRetraction(row, chip, verdict);
+    });
+    (row.chip || row.after).insertAdjacentElement('afterend', chip);
+    retractions.chips.push(chip);
+    return chip;
+  }
+
+  function clearRetractions() {
+    for (const chip of retractions.chips) chip.remove();
+    retractions.chips = [];
+    retractions.summary = null;
+    paintSweepToggle();
+  }
+
+  /* The press. Every reference with an identifier in it, in two requests, and
+   * then the few that need saying. */
+  async function sweepRetractions() {
+    if (!inEditor()) return;
+    const run = ++retractions.run;
+    clearRetractions();
+    closeCiteNote();
+
+    const rows = referenceFields();
+    const seen = rows.map((row) => ({ row, ids: refIds(refresh(row)) }));
+    const askable = seen.filter((s) => hasId(s.ids));
+    if (!askable.length) {
+      retractions.summary = { rows: rows.length, asked: 0, flagged: [], trouble: null };
+      return paintSweepToggle();
+    }
+
+    setSweepBusy(true);
+    const index = await retractionIndex();
+    if (run !== retractions.run) return;
+
+    let heard = new Map(), trouble = null;
+    const wanted = [...new Set(askable.flatMap((s) => [s.ids.doi, s.ids.pmid].filter(Boolean)))];
+    try {
+      heard = await askPubmed(wanted);
+    } catch (err) {
+      trouble = err.message;      // the index still has something to say
+    }
+    if (run !== retractions.run) return;
+    setSweepBusy(false);
+
+    const flagged = [];
+    for (const { row, ids } of askable) {
+      if (!row.input.isConnected) continue;
+      const verdict = retractionVerdict(ids, index, heard);
+      const chip = markRetraction(row, verdict);
+      if (chip) flagged.push({ row, chip, verdict });
+    }
+    retractions.summary = {
+      rows: rows.length, asked: askable.length, flagged,
+      known: askable.filter((s) => [s.ids.doi, s.ids.pmid].some((id) => id && heard.has(id))).length,
+      index, trouble,
+    };
+    paintSweepToggle();
+    showSweep();
+  }
+
+  /* What the toolbar says once it has been pressed: the count, because a sweep
+   * that found nothing has to look different from a sweep nobody ran. */
+  function paintSweepToggle() {
+    if (!sweepToggle) return;
+    const found = retractions.summary;
+    sweepToggle.classList.toggle('rlx-on', !!found);
+    sweepToggle.classList.toggle('rlx-flagged', !!found?.flagged.length);
+    sweepToggle.textContent = found
+      ? `⊘ ${found.flagged.length}`
+      : '⊘';
+    sweepToggle.title = found
+      ? sweepSentence(found) + ' — press again to check once more'
+      : 'Check every reference against the Retraction Watch index and PubMed';
+  }
+
+  function setSweepBusy(busy) {
+    if (!sweepToggle) return;
+    sweepToggle.disabled = busy;
+    if (busy) sweepToggle.textContent = '⊘ …';
+  }
+
+  function sweepSentence(found) {
+    if (!found.asked) {
+      return found.rows
+        ? `None of the ${found.rows} references carries a DOI or a PubMed ID to look up`
+        : 'No references to check';
+    }
+    const flags = found.flagged.length;
+    const head = flags
+      ? `${flags} of ${found.asked} references ${flags === 1 ? 'has' : 'have'} been withdrawn or questioned`
+      : `Nothing against any of the ${found.asked} references that could be looked up`;
+    const rest = [];
+    if (found.asked < found.rows) rest.push(`${found.rows - found.asked} had no identifier`);
+    if (found.known != null && found.known < found.asked) {
+      rest.push(`${found.asked - found.known} unknown to PubMed`);
+    }
+    if (found.trouble) rest.push('PubMed could not be asked');
+    else if (found.index) rest.push(`index of ${indexDate(found.index)}`);
+    else rest.push('the index could not be read');
+    return `${head} (${rest.join(', ')})`;
+  }
+
+  // ———————————————————————————————————————————————————————————— the notes
+
+  /* Both notes are the citation note's panel, borrowed: same box, same
+   * placement, same Escape, so there is one thing on screen at a time and one
+   * piece of code deciding where it goes. */
+  function panel(anchor, where, state, head, why) {
+    closeCiteNote();
+    const note = document.createElement('div');
+    note.id = 'rlx-cite-note';
+    note.style.borderLeftColor =
+      state === 'retracted' ? COLORS.error.ink
+        : state === 'concern' ? COLORS.warning.ink
+          : state === 'clean' ? '#059669' : COLORS.other.ink;
+
+    const line = document.createElement('div');
+    line.className = 'rlx-cite-head';
+    const what = document.createElement('strong');
+    what.textContent = head;
+    const place = document.createElement('span');
+    place.textContent = where;
+    line.append(what, place);
+
+    const reason = document.createElement('div');
+    reason.className = 'rlx-cite-why';
+    reason.textContent = why;
+    note.append(line, reason);
+
+    document.body.appendChild(note);
+    cites.note = note;
+    cites.open = { chip: anchor };
+    return note;
+  }
+
+  function finishPanel(note, acts) {
+    note.appendChild(acts);
+    const shut = document.createElement('button');
+    shut.textContent = 'Close';
+    shut.addEventListener('click', closeCiteNote);
+    acts.appendChild(shut);
+    placeCiteNote();
+    document.addEventListener('keydown', onCiteKey, true);
+    addEventListener('scroll', placeCiteNote, true);
+    addEventListener('resize', placeCiteNote);
+  }
+
+  const actsRow = () => {
+    const acts = document.createElement('div');
+    acts.className = 'rlx-cite-acts';
+    return acts;
+  };
+
+  function labelled(note, label, text) {
+    const head = document.createElement('div');
+    head.className = 'rlx-cite-label';
+    head.textContent = label;
+    const body = document.createElement('div');
+    body.className = 'rlx-cite-text';
+    body.textContent = text;
+    note.append(head, body);
+  }
+
+  /* One reference's answer. The notice is the point of it: `RIN` comes back
+   * from PubMed as a citation with its own DOI and PubMed ID in it, and that
+   * is the thing to read next and, where an article still wants to mention the
+   * paper, the thing to cite beside it. */
+  function showRetraction(row, chip, verdict) {
+    const note = panel(chip, `reference ${row.pos}`, verdict.state, verdict.head, verdict.why);
+
+    const says = verdict.live?.says;
+    if (says) labelled(note, 'the notice, as PubMed has it', says);
+    else if (verdict.filed?.notice) {
+      labelled(note, 'the notice', verdict.filed.notice);
+    }
+    labelled(note, 'asked', verdict.sources);
+
+    const acts = actsRow();
+    const notice = verdict.event?.notice || verdict.filed?.notice;
+    if (notice) {
+      const open = document.createElement('button');
+      open.textContent = 'Open the notice';
+      open.title = 'The retraction notice itself, at the publisher or at PubMed';
+      open.addEventListener('click', () => {
+        window.open(/^\d+$/.test(notice)
+          ? `https://pubmed.ncbi.nlm.nih.gov/${notice}/`
+          : `https://doi.org/${notice}`, '_blank', 'noopener');
+      });
+      acts.appendChild(open);
+    }
+    const ids = refIds(row);
+    if (ids.pmid || ids.doi) {
+      const paper = document.createElement('button');
+      paper.textContent = 'Open the paper';
+      paper.addEventListener('click', () => {
+        window.open(ids.pmid
+          ? `https://pubmed.ncbi.nlm.nih.gov/${ids.pmid}/`
+          : `https://doi.org/${ids.doi}`, '_blank', 'noopener');
+      });
+      acts.appendChild(paper);
+    }
+    finishPanel(note, acts);
+  }
+
+  /* And the sweep's own answer, which is mostly a number — but a number with
+   * what it could not do printed under it, because "nothing found" and "could
+   * not look" are not the same sentence and the chips cannot tell them apart. */
+  function showSweep() {
+    const found = retractions.summary;
+    if (!found || !sweepToggle) return;
+    const state = found.flagged.length ? 'retracted' : found.asked ? 'clean' : 'unknown';
+    const note = panel(sweepToggle, 'references', state,
+      found.flagged.length ? `${found.flagged.length} to look at` : 'Nothing to flag',
+      sweepSentence(found) + '.');
+
+    if (found.flagged.length) {
+      labelled(note, 'flagged', found.flagged
+        .map(({ row, verdict }) => `${row.pos}. ${verdict.head.toLowerCase()}`)
+        .join(' · '));
+    }
+    if (found.trouble) labelled(note, 'PubMed', found.trouble);
+
+    const acts = actsRow();
+    if (found.flagged.length) {
+      const first = document.createElement('button');
+      first.textContent = 'Show the first';
+      first.addEventListener('click', () => {
+        const { row, chip, verdict } = found.flagged[0];
+        row.input.scrollIntoView({ block: 'center' });
+        showRetraction(row, chip, verdict);
+      });
+      acts.appendChild(first);
+    }
+    finishPanel(note, acts);
   }
 
   // ————————————————————————————————————————————————————————————— wiring

@@ -64,6 +64,7 @@ article_type                                            └─  the ones missing
 - [Proper nouns and acronyms](#proper-nouns-and-acronyms)
   - [Adding one](#adding-one)
 - [Linting the references](#linting-the-references)
+- [Has it been retracted?](#has-it-been-retracted)
 - [The sections that are missing](#the-sections-that-are-missing)
   - [What the clipboard carries](#what-the-clipboard-carries)
   - [Required and offered](#required-and-offered)
@@ -403,6 +404,96 @@ loud rather than burying in a diff.
 > Tailwind classes this script used to read the findings out of before v1.5.0 — but it is still a
 > thing that can change without warning, and when it does the chip will say so rather than lie.
 > A `GET /api/v1/cite?search=…` alongside the lint API would retire this caveat.
+
+---
+
+## Has it been retracted?
+
+A reference can be word for word right and still be the wrong thing to cite, because the paper
+behind it has been withdrawn. The citation check above cannot see that: it compares the words in
+the box against the words a database returns for that identifier, and a retracted paper's words do
+not change. The retraction is a second record, pointing at the first.
+
+The `⊘` beside the **Lint** button asks that other question, about every reference at once. One
+press, and the few that need saying get a chip of their own:
+
+| | |
+| :-- | :-- |
+| `⊘ retracted` | the paper has been withdrawn |
+| `⚠ concern` | a journal has published an expression of concern about it |
+| `↺ reinstated` | it was retracted, and the retraction was itself withdrawn |
+
+The clean ones get nothing. Forty green chips are what teaches a person to stop reading the one
+red one, so the count lives in the toolbar — `⊘ 0` is a sweep that ran and found nothing, which
+is not the same thing as a sweep nobody ran — and a chip on the page means a paper to look at.
+Pressing one opens the notice: journal, date, its own DOI and PMID, and a button that goes there.
+
+Two places are asked, because they are wrong in opposite directions.
+
+**The Retraction Watch database**, which reaches past PubMed into journals PubMed does not index.
+It is 68 MB of CSV and not a thing to hand to an editor, so
+[`tools/retraction-index.py`](tools/retraction-index.py) reduces it to the four columns that
+answer this question — identifier, what happened, when, and the notice — and
+[`retraction-index.txt`](retraction-index.txt) is what the script reads: 95,563 entries, one per
+DOI and one per PubMed ID, the identifier at the start of its line so that a lookup is one
+`indexOf` over a string rather than a table of ninety-five thousand objects in memory. It costs
+one fetch for the whole article and no round trip per reference. It is also exactly as current
+as the day it was last regenerated, and the panel prints that date rather than letting you
+assume it.
+
+**PubMed, live**, which is never stale, and which is the one that says what the notice actually
+is. It is asked through the E-utilities, and the whole reference list goes in two requests —
+`esearch` takes the OR of every identifier found in the boxes, DOIs as `[aid]` and PubMed IDs as
+`[uid]`, and `efetch` returns all the records at once in MEDLINE, where `PT - Retracted
+Publication` says the paper was withdrawn and `RIN` is the notice that withdrew it. A
+thirty-reference article costs the same as a two-reference one.
+
+Neither alone would do, and the panel always prints what each one said. PubMed does not index
+every journal that retracts things. An index in a file is a photograph of a moving target. And
+PubMed tags a retraction some weeks after the notice appears, so **either source flagging it is
+enough** — the more serious of the two names the chip, and where they disagree the disagreement is
+printed rather than resolved out of sight.
+
+> [!WARNING]
+> **This is a warning, never a verdict and never a block.** Citing a retracted paper is sometimes
+> exactly what an article means to do — the history of a sign, a fabrication that mattered. So
+> nothing is corrected, nothing is written into the editor, and the chip says what was found and
+> where it was found. The decision stays with the person who pressed it.
+
+> [!NOTE]
+> **Nothing is asked until you press it.** This one reaches two databases, and an article being
+> opened is not a reason to ask them anything. NCBI are sent a tool name, as they ask, and no
+> address: the person pressing this is an editor on somebody else's site, and their address is not
+> ours to hand to a third party.
+
+### Keeping the index current
+
+It keeps itself. [`.github/workflows/retraction-index.yml`](.github/workflows/retraction-index.yml)
+runs every Monday, fetches the current database from Crossref, rebuilds the index and commits it if
+it moved — and because the script reads the index from `main` rather than from a release, that
+commit *is* the update: every installed copy has it on the next press, with no new version to
+install. The Actions tab has a **Run workflow** button for when you want it now.
+
+By hand, which is the same two steps the workflow runs:
+
+```bash
+python3 tools/retraction-index.py --download
+```
+
+The database is CC BY 4.0 and the file carries that attribution in its header. The CSV itself is
+in `.gitignore`: 68 MB that regenerates in one command does not belong in a repository.
+
+A weekly commit of a 4.6 MB file sounds expensive and is not — the file is sorted, so a week lands
+as a hundred or so inserted lines in three or four hunks, and git stores it as a delta. Thirteen
+revisions measured 12 kB more than one.
+
+The generator would rather write nothing than write something wrong, which matters when it runs
+unattended and a commit is published to everybody. It refuses an index that has lost entries
+against the one already there, one built from fewer records than the database has ever held, one
+whose columns have been renamed under it, and one that has somehow forgotten three papers that
+have been retracted for years. `--force` overrides the first of those; the rest are not
+negotiable. A refusal fails the workflow loudly and changes nothing, and a week of staleness costs
+far less than a broken index — which is also the second reason PubMed is asked live.
 
 ---
 
