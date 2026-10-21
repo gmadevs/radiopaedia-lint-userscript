@@ -61,6 +61,9 @@ article_type                                            └─  the ones missing
 - [The colour of the button](#the-colour-of-the-button)
 - [Nothing to lint](#nothing-to-lint)
 - [Working through the findings](#working-through-the-findings)
+- [The ones with one right answer](#the-ones-with-one-right-answer)
+  - [Which eight](#which-eight)
+  - [What it will not do](#what-it-will-not-do)
 - [Proper nouns and acronyms](#proper-nouns-and-acronyms)
   - [Adding one](#adding-one)
 - [When the rule is the problem](#when-the-rule-is-the-problem)
@@ -247,6 +250,7 @@ linter should take from you while you are rewriting the sentence it is complaini
 | Ignore | <kbd>x</kbd> | <kbd>Alt</kbd> + <kbd>x</kbd> |
 | Undo the last verdict | <kbd>u</kbd> | — |
 | Copy the message | <kbd>c</kbd> | — |
+| Write the correction in | <kbd>f</kbd> | <kbd>Alt</kbd> + <kbd>f</kbd> |
 | Add a name or an acronym | <kbd>p</kbd> | — |
 | Write down that the rule is wrong | <kbd>d</kbd> | <kbd>Alt</kbd> + <kbd>d</kbd> |
 | Move the bar to the other edge | <kbd>t</kbd> | — |
@@ -288,6 +292,67 @@ never repeats the snippet, because you are already looking at it.
 When a finding is so tall that nothing fits beside it, reach the note with the pointer: it fades
 **and stops catching the mouse**, so you can select the text underneath as if it were not there.
 Its own message is a keystroke away either way — <kbd>c</kbd>, or **Copy** on the bar.
+
+---
+
+## The ones with one right answer
+
+Most findings need you. A few do not: `post-biopsy` loses its hyphen, `68Ga` becomes `Ga-68`,
+`aka` becomes `a.k.a.`, a comma goes in before the last `and`. There is nothing to decide in
+those, only typing to do, and **✎ Fix** on the bar — <kbd>f</kbd> — does the typing.
+
+The note shows what it would write before you press it. Nothing happens until you do, nothing is
+saved, and <kbd>Ctrl</kbd> + <kbd>Z</kbd> in the editor takes it back: the change goes in through
+the editor's own insert command, so it lands on the editor's undo stack exactly as though you had
+typed it, and the form knows it has been edited. The finding is marked done once it is written;
+<kbd>u</kbd> reopens the finding, which is a different thing from undoing the text.
+
+Two rules are worth knowing because they are what keeps this from guessing.
+
+**It reads the editor, not the linter.** The linter quotes the article as published, and the text
+in front of you has moved on — somebody edited the paragraph, or you did, a minute ago. So the
+correction is built from the characters actually under the highlight. Where those characters
+already read the way the rule asks, no fix is offered at all.
+
+**It writes the smallest change that does it.** Not the phrase, the comma. "reduced tissue,
+citrate and polyamine levels" with a link on *tissue* comes back with the link intact, because
+the only thing selected and replaced was one character of punctuation. A change that would have
+to cross a tag — the hyphen of `post<em>-</em>biopsy`, say — is refused in so many words rather
+than flattened into plain text.
+
+### Which eight
+
+| Check | What it writes |
+| :-- | :-- |
+| Oxford Comma | the comma, before the last `and` / `or` / `nor` |
+| Adjectival Hyphens | the hyphen out: `post-biopsy` → `postbiopsy` |
+| Prefix Hyphens | the same: `extra-gastrointestinal` → `extragastrointestinal` |
+| List Caps | the first letter down: `Balthazar score` → `balthazar score` |
+| EG List And | the trailing `and` / `or` out, keeping the comma the list needs |
+| Latin | the form the message names: `aka` → `a.k.a.`, `vs.` → `vs` |
+| Isotope Notation | `68Ga` → `Ga-68` |
+| Quotes | the comma or full stop outside: `"washout."` → `"washout".` |
+
+List Caps refuses an item that begins with an acronym, because `MRI findings` would come back as
+`mRI findings`. It cannot tell you whether `Balthazar` is a name — but <kbd>p</kbd> is on the bar
+beside it, and that is the other answer.
+
+Latin reads the replacement out of the linter's own message rather than keeping a table of its
+own, which is why it cannot drift away from what the linter is asking for.
+
+### What it will not do
+
+Everything else, which is most of it. Acronyms need an expansion looked up. Headings need moving.
+Semicolons, commas, parentheses, `There is`, the bracketed `e.g.` and the litotes all need the
+sentence rewritten, and a sentence rewritten by a machine in a radiology article is a sentence
+somebody has to check anyway.
+
+Bold and italics are missing from the list for a different reason: taking `<em>` off a word is
+markup surgery rather than a change to the text, and nothing here touches the markup yet.
+
+Number Spacing is missing for a third reason. Its findings are usually about `<sup>-6</sup>` read
+as prose — the article says 10⁻⁶ and the rule sees a space that is not in the text — so there is
+nothing there to correct. That is one for [the log](#when-the-rule-is-the-problem).
 
 ---
 
@@ -449,8 +514,9 @@ up** — a reference is eighty words long and what is wrong with it is usually o
 **`Copy as 4.`** puts the corrected line on the clipboard **as source**, `<a href>` tags and all,
 which is what the box holds and what pasting into it needs; the number is the one the reference
 ought to have, taken from where it actually stands in the list. You paste it over the old one
-yourself: this script has never written a character inside the editor, and a citation is not the
-place to start. <kbd>Esc</kbd>
+yourself: a reference is eighty words of somebody's work, and the one place this script writes
+into the editor is [a correction with a single right answer](#the-ones-with-one-right-answer),
+which a citation is not. <kbd>Esc</kbd>
 closes the panel; the `❝` beside the **Lint** button turns the chips off.
 
 The number gets its own verdict. A reference whose text is perfect but which is numbered `2` in
@@ -523,8 +589,8 @@ printed rather than resolved out of sight.
 > [!WARNING]
 > **This is a warning, never a verdict and never a block.** Citing a retracted paper is sometimes
 > exactly what an article means to do — the history of a sign, a fabrication that mattered. So
-> nothing is corrected, nothing is written into the editor, and the chip says what was found and
-> where it was found. The decision stays with the person who pressed it.
+> nothing is corrected, nothing is written into the editor from here, and the chip says what was
+> found and where it was found. The decision stays with the person who pressed it.
 
 > [!NOTE]
 > **Nothing is asked until you press it.** This one reaches two databases, and an article being
@@ -634,8 +700,8 @@ then promote by hand.
 **The place.** The chip also writes down the heading it was standing beside. Go to the edit page
 and the marker is waiting on the text itself: an amber rule where the new heading goes, labelled
 with what you copied and where it belongs — *above "Radiographic features"*, *inside* it, or *at the
-end of the article*. Nothing is written into the editor; the rule is drawn over it, like the
-highlights. It goes when you paste, when you press its `×`, or after an hour.
+end of the article*. The marker writes nothing into the editor; the rule is drawn over it, like
+the highlights. It goes when you paste, when you press its `×`, or after an hour.
 
 <sub>If the heading it was measured against is not in the editor text at all — you deleted it, or
 you are on a different draft — the marker says so and stands at the end of the text rather than
@@ -811,7 +877,7 @@ what the API gives.
 </details>
 
 <details>
-<summary><strong>The text is never touched</strong></summary>
+<summary><strong>The highlight never touches the text</strong></summary>
 
 <br>
 
@@ -819,6 +885,11 @@ The highlight is a layer of rectangles laid over the page, drawn from the `getCl
 the ranges and redrawn on every scroll. **Not a single tag goes into the editor content.**
 Wrapping the snippets in `<mark>` would have been simpler and would have published those `<mark>`
 elements inside the article the first time you hit save.
+
+<kbd>f</kbd> is the one thing that does write to the editor, and it writes characters rather than
+tags: the smallest edit that applies the rule, through the editor's own insert command, on the
+finding you are standing on and only when you press it. [The ones with one right
+answer](#the-ones-with-one-right-answer) says what it will and will not touch.
 
 One box per line of text, though, not one per rectangle: a range is cut wherever it crosses a
 tag, so a phrase with a link in the middle comes back in three pieces, and three outlined boxes

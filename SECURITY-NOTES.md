@@ -188,9 +188,30 @@ your selection, and it puts back the selection it found.
 ## The editor
 
 The only DOM the script creates is `<div>`, `<span>` and `<button>` elements with `rlx-` ids and
-classes, appended to `document.body` or to the article's title. **Nothing is ever written inside
-the editor roots**, and save and submit are never touched. The highlights and the structure rail
-are layers over the page, drawn from the text's own rectangles.
+classes, appended to `document.body` or to the article's title. Save and submit are never touched.
+The highlights and the structure rail are layers over the page, drawn from the text's own
+rectangles.
+
+**One thing writes inside an editor root, and only on a keystroke of yours.** `f` — the Fix button
+— applies one of eight corrections where the check has a single right answer. What it writes is
+worth being precise about, because this is the only place the script changes the article:
+
+- It runs on the current finding and nowhere else. There is no sweep, no "fix all", and no
+  automatic anything: one press, one correction, and the button is not even shown unless that
+  finding is one of the eight and its words have been found in the text.
+- What goes in is the **smallest** edit that applies the rule — the comma, the hyphen, the one
+  letter — computed as the difference between the text under the highlight and what the rule
+  would have it read. An edit that would span more than one text node is refused in a sentence
+  rather than written, so a link or a `<sup>` inside the phrase can never be flattened by it.
+- It goes in through `document.execCommand('insertText')` (or `'delete'`, where the rule removes
+  a character) on a selection set to exactly that span. That is the editor's own editing command:
+  TinyMCE sees it, the form is marked dirty, and <kbd>Ctrl</kbd> + <kbd>Z</kbd> takes it back,
+  because the change is on the browser's own undo stack. Setting `nodeValue` directly would do
+  none of those things.
+- It does **not** reach for the page's `tinymce` object, and `@grant` still has no `unsafeWindow`.
+  The command is run against the editor's own `document`, which is reachable without it.
+- Nothing is saved. The article is published when you press Radiopaedia's Save button, which this
+  script never touches and never looks for.
 
 The citation chips are the one thing put inside the page rather than over it, and they are still
 inside that rule: they go in the reference **form**, beside Radiopaedia's own "Format citation"

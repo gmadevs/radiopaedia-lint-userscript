@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.5.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
+// @version      3.6.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there — a Fix button writes it into the editor, the smallest change that does it and nothing else. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -44,10 +44,14 @@
  * begin with. A snippet, on the other hand, can simply be searched for in the
  * editor text.
  *
- * The editor DOM is never touched. No `<mark>` wrapped around the text: those
- * would end up inside the article the first time you save. The highlight is a
+ * The highlight never touches the editor DOM. No `<mark>` wrapped around the
+ * text: those would end up inside the article the first time you save. It is a
  * layer of rectangles laid over the page, drawn from the `getClientRects()` of
  * the Ranges and redrawn on every scroll — the content stays exactly as it was.
+ *
+ * `f` is the one thing in this script that does write to the editor, and it is
+ * described further down. Everything else here — the highlights, the rail, the
+ * citation chips, the retraction sweep — only ever reads.
  *
  * The linter lints the PUBLISHED article, not the text sitting in your form.
  * The findings are a snapshot of how things were before you started, so "done"
@@ -84,6 +88,18 @@
  * rule, which is the shape an argument for changing one has to be in. Nothing
  * is sent from there either — see `the disagreement log`, further down.
  *
+ * Eight of the checks have one right answer rather than a judgement to make —
+ * the Oxford comma, the two hyphen rules, a list item's capital, an e.g. list
+ * ending in 'and', the Latin forms, the isotope notation, a comma inside a
+ * quotation mark. On those, `f` writes the correction in. What it writes is
+ * read off the EDITOR and not off the linter's quote, because the quote is of
+ * the article as published and the text in the form has moved on; and what
+ * reaches the document is the SMALLEST edit that does it — the comma, the
+ * hyphen, the one letter — through `insertText`, which is the editor's own
+ * command, so TinyMCE marks the form dirty and Ctrl + Z takes it back. A
+ * change that would cross a tag is refused rather than flattened. See
+ * `the fixes`.
+ *
  * The references at the bottom of the article are checked by a second tool at
  * the same host, `radiopaedia.work/cite`: it takes a reference, works out what
  * to look up in it, asks Crossref or PubMed or Google Books, and gives back the
@@ -92,8 +108,9 @@
  * that link: one press asks about that one reference — matches, differs, or
  * nothing in there to look up. Where it differs the two forms are shown
  * with the words that changed lit up, and the corrected line, numbered by
- * where it stands in the list, goes to the clipboard for you to paste. The
- * editor is never written to, here as everywhere else.
+ * where it stands in the list, goes to the clipboard for you to paste.
+ * Nothing is written to the editor from there: a reference is eighty words of
+ * somebody's work and a chip beside it is not the place to replace them.
  *
  * One request here is one request to Radiopaedia: the linter reads the article
  * on our behalf. This is a human clicking a button on one article at a time,
@@ -1009,6 +1026,257 @@
     }
   }
 
+  // ——————————————————————————————————————————————————— the fixes
+
+  /* A good few findings have exactly one right answer, and it is not a matter
+   * of taste: `post-biopsy` loses its hyphen, `68Ga` becomes `Ga-68`, `aka`
+   * becomes `a.k.a.`, a comma goes in before the last `and`. Those are the
+   * ones this section writes, and the list is short on purpose — everything
+   * that needs a sentence rewritten, a word looked up or a judgement made
+   * stays yours.
+   *
+   * Three rules hold all of them together, and they are what keeps this from
+   * being a bot:
+   *
+   * The proposal is read off the EDITOR, not off the linter. The linter
+   * quotes the article as it was published; the text you are looking at has
+   * moved on, and a replacement built from the quote would paste the old
+   * spacing, the old wording and sometimes an old sentence back in. So the
+   * input is `range.toString()` — the characters actually under the
+   * highlight — and the output is what those characters should read instead.
+   *
+   * Only a NARROWED finding is offered one. Where the highlight is still the
+   * whole paragraph, the words the rule is about were not found inside it, and
+   * "remove the hyphen" would remove some other line's hyphen.
+   *
+   * What gets written is the SMALLEST edit that turns one into the other — the
+   * comma, the hyphen, the letter — and never the whole phrase. A phrase with
+   * a link in the middle of it, replaced wholesale, comes back as plain text
+   * with the link gone. `narrow()` below finds that smallest edit, and the fix
+   * is refused outright unless it lands inside a single text node, which is
+   * the one shape that cannot disturb the markup around it. */
+
+  /* 'post-biopsy' → 'postbiopsy'. One hyphen or none: a word with two of them
+   * is not the compound this rule is about, and guessing which to take out is
+   * exactly the kind of guess that does not belong here. */
+  function dropHyphen(text) {
+    const parts = text.split('-');
+    return parts.length === 2 && parts[0] && parts[1] ? parts[0] + parts[1] : null;
+  }
+
+  /* 'Balthazar score' → 'balthazar score', and a hard no on an acronym. The
+   * rule is about a sentence started with a capital; `MRI findings` starts
+   * with a word that is capitals all the way down, and `mRI findings` is not
+   * what anybody meant. Whether `Balthazar` is a name is a question this
+   * cannot answer — but `p` is on the bar next to this, which is the answer. */
+  function lowerFirst(text) {
+    const first = text.split(/\s+/)[0] || '';
+    if (first.length > 1 && first === first.toUpperCase()) return null;
+    const low = text[0].toLowerCase();
+    return low === text[0] ? null : low + text.slice(1);
+  }
+
+  /* 'e.g. donepezil, rivastigmine, and' → 'e.g. donepezil, rivastigmine,'.
+   *
+   * The comma has to survive the conjunction leaving, and it is not always
+   * there to begin with: a list of two reads 'e.g. A and B', and dropping the
+   * word alone would leave 'e.g. A B'. So the comma is kept where there is one
+   * and put in where there is not. */
+  const TRAILING_CONJUNCTION = /[,;]?\s+(?:and|or)$/i;
+
+  function dropTrailingConjunction(text) {
+    const m = TRAILING_CONJUNCTION.exec(text);
+    if (!m) return null;
+    const head = text.slice(0, m.index).trimEnd();
+    return /[,;]$/.test(head) ? head : `${head},`;
+  }
+
+  /* 'aka' → 'a.k.a.', 'vs.' → 'vs'. The message carries the answer —
+   * "Use appropriate Latin forms: 'a.k.a.' rather than 'aka'." — so this reads
+   * it out of there rather than keeping a table of its own that could disagree
+   * with the linter's. The form it says to replace has to be the text under
+   * the highlight, or this is not the finding we think it is. */
+  const LATIN_FORM = /'([^']+)'\s+rather than\s+'([^']+)'/i;
+
+  function latinForm(text, f) {
+    const m = LATIN_FORM.exec(f.message || '');
+    return m && fold(m[2]) === fold(text) ? m[1] : null;
+  }
+
+  // '68Ga' → 'Ga-68'.
+  const ISOTOPE = /^(\d{1,3})([A-Za-z]{1,2})$/;
+
+  function isotope(text) {
+    const m = ISOTOPE.exec(text);
+    return m ? `${m[2]}-${m[1]}` : null;
+  }
+
+  // '"washout."' → '"washout".'
+  const QUOTE_MARK = '[\'"‘’“”]';
+  const QUOTED_PUNCT = new RegExp(`^(${QUOTE_MARK})([\\s\\S]+?)([,.])(${QUOTE_MARK})$`);
+
+  function punctuationOutside(text) {
+    const m = QUOTED_PUNCT.exec(text);
+    return m ? m[1] + m[2] + m[4] + m[3] : null;
+  }
+
+  /* 'tissue, citrate and polyamine' → 'tissue, citrate, and polyamine'. The
+   * comma goes before the LAST conjunction, which is the one the phrase ends
+   * on — `CONJUNCTION` is the same expression `insertion()` uses to draw the
+   * caret, so the mark on the text and the text written in are the same
+   * reading of the same phrase. */
+  function oxfordComma(text) {
+    let at = -1;
+    for (const m of text.matchAll(CONJUNCTION)) at = m.index;
+    if (at <= 0 || text[at - 1] === ',') return null;
+    return text.slice(0, at) + ',' + text.slice(at);
+  }
+
+  /* The whole list. A condition that is not in here has no fix, and that is
+   * the usual case: of the thirty-odd checks the linter runs, these eight are
+   * the ones where the answer does not depend on knowing what the sentence is
+   * trying to say. */
+  const FIXES = {
+    'Radiopaedia.OxfordComma': oxfordComma,
+    'Radiopaedia.AdjectivalHyphens': dropHyphen,
+    'Radiopaedia.PrefixHyphens': dropHyphen,
+    'Radiopaedia.ListCaps': lowerFirst,
+    'Radiopaedia.EGListAnd': dropTrailingConjunction,
+    'Radiopaedia.Latin': latinForm,
+    'Radiopaedia.IsotopeNotation': isotope,
+    'Radiopaedia.Quotes': punctuationOutside,
+  };
+
+  /* What this finding would have the text read instead, or nothing at all.
+   *
+   * Called on every draw, so it stays cheap: a lookup, a `toString()` and a
+   * handful of string operations on a phrase. It deliberately re-reads the
+   * range every time rather than caching — the text under the highlight is
+   * being edited while you look at it, and a proposal built a minute ago is a
+   * proposal for a sentence that may no longer be there. */
+  function proposal(f) {
+    if (!f || f.state !== 'open' || !f.range || !f.narrowed) return null;
+    const fix = FIXES[f.condition];
+    if (!fix) return null;
+    let before;
+    try { before = f.range.toString(); } catch { return null; }
+    if (!before) return null;
+    const after = fix(before, f);
+    return after && after !== before ? { before, after } : null;
+  }
+
+  /* The smallest edit that turns one string into the other: the common start
+   * and the common end are not touched, and what is left in the middle is the
+   * whole of the change. For the Oxford comma that is one character inserted
+   * into a phrase of forty, and the thirty-nine others — links, abbreviations,
+   * superscripts and all — are never selected, never replaced and never
+   * noticed by the editor. */
+  function narrow(before, after) {
+    let head = 0;
+    while (head < before.length && head < after.length && before[head] === after[head]) head++;
+    let tail = 0;
+    while (tail < before.length - head && tail < after.length - head &&
+           before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+    return { at: head, remove: before.length - head - tail,
+             insert: after.slice(head, after.length - tail) };
+  }
+
+  /* The pieces of text a Range actually covers, in order. Their contents
+   * concatenated ARE `range.toString()`, which is what makes an offset into
+   * that string something this can turn back into a place in the document. */
+  function piecesOf(range) {
+    const start = range.startContainer, end = range.endContainer;
+    if (start === end && start.nodeType === 3) {
+      return [{ node: start, from: range.startOffset, to: range.endOffset }];
+    }
+    const walker = range.commonAncestorContainer.ownerDocument
+      .createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT);
+    const out = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!range.intersectsNode(n)) continue;
+      const from = n === start ? range.startOffset : 0;
+      const to = n === end ? range.endOffset : (n.nodeValue || '').length;
+      if (to > from) out.push({ node: n, from, to });
+    }
+    return out;
+  }
+
+  // An offset into that concatenation, as a node and an offset in it.
+  function placeAt(pieces, offset) {
+    let seen = 0;
+    for (const p of pieces) {
+      const len = p.to - p.from;
+      if (offset <= seen + len) return { node: p.node, offset: p.from + (offset - seen) };
+      seen += len;
+    }
+    return null;
+  }
+
+  /* Write it.
+   *
+   * `insertText` rather than touching the DOM: it is the editor's own editing
+   * command, so TinyMCE hears it, marks the form dirty and puts the change on
+   * ITS undo stack — which means ctrl+Z works afterwards exactly as it does
+   * for something you typed. A `textNode.nodeValue = …` would be invisible to
+   * all three: the text would change on screen and the editor would go on
+   * believing the article was untouched, which is how you press Save and save
+   * nothing.
+   *
+   * It is also the reason nothing here needs `unsafeWindow`. Reaching into the
+   * page's `tinymce` object would do the same job and would mean this script
+   * could reach everything else in there too.
+   *
+   * The selection is left on what was written. That is not a flourish: you
+   * asked for a change to a sentence you are reading, and the cursor sitting
+   * on it is how you see which words moved. */
+  function applyFix(f) {
+    const p = proposal(f);
+    if (!p) return 'no fix for this one — it needs a person';
+
+    const edit = narrow(p.before, p.after);
+    const pieces = piecesOf(f.range);
+    const from = placeAt(pieces, edit.at);
+    const to = placeAt(pieces, edit.at + edit.remove);
+    if (!from || !to) return 'the words moved while that was being worked out';
+    if (from.node !== to.node) return 'that change crosses the markup — fix it by hand';
+
+    const doc = from.node.ownerDocument;
+    const win = doc.defaultView;
+    if (!doc || !win) return 'the editor is not there any more';
+
+    const target = doc.createRange();
+    try {
+      target.setStart(from.node, from.offset);
+      target.setEnd(to.node, to.offset);
+    } catch { return 'the words moved while that was being worked out'; }
+
+    // The editable the text lives in has to hold the focus, or the command
+    // is run against whatever else does and lands somewhere else entirely.
+    const host = from.node.parentElement?.closest('[contenteditable="true"], body');
+    try { win.focus(); } catch { /* another document's window: never mind */ }
+    try { host?.focus({ preventScroll: true }); } catch { host?.focus(); }
+
+    const sel = doc.getSelection();
+    if (!sel) return 'the editor is not there any more';
+    sel.removeAllRanges();
+    sel.addRange(target);
+
+    /* Taking a hyphen out is a deletion, not an insertion of nothing:
+       `insertText` with an empty string is a no-op in some browsers, and a
+       no-op that reports success is worse than a refusal. */
+    let wrote = false;
+    try {
+      wrote = edit.insert
+        ? doc.execCommand('insertText', false, edit.insert)
+        : doc.execCommand('delete');
+    } catch { wrote = false; }
+    if (!wrote) {
+      sel.removeAllRanges();
+      return 'the editor refused the change — fix it by hand';
+    }
+    return null;
+  }
+
   // ———————————————————————————————————————————————————————————— the stage
 
   GM_addStyle(`
@@ -1233,8 +1501,9 @@
     /* The line the copied heading goes on, drawn on the editor text itself.
        The chip's amber, because it is the same fact the chip was stating: a
        section Radiopaedia asks for that is not there yet. Fixed like
-       everything else of ours — the article DOM is never written to, not even
-       here, where what you are looking at is somebody's unsaved work. */
+       everything else of ours — this marker never writes to the article DOM,
+       not even here, where what you are looking at is somebody's unsaved
+       work. */
     #rlx-paste { position:fixed; inset:0; pointer-events:none; z-index:99996;
       font-family:"Open Sans", system-ui, -apple-system, sans-serif; }
     #rlx-paste[hidden] { display:none; }
@@ -1398,7 +1667,8 @@
        holding the reference, which is where somebody already looks for
        something to press about a citation. The form is not what gets saved —
        the article is — so a button there is a button, not a thing waiting to
-       be written into an article. Nothing is ever put inside the editor. */
+       be written into an article. Nothing is put inside the editor from a
+       chip: the corrected reference goes to the clipboard instead. */
     .rlx-cite {
       display:inline-block; vertical-align:baseline; margin-left:.8em;
       padding:2px 8px; border-radius:2px;
@@ -1555,6 +1825,7 @@
     i: -1,
     history: [],      // for "undo": {i, state}
     layer: null, note: null, bar: null,
+    said: null,       // what the last action had to say, until you move
     live: false,
   };
 
@@ -1583,6 +1854,7 @@
       <button data-act="ignore" title="Ignore (x, or Alt+X while typing)">Ignore</button>
       <button data-act="undo" title="Undo the last one (u)">Undo</button>
       <span class="rlx-sep rlx-sep-tools"></span>
+      <button data-act="fix" title="Write the correction into the editor (f)">&#9998; Fix</button>
       <button data-act="copy" title="Copy the message (c)">Copy</button>
       <button data-act="propose" title="Add this to the shared list (p)">+ Name</button>
       <button data-act="dispute" title="The rule is wrong here: write it down (d)">&#9873; Log</button>
@@ -1632,6 +1904,7 @@
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('mousemove', onMove, true);
     stage.findings = []; stage.hidden = {}; stage.i = -1; stage.history = [];
+    stage.said = null;
   }
 
   // ———————————————————————————————————————————————— the all-clear banner
@@ -1866,14 +2139,28 @@
     msg.textContent = f.message;
     stage.note.append(head, msg);
 
-    // The phrase as it should read. The message quotes it as it is, which
-    // leaves the difference between the two for the reader to find.
-    if (f.point?.fixed && !settled) {
+    /* The phrase as it should read. The message quotes it as it is, which
+       leaves the difference between the two for the reader to find.
+
+       Read off the editor where that can be done — `proposal` is the text
+       under the highlight with the rule applied to it, which is the exact
+       string `f` would write — and off the linter's own quote otherwise. The
+       second is still worth printing on a finding that could not be anchored:
+       it says what the answer is, even where nothing can write it. */
+    const would = proposal(f);
+    const reads = would ? would.after : (!settled ? f.point?.fixed : null);
+    if (reads) {
       const fix = document.createElement('div');
       fix.className = 'rlx-fix';
       fix.style.color = c.ink;
-      fix.textContent = f.point.fixed;
+      fix.textContent = reads;
       stage.note.appendChild(fix);
+      if (would) {
+        const how = document.createElement('div');
+        how.className = 'rlx-hint';
+        how.textContent = 'Press f to write it in. Ctrl + Z in the editor takes it back.';
+        stage.note.appendChild(how);
+      }
     }
 
     /* The list line. A `ListCaps` finding on a capital that is a name is not
@@ -2136,8 +2423,12 @@
     }
     for (const said of knownSaid(stage.hidden || {})) word(said, 'rlx-known');
 
-    let status = '';
-    if (!stage.findings.length) status = 'No findings: the article is clean.';
+    /* Anything the last action had to say about itself, until you move: a
+       fix the editor would not take is a thing to read, and a thing that must
+       not vanish on the next redraw. `goTo` clears it. */
+    let status = stage.said || '';
+    if (status) { /* said, and it stands */ }
+    else if (!stage.findings.length) status = 'No findings: the article is clean.';
     // A settled finding has no snippet in the text by definition — saying it
     // "cannot be found" about the one you have just fixed reads as a fault.
     else if (f && f.state !== 'open' && open.length) status = 'Alt + j for the next one';
@@ -2165,6 +2456,12 @@
     };
     const walking = open.length > 0;
     for (const b of ['prev', 'next', 'done', 'ignore', 'copy']) show(b, walking);
+
+    /* Offered only where there is one right answer and the words to apply it
+       to have been found. Hidden the rest of the time rather than greyed out:
+       most findings have no fix, and a permanently dead button beside them
+       reads as a feature that is broken. */
+    show('fix', !!proposal(f));
     stage.bar.querySelector('.rlx-sep-nav').hidden = !walking;
 
     // Offered only where there is a word to offer: a finding one of the lists
@@ -2197,6 +2494,7 @@
   // ————————————————————————————————————————————————— navigation and actions
 
   function goTo(k) {
+    stage.said = null;
     stage.i = k;
     const f = stage.findings[k];
     if (f?.range) bringIntoView(f);
@@ -2254,6 +2552,28 @@
       case 'copy': {
         const f = stage.findings[stage.i];
         if (f) navigator.clipboard?.writeText(f.message);
+        return;
+      }
+
+      /* Written, and done with — immediately, not when the re-anchor catches
+       * up seven hundred milliseconds later. In between, the proposal would
+       * still be on offer and a second press would write the comma in twice.
+       *
+       * `done` rather than a state of its own: a finding whose text now reads
+       * the way the rule asked IS fixed, however the words got there. `u`
+       * reopens it the same as any other, and Ctrl + Z in the editor is what
+       * takes the text back — the two are separate on purpose, because the
+       * editor's undo is the editor's and this script does not own it. */
+      case 'fix': {
+        const f = stage.findings[stage.i];
+        if (!f) return;
+        const trouble = applyFix(f);
+        if (trouble) { stage.said = trouble; updateBar(); return; }
+        stage.history.push({ i: stage.i, state: f.state });
+        f.state = 'done';
+        f.range = null;
+        draw();
+        updateBar();
         return;
       }
       /* The name to the clipboard, the file to a new tab. Two halves of one
@@ -2315,14 +2635,16 @@
      * those characters from being typed. */
     if (e.altKey) {
       const m = { KeyJ: 'next', KeyK: 'prev', KeyS: 'done', KeyX: 'ignore',
-                  KeyD: 'dispute', Enter: 'done', NumpadEnter: 'done' }[e.code];
+                  KeyD: 'dispute', KeyF: 'fix',
+                  Enter: 'done', NumpadEnter: 'done' }[e.code];
       if (m) { e.preventDefault(); act(m); }
       return;
     }
     if (isTyping(e.target)) return;
 
     const m = { j: 'next', k: 'prev', s: 'done', x: 'ignore', u: 'undo',
-                c: 'copy', p: 'propose', d: 'dispute', t: 'flip', Escape: 'close' }[e.key];
+                c: 'copy', p: 'propose', d: 'dispute', f: 'fix', t: 'flip',
+                Escape: 'close' }[e.key];
     if (m) { e.preventDefault(); act(m); }
   }
 
