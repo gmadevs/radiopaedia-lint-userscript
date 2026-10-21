@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.7.0
+// @version      3.8.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them — a Fix button writes it into the editor, the smallest change that does it and nothing else. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -88,13 +88,21 @@
  * rule, which is the shape an argument for changing one has to be in. Nothing
  * is sent from there either — see `the disagreement log`, further down.
  *
- * Eleven of the checks have one right answer rather than a judgement to make.
- * Eight are about the words — the Oxford comma, the two hyphen rules, a list
- * item's capital, an e.g. list ending in 'and', the Latin forms, the isotope
- * notation, a comma inside a quotation mark — and on those `f` writes the
- * SMALLEST edit that does it, the comma or the hyphen or the one letter, never
- * the phrase, so a link inside the phrase is not selected and not touched. A
- * change that would cross a tag is refused rather than flattened.
+ * Nineteen of the checks have one right answer rather than a judgement to
+ * make. Fifteen are about the words — the Oxford comma, the two hyphen rules,
+ * a list item's capital, an e.g. list ending in 'and', the Latin forms, the
+ * isotope notation, a comma inside a quotation mark, two references written as
+ * a range, a full stop on a list item, a possessive eponym, a range with
+ * 'between' in front of it, a missing space after a full stop, an en-dash, and
+ * a bracketed e.g. — and on those `f` writes the SMALLEST edit that does it,
+ * the comma or the hyphen or the one letter, never the phrase, so a link
+ * inside the phrase is not selected and not touched. A change that would cross
+ * a tag is refused rather than flattened; where a rule really does need two
+ * changes at either end of a phrase, they are made as two, in two text nodes
+ * that cannot disturb each other.
+ *
+ * One more puts a space in front of a reference marker, which is a place
+ * rather than a change to any word.
  *
  * Three are about the markup: italics and bold taken off a word, and the colon
  * of a bold intro moved outside it. Those have no corrected string to show —
@@ -1141,9 +1149,59 @@
     return text.slice(0, at) + ',' + text.slice(at);
   }
 
+  /* '1-2' → '1,2'. Two references in a row are a list and not a range, which
+   * is what "except when the range is over 2" means: 1-5 stays as it is. The
+   * separator carries no space, because that is how the rest of them are
+   * written — `<sup>26,27</sup>`. */
+  const TWO_IN_A_ROW = /^(\d+)\s*[-–]\s*(\d+)$/;
+
+  function citationList(text) {
+    const m = TWO_IN_A_ROW.exec(text);
+    return m && Number(m[2]) - Number(m[1]) === 1 ? `${m[1]},${m[2]}` : null;
+  }
+
+  // 'fluorinated tracers.' → 'fluorinated tracers'. An ellipsis is not a full
+  // stop and is left where it is.
+  function dropFullStop(text) {
+    return /[^.]\.$/.test(text) ? text.slice(0, -1) : null;
+  }
+
+  // "Crohn's disease" → 'Crohn disease'. The eponym only: a possessive
+  // anywhere else in the phrase is somebody's grammar, not an eponym.
+  const POSSESSIVE = /^(\p{Lu}[\p{L}'’-]*?)['’]s\b/u;
+
+  function dropPossessive(text) {
+    const m = POSSESSIVE.exec(text);
+    return m ? m[1] + text.slice(m[0].length) : null;
+  }
+
+  // 'between 10-17' → '10-17'.
+  const RANGE_WORD = /^(?:from|between)\s+/i;
+
+  function dropRangeWord(text) {
+    return RANGE_WORD.test(text) ? text.replace(RANGE_WORD, '') : null;
+  }
+
+  /* 's.A' → 's. A'. The linter quotes the three characters either side of the
+   * join, which is the whole of what has to change. */
+  const NO_SPACE_AFTER = /^(\S)([.,;:])(\S)$/;
+
+  function oneSpace(text) {
+    const m = NO_SPACE_AFTER.exec(text);
+    return m ? `${m[1]}${m[2]} ${m[3]}` : null;
+  }
+
+  /* '–' → '-'. `flat()` folds the dashes onto one another, which is how the
+   * en-dash was found at all; `range.toString()` gives back the character that
+   * is really in the text, and this is the one case where which of them it is
+   * decides the answer. */
+  function hyphenMinus(text) {
+    return /^[–—−]+$/.test(text) ? '-' : null;
+  }
+
   /* The whole list. A condition that is not in here has no fix, and that is
-   * the usual case: of the thirty-odd checks the linter runs, these eight are
-   * the ones where the answer does not depend on knowing what the sentence is
+   * the usual case: of the thirty-odd checks the linter runs, these are the
+   * ones where the answer does not depend on knowing what the sentence is
    * trying to say. */
   const TEXT_FIXES = {
     'Radiopaedia.OxfordComma': oxfordComma,
@@ -1154,7 +1212,108 @@
     'Radiopaedia.Latin': latinForm,
     'Radiopaedia.IsotopeNotation': isotope,
     'Radiopaedia.Quotes': punctuationOutside,
+    'Radiopaedia.CitationSyntax': citationList,
+    'Radiopaedia.ListPunctuation': dropFullStop,
+    'Radiopaedia.EponymApostrophe': dropPossessive,
+    'Radiopaedia.Ranges': dropRangeWord,
+    'Radiopaedia.Spacing': oneSpace,
+    'Radiopaedia.EnDash': hyphenMinus,
+    'Radiopaedia.InlineEG': inlineEG,
   };
+
+  /* Fixes that need the character standing before the highlight as well.
+   *
+   * `deep location (e.g. thalamus)` has to come out as `deep location, e.g.
+   * thalamus`, and the space in front of the bracket has to go with the
+   * bracket — leave it and the comma lands with a space in front of it. The
+   * linter's words stop at the bracket, so this is the one place the fix
+   * reaches outside them, and it reaches exactly one character. */
+  const TAKES_THE_SPACE_BEFORE = new Set(['Radiopaedia.InlineEG']);
+
+  function withSpaceBefore(range) {
+    const node = range.startContainer;
+    if (node.nodeType !== 3 || range.startOffset < 1) return null;
+    if (!/\s/.test((node.nodeValue || '')[range.startOffset - 1] || '')) return null;
+    const r = range.cloneRange();
+    try { r.setStart(node, range.startOffset - 1); } catch { return null; }
+    return r;
+  }
+
+  /* ' (e.g. thalamus)' → ', e.g. thalamus'.
+   *
+   * Two changes rather than one, and they are given as two on purpose: eight
+   * of the twenty-five in the sample have a link inside the brackets — `(e.g.
+   * <a>ECOG performance status</a>)` — and replacing the phrase wholesale
+   * would flatten it. The bracket at one end and the bracket at the other are
+   * in different text nodes, and each of them is one character.
+   *
+   * Only where the brackets END the paragraph or list item. All twenty-five
+   * do, which is presumably what the check is looking for, and it matters:
+   * `X (e.g. Y) is common` would come out as `X, e.g. Y is common`, where the
+   * comma that should close the aside has nowhere to go.
+   *
+   * Brackets inside the brackets are left alone — "(e.g. intra-arterial
+   * delivery of vasodilating agents (such as …))" is a sentence to rewrite,
+   * not a pair of characters to delete. */
+  const BRACKETED_EG = /^(\s?)\((e\.g\.[^()]+)\)$/i;
+
+  function inlineEG(text, f) {
+    const m = BRACKETED_EG.exec(text);
+    if (!m) return null;
+    if (!fold(f.snippet || '').endsWith(fold(text).trim())) return null;
+    return [
+      { at: 0, remove: m[1].length + 1, insert: ', ' },
+      { at: text.length - 1, remove: 1, insert: '' },
+    ];
+  }
+
+  /* ————— and one that is a character in a place, rather than a change to
+     the words under the highlight.
+
+   * It supplies its own range, because the gap in front of a tag is not
+   * inside the words the highlight is drawn on.
+   *
+   * `HeadingsSpacing` — the stray space at the end of a heading — was written
+   * here too and then taken out again: none of `delete`, `insertText` or
+   * `insertHTML` will remove trailing whitespace from a heading. The first
+   * eats the character before it, and the other two report success and leave
+   * the space exactly where it was. What is left is setting `nodeValue`, which
+   * the editor would not see. It stays a thing to fix by hand. */
+  const SPOT_FIXES = {
+    'Radiopaedia.CitationPrecedingSpace':
+      { find: spaceBeforeCitation, say: 'Puts a space before the citation.' },
+  };
+
+  /* The gap in front of a reference marker — but only where the marker is a
+   * reference.
+   *
+   * Two of the five in the sample are `<sup>-6</sup>`: the article says
+   * 10⁻⁶, the check reads the superscript as prose and asks for a space that
+   * would be wrong in the text. A citation is digits, and commas or hyphens
+   * between digits; an exponent that opens with a minus sign is not one. */
+  const CITATION_NUMBERS = /^\d+(?:\s*[,–-]\s*\d+)*$/;
+
+  function spaceBeforeCitation(f) {
+    const node = f.range.startContainer;
+    const sup = (node.nodeType === 1 ? node : node.parentElement)?.closest('sup');
+    if (!sup || !CITATION_NUMBERS.test(tidy(sup.textContent || ''))) return null;
+
+    const before = sup.previousSibling;
+    if (!before || before.nodeType !== 3) return null;
+    const text = before.nodeValue || '';
+    if (!text || /\s$/.test(text)) return null;
+
+    const target = sup.ownerDocument.createRange();
+    try {
+      target.setStart(before, text.length);
+      target.setEnd(before, text.length);
+    } catch { return null; }
+    /* A space, through `insertHTML`, because `insertText` would put a
+       non-breaking one here. The value is this constant and nothing else:
+       no part of it comes from the article or from the linter. */
+    return { target, insert: ' ', html: true };
+  }
+
 
   /* ————— and the three that are about the markup rather than the words.
 
@@ -1252,19 +1411,35 @@
 
     const text = TEXT_FIXES[f.condition];
     if (text) {
+      const range = (TAKES_THE_SPACE_BEFORE.has(f.condition) && withSpaceBefore(f.range))
+        || f.range;
       let before;
-      try { before = f.range.toString(); } catch { return null; }
+      try { before = range.toString(); } catch { return null; }
       if (!before) return null;
-      const after = text(before, f);
+
+      /* A fix answers with the words as they should read, or — where one
+         replacement would have to span a link — with the handful of separate
+         changes that get there. */
+      const out = text(before, f);
+      if (!out) return null;
+      const edits = Array.isArray(out) ? out : null;
+      const after = edits ? applyEdits(before, edits) : out;
       if (!after || after === before) return null;
-      return { say: after, quoted: true, apply: () => writeText(f, before, after) };
+      return { say: after, apply: () => writeText(range, before, after, edits) };
+    }
+
+    const spot = SPOT_FIXES[f.condition];
+    if (spot) {
+      const where = spot.find(f);
+      if (!where) return null;
+      return { say: spot.say, apply: () => writeSpot(where) };
     }
 
     const spec = MARKUP_FIXES[f.condition];
     if (!spec) return null;
     const target = spec.colon ? boldColon(f.range) : wrapping(f, spec.tags);
     if (!target) return null;
-    return { say: spec.say, quoted: false, apply: () => unformat(target, spec.command) };
+    return { say: spec.say, apply: () => unformat(target, spec.command) };
   }
 
   /* The smallest edit that turns one string into the other: the common start
@@ -1303,12 +1478,24 @@
     return out;
   }
 
-  // An offset into that concatenation, as a node and an offset in it.
-  function placeAt(pieces, offset) {
+  /* An offset into that concatenation, as a node and an offset in it.
+   *
+   * `bind` is what to do where the offset falls exactly between two pieces,
+   * which is a place that exists twice: the end of one text node and the
+   * start of the next are the same point in the string. The START of an edit
+   * belongs to the piece that follows and the END of it to the piece before.
+   * Read the other way round, an edit wholly inside one text node is taken
+   * for one spanning two — which is how `<sup>21</sup>.` came to refuse the
+   * deletion of a full stop that was never inside the superscript. */
+  function placeAt(pieces, offset, bind) {
     let seen = 0;
-    for (const p of pieces) {
+    for (let i = 0; i < pieces.length; i++) {
+      const p = pieces[i];
       const len = p.to - p.from;
-      if (offset <= seen + len) return { node: p.node, offset: p.from + (offset - seen) };
+      const mine = bind === 'start' && i < pieces.length - 1
+        ? offset < seen + len
+        : offset <= seen + len;
+      if (mine) return { node: p.node, offset: p.from + (offset - seen) };
       seen += len;
     }
     return null;
@@ -1338,29 +1525,77 @@
     return p ? p.apply() : 'no fix for this one — it needs a person';
   }
 
-  function writeText(f, before, after) {
-    const edit = narrow(before, after);
-    const pieces = piecesOf(f.range);
-    const from = placeAt(pieces, edit.at);
-    const to = placeAt(pieces, edit.at + edit.remove);
-    if (!from || !to) return 'the words moved while that was being worked out';
-    if (from.node !== to.node) return 'that change crosses the markup — fix it by hand';
+  // The same change, done to a string: what the note prints.
+  function applyEdits(text, edits) {
+    let out = text;
+    for (const e of [...edits].sort((a, b) => b.at - a.at)) {
+      out = out.slice(0, e.at) + e.insert + out.slice(e.at + e.remove);
+    }
+    return out;
+  }
 
+  /* One edit, as a place in the document — or nothing, when it would have to
+   * span more than one text node. That refusal is the whole guard on the
+   * markup: a selection that stays inside one run of text cannot take a link
+   * or a superscript with it. */
+  function place(pieces, edit) {
+    const from = placeAt(pieces, edit.at, 'start');
+    const to = placeAt(pieces, edit.at + edit.remove, 'end');
+    if (!from || !to || from.node !== to.node) return null;
     const doc = from.node.ownerDocument;
-    if (!doc) return 'the editor is not there any more';
-
+    if (!doc) return null;
     const target = doc.createRange();
     try {
       target.setStart(from.node, from.offset);
       target.setEnd(to.node, to.offset);
-    } catch { return 'the words moved while that was being worked out'; }
+    } catch { return null; }
+    return { target, insert: edit.insert, at: edit.at };
+  }
 
-    /* Taking a hyphen out is a deletion, not an insertion of nothing:
-       `insertText` with an empty string is a no-op in some browsers, and a
-       no-op that reports success is worse than a refusal. */
-    return edit.insert
-      ? runCommand(target, 'insertText', edit.insert)
-      : runCommand(target, 'delete');
+  /* Taking a hyphen out is a deletion, not an insertion of nothing:
+     `insertText` with an empty string is a no-op in some browsers, and a
+     no-op that reports success is worse than a refusal. */
+  /* `html` is for one case and one value — see `spaceBeforeCitation`.
+     Measured, not assumed: `insertText` with a space at the end of a text
+     node writes a NON-BREAKING space, because a plain one would collapse
+     where it stands and the browser is being helpful. `insertHTML` with the
+     same character writes the character. */
+  const writeSpot = (spot) => spot.insert
+    ? runCommand(spot.target, spot.html ? 'insertHTML' : 'insertText', spot.insert)
+    : runCommand(spot.target, 'delete');
+
+  function writeText(range, before, after, edits) {
+    const pieces = piecesOf(range);
+
+    /* One edit if one will do, and nearly always one will: the comma, the
+       hyphen, the single letter. */
+    const one = place(pieces, narrow(before, after));
+    if (one) return writeSpot(one);
+
+    /* Otherwise the fix's own account of what changes — which for the
+       bracketed e.g. is two single characters at either end of a phrase with
+       a link in the middle of it.
+
+       They have to land in DIFFERENT text nodes, and they are applied back to
+       front. Both conditions are about the same risk: a command rewrites the
+       node it runs in, so an edit counted in a node that an earlier edit has
+       already touched is counted in a node that may no longer be there. Edits
+       sharing a node are the case `narrow` above already covers, and if that
+       was refused for crossing the markup then these would be too. */
+    if (!edits || edits.length < 2) return 'that change crosses the markup — fix it by hand';
+
+    const spots = edits.map((e) => place(pieces, e));
+    if (spots.some((spot) => !spot)) return 'that change crosses the markup — fix it by hand';
+    if (new Set(spots.map((spot) => spot.target.startContainer)).size !== spots.length) {
+      return 'that change crosses the markup — fix it by hand';
+    }
+
+    spots.sort((a, b) => b.at - a.at);
+    for (const spot of spots) {
+      const trouble = writeSpot(spot);
+      if (trouble) return trouble;
+    }
+    return null;
   }
 
   /* Bold or italics off the selection. The command is a toggle and the

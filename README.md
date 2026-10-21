@@ -62,7 +62,7 @@ article_type                                            └─  the ones missing
 - [Nothing to lint](#nothing-to-lint)
 - [Working through the findings](#working-through-the-findings)
 - [The ones with one right answer](#the-ones-with-one-right-answer)
-  - [Which eleven](#which-eleven)
+  - [Which nineteen](#which-nineteen)
   - [The three about the markup](#the-three-about-the-markup)
   - [What it will not do](#what-it-will-not-do)
 - [Proper nouns and acronyms](#proper-nouns-and-acronyms)
@@ -322,13 +322,14 @@ the only thing selected and replaced was one character of punctuation. A change 
 to cross a tag — the hyphen of `post<em>-</em>biopsy`, say — is refused in so many words rather
 than flattened into plain text.
 
-### Which eleven
+### Which nineteen
 
-Eight of them change the words:
+Fifteen of them change the words:
 
 | Check | What it writes |
 | :-- | :-- |
 | Oxford Comma | the comma, before the last `and` / `or` / `nor` |
+| Inline EG | the brackets off: `deep location (e.g. thalamus)` → `deep location, e.g. thalamus` |
 | Adjectival Hyphens | the hyphen out: `post-biopsy` → `postbiopsy` |
 | Prefix Hyphens | the same: `extra-gastrointestinal` → `extragastrointestinal` |
 | List Caps | the first letter down: `Balthazar score` → `balthazar score` |
@@ -336,6 +337,32 @@ Eight of them change the words:
 | Latin | the form the message names: `aka` → `a.k.a.`, `vs.` → `vs` |
 | Isotope Notation | `68Ga` → `Ga-68` |
 | Quotes | the comma or full stop outside: `"washout."` → `"washout".` |
+| Citation Syntax | two references in a row are a list: `1-2` → `1,2` |
+| List Punctuation | the full stop off the end of a list item |
+| Eponym Apostrophe | the possessive off: `Crohn's disease` → `Crohn disease` |
+| Ranges | the word off: `between 10-17` → `10-17` |
+| Spacing | the missing space after a full stop |
+| En Dash | `–` → `-` |
+
+And one puts a space in front of a reference marker — `intramural<sup>11</sup>` →
+`intramural <sup>11</sup>` — which is a place rather than a change to any word. Only where the
+marker is a reference: `<sup>-6</sup>` is an exponent, the article says 10⁻⁶, and a space there
+would be wrong. That one goes in with `insertHTML` rather than `insertText`, because measured
+rather than assumed: `insertText` with a space at the end of a run of text writes a
+*non-breaking* space, the browser being helpful about a space that would otherwise collapse. The
+value passed is that one character and nothing else.
+
+Citation Syntax leaves a real range alone — `1-5` is a range, `1-2` is two references written
+with a hyphen. Inline EG only acts where the brackets end the paragraph or list item, which all
+twenty-five in the sample did: `X (e.g. Y) is common` would come out as `X, e.g. Y is common`,
+where the comma that should close the aside has nowhere to go. Brackets inside the brackets are
+left alone.
+
+Inline EG is also the one rule that needs **two** changes rather than one — the bracket at each
+end — and eight of the twenty-five have a link between them. Two separate one-character edits in
+two different text nodes get there without the link being selected; a single replacement would
+have flattened it. Where a fix takes two edits it takes two presses of <kbd>Ctrl</kbd> +
+<kbd>Z</kbd> to undo. Every other rule is one of each.
 
 List Caps refuses an item that begins with an acronym, because `MRI findings` would come back as
 `mRI findings`. It cannot tell you whether `Balthazar` is a name — but <kbd>p</kbd> is on the bar
@@ -389,7 +416,19 @@ somebody has to check anyway.
 
 Number Spacing is missing for a third reason. Its findings are usually about `<sup>-6</sup>` read
 as prose — the article says 10⁻⁶ and the rule sees a space that is not in the text — so there is
-nothing there to correct. That is one for [the log](#when-the-rule-is-the-problem).
+nothing there to correct. That is one for [the log](#when-the-rule-is-the-problem), and so is
+Headings Case, which asks for sentence-style capitalisation on headings like `MR spectroscopy`
+that already have it.
+
+Headings Spacing — the stray space at the end of a heading — was written and then taken out
+again. None of the browser's editing commands will remove it: `delete` eats the character before
+it, and `insertText` and `insertHTML` both report success and leave the space exactly where it
+was. What is left is setting the text directly, which the editor would not notice, so this one
+stays a thing to fix by hand.
+
+Optional Plurals (`tear(s)`), Accepted Abbreviations and Number Formatting are left out because
+the message does not say what the answer is — `tear` or `tears` depends on what the sentence
+means, and "check against the style guide" is not an instruction a script can follow.
 
 ---
 

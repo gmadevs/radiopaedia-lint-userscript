@@ -193,14 +193,14 @@ The highlights and the structure rail are layers over the page, drawn from the t
 rectangles.
 
 **One thing writes inside an editor root, and only on a keystroke of yours.** `f` — the Fix button
-— applies one of eleven corrections where the check has a single right answer. What it writes is
+— applies one of nineteen corrections where the check has a single right answer. What it writes is
 worth being precise about, because this is the only place the script changes the article.
 
 Common to all eleven:
 
 - It runs on the current finding and nowhere else. There is no sweep, no "fix all", and no
   automatic anything: one press, one correction, and the button is not even shown unless that
-  finding is one of the eleven and its words have been found in the text.
+  finding is one of the nineteen and its words have been found in the text.
 - Everything goes in through `document.execCommand` on a selection this script sets and then
   releases — the editor's own editing commands. TinyMCE sees them, the form is marked dirty, and
   <kbd>Ctrl</kbd> + <kbd>Z</kbd> takes the change back, because it is on the browser's own undo
@@ -210,12 +210,25 @@ Common to all eleven:
 - Nothing is saved. The article is published when you press Radiopaedia's Save button, which this
   script never touches and never looks for.
 
-The eight that change the words use `insertText`, or `delete` where the rule removes a character
+The fifteen that change the words use `insertText`, or `delete` where the rule removes a character
 (an empty insertion is a no-op in some browsers, and a no-op that reports success is worse than a
 refusal). What goes in is the **smallest** edit that applies the rule — the comma, the hyphen, the
 one letter — computed as the difference between the text under the highlight and what the rule
 would have it read. An edit that would span more than one text node is refused in a sentence
 rather than written, so a link or a `<sup>` inside the phrase can never be flattened by it.
+
+One rule, the bracketed `e.g.`, genuinely needs two changes — a bracket at each end of a phrase
+that often has a link in the middle. Those go in as two separate one-character edits, and the
+guard is that they must land in two **different** text nodes, applied back to front: a command
+rewrites the node it runs in, so an edit counted in a node an earlier edit has already touched
+could be counted in a node that is no longer there. Edits sharing a node are the single-edit case
+above, which is refused if it crosses the markup.
+
+One more inserts a space in front of a reference marker, and it is the only call to `insertHTML`
+in the script. The value passed is the single character `' '`, a constant in the source: nothing
+from the article, the linter or the page is ever passed to it. `insertText` is not used there
+because it writes a non-breaking space at the end of a run of text, which is not the character the
+rule is asking for.
 
 The three that change the markup use `bold` and `italic`. Those commands toggle, so the selection
 is built to be exactly the formatted run and the fix is refused outright when it cannot be: the
