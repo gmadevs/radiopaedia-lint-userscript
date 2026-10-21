@@ -63,6 +63,9 @@ article_type                                            └─  the ones missing
 - [Working through the findings](#working-through-the-findings)
 - [Proper nouns and acronyms](#proper-nouns-and-acronyms)
   - [Adding one](#adding-one)
+- [When the rule is the problem](#when-the-rule-is-the-problem)
+  - [What a record holds](#what-a-record-holds)
+  - [Getting it out](#getting-it-out)
 - [Linting the references](#linting-the-references)
 - [Has it been retracted?](#has-it-been-retracted)
 - [The sections that are missing](#the-sections-that-are-missing)
@@ -245,6 +248,7 @@ linter should take from you while you are rewriting the sentence it is complaini
 | Undo the last verdict | <kbd>u</kbd> | — |
 | Copy the message | <kbd>c</kbd> | — |
 | Add a name or an acronym | <kbd>p</kbd> | — |
+| Write down that the rule is wrong | <kbd>d</kbd> | <kbd>Alt</kbd> + <kbd>d</kbd> |
 | Move the bar to the other edge | <kbd>t</kbd> | — |
 | Close | <kbd>Esc</kbd> | — |
 
@@ -353,6 +357,68 @@ the linter sent them.
 > a second host, `raw.githubusercontent.com`, and it only ever reads. Nothing is sent there: what
 > reaches the repository is what you type into GitHub yourself. Every request the script makes,
 > and everything it stores, is written out in [SECURITY-NOTES.md](SECURITY-NOTES.md).
+
+---
+
+## When the rule is the problem
+
+Some findings are not mistakes in the article. `<em>TERT</em>` is caught by Emphasis, where
+italicising a gene symbol is the convention rather than a lapse. `YEARS` and `PERC` are caught by
+Acronyms, and they are the names of trials: they expand to nothing. `'10 -6'` is caught by Number
+Spacing, and the article says 10⁻⁶ — what the rule read was `<sup>-6</sup>`.
+
+<kbd>x</kbd> makes those go away for the afternoon. It does not make them go away next month, on
+the next article, for everybody. The mechanism that would is the linter's own: every finding the
+API sends carries `supportsExceptions`, and registering one is for Radiopaedia's own editors.
+What is left to the rest of us is the argument for a rule being changed or an exception being
+granted — and one case is a judgement call, while nine cases of Emphasis against nine gene symbols
+is a rule with a clause missing.
+
+**⚑ Log** on the bar, or <kbd>d</kbd>, is where you collect them. It opens on the finding you are
+standing on, with the rule, the words and the line already filled in, and asks you for the one
+thing it cannot know: why it does not hold here. There is a second field for what the rule should
+do instead, which is optional and worth filling in anyway — "treat trial names as proper nouns" is
+a proposal, "this is wrong" is a complaint.
+
+Recording one also takes it out of the walk, the same way <kbd>x</kbd> would: saying the rule is
+wrong *is* skipping the finding. It does not move you on — the note turns and waits where the
+words are, like a fix does — and <kbd>u</kbd> puts the finding back if you change your mind. The
+record stays either way, because it is a note about the rule rather than about this finding.
+
+Press <kbd>d</kbd> on the same finding again and you get what you wrote, to correct.
+
+### What a record holds
+
+Mostly things you did not type:
+
+| | |
+| :-- | :-- |
+| the rule | `Radiopaedia.Emphasis` — the condition as the API names it, which is what an exception would be registered against |
+| the article | its slug and its URL |
+| where | the line and column the linter gave |
+| the words | what it flagged |
+| the line they are on | the sentence, as plain text |
+| what the linter said | the message, word for word |
+| why it does not hold | yours |
+| what the rule should do | yours, if you filled it in |
+
+The panel shows all of it before you write anything. A record you would have to reconstruct from
+memory in a month is no use to the person who has to decide whether the rule changes.
+
+### Getting it out
+
+**Copy Markdown** puts the whole log on the clipboard, grouped by rule and commonest rule first,
+with a heading per case and the article link under it. That is the shape the argument has to be in
+to be read: paste it into whatever you were going to write to the editorial team anyway.
+
+**Download CSV** gives the same records a column each, for a spreadsheet.
+
+**Clear the log** empties it, and asks once before it does. Individual entries come out with the
+× beside them, which also asks once.
+
+The log lives in `localStorage` under `rlx-disputes` and never leaves the browser — the two
+buttons above are the only ways out of it, and both of them go through you. It is per browser and
+per profile, so it does not follow you to another machine.
 
 ---
 

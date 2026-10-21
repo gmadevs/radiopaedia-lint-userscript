@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.4.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted.
+// @version      3.5.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -76,6 +76,13 @@
  * The exception mechanism the API itself carries (`supportsExceptions`) is the
  * right place for all of this, and it is not open to us: only Radiopaedia's
  * own editors can register one. This is the second best thing.
+ *
+ * The third is the Log button, which is about the rules themselves rather than
+ * about one word. Where a finding is the rule meeting a case it was not
+ * written for, pressing it records the rule, the article, the line, the words
+ * and why it does not hold there; Copy Markdown gives the lot back grouped by
+ * rule, which is the shape an argument for changing one has to be in. Nothing
+ * is sent from there either — see `the disagreement log`, further down.
  *
  * The references at the bottom of the article are checked by a second tool at
  * the same host, `radiopaedia.work/cite`: it takes a reference, works out what
@@ -160,6 +167,7 @@
   const LIST_TIMEOUT = 15_000;
   const LIST_MAX = 256 * 1024;      // a list of words; anything bigger is not one
   const PROPOSED_KEY = 'rlx-proposed';   // {word: the day you proposed it}
+  const DISPUTES_KEY = 'rlx-disputes';   // {article|finding: what you said about it}
 
   /* One entry per check a list answers. `condition` is what the API calls the
    * check; `match` is asked whether the word the linter quoted is already on
@@ -412,7 +420,8 @@
       const known = quoted ? on.match(quoted, on.entries) : null;
       const propose = quoted && !known && on.entries ? on.draft(quoted) : null;
 
-      out.push({ check, severity, line: where, message, snippet,
+      out.push({ check, condition: lint.condition || '', severity, line: where,
+                 message, snippet, words: plain(lint.matched),
                  target: flat(plain(lint.matched)), targetNth: nthInLine(lint),
                  point: insertion(lint), known, propose, list: on ? on.key : null,
                  occurrence: copy.n, fp: `${check}|${message}|${snippet}|${where}` });
@@ -1447,12 +1456,94 @@
     }
     #rlx-cite-note button:hover { background:rgba(127,127,127,.18); }
 
+    /* ————— the disagreement log.
+
+       The one box in this script you type into, and that is why it is a box of
+       its own and not a few more lines in the note. The note gets out of the
+       way the moment the pointer comes near it — faded and click-through, so
+       the text underneath stays selectable — which is exactly what a form must
+       not do. So: a panel in the middle, with the page dimmed behind it, and
+       the stage's own keys off while it is open.
+
+       It is the only thing here that sits above the bar (z-index 100000 against
+       99999): while you are writing down why a rule is wrong, the rule is the
+       only thing on screen that matters. */
+    #rlx-dispute {
+      position:fixed; inset:0; z-index:100000; display:flex;
+      align-items:center; justify-content:center; padding:1em;
+      background:rgba(17,24,39,.42);
+      font:14px/1.45 system-ui,-apple-system,sans-serif;
+    }
+    #rlx-dispute .rlx-d-panel {
+      width:min(42em, 94vw); max-height:86vh; overflow:auto;
+      padding:.9em 1.1em 1.1em; border-radius:12px;
+      background:#fff; color:#111; box-shadow:0 10px 40px rgba(0,0,0,.4);
+    }
+    #rlx-dispute .rlx-d-head { display:flex; align-items:baseline; gap:.6em; }
+    #rlx-dispute .rlx-d-title { font-weight:700; flex:1 1 auto; }
+    #rlx-dispute .rlx-d-x { background:transparent; border:0; color:inherit;
+      font-size:18px; line-height:1; padding:0 .2em; cursor:pointer; opacity:.6; }
+    #rlx-dispute .rlx-d-x:hover { opacity:1; }
+
+    /* What gets recorded without you typing it: the rule, the words, the line.
+       Shown because a record you cannot see is a record you cannot trust. */
+    #rlx-dispute .rlx-d-about { margin-top:.8em; padding:.55em .7em; border-radius:8px;
+      border-left:3px solid #9ca3af; background:rgba(127,127,127,.09); }
+    #rlx-dispute .rlx-d-where { font-size:12px; text-transform:uppercase;
+      letter-spacing:.04em; opacity:.7; }
+    #rlx-dispute .rlx-d-msg { margin-top:.25em; }
+    #rlx-dispute .rlx-d-words { margin-top:.4em; font-weight:600;
+      font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:13px;
+      word-break:break-word; }
+    #rlx-dispute .rlx-d-snippet { margin-top:.4em; padding-left:.6em;
+      border-left:2px solid #e5e7eb; color:#4b5563; font-style:italic; }
+
+    #rlx-dispute .rlx-d-label { display:block; margin-top:.85em; margin-bottom:.2em;
+      font-size:12px; text-transform:uppercase; letter-spacing:.04em; opacity:.6; }
+    #rlx-dispute textarea {
+      display:block; width:100%; box-sizing:border-box; padding:.45em .55em;
+      border:1px solid rgba(127,127,127,.45); border-radius:8px;
+      background:transparent; color:inherit; font:inherit; resize:vertical;
+    }
+    #rlx-dispute textarea:focus { outline:2px solid #2563eb; outline-offset:-1px; }
+    #rlx-dispute .rlx-d-acts { display:flex; align-items:center; gap:.45em;
+      margin-top:.8em; flex-wrap:wrap; }
+    #rlx-dispute button { flex:0 0 auto; padding:.4em .8em; border:0; border-radius:8px;
+      background:rgba(127,127,127,.2); color:inherit; font:inherit; font-weight:600;
+      cursor:pointer; }
+    #rlx-dispute button:hover { background:rgba(127,127,127,.34); }
+    #rlx-dispute .rlx-d-primary { background:#059669; color:#fff; }
+    #rlx-dispute .rlx-d-primary:hover { background:#047857; color:#fff; }
+    #rlx-dispute .rlx-d-say { font-size:12.5px; opacity:.75; }
+    #rlx-dispute .rlx-d-none { margin-top:.8em; opacity:.75; }
+
+    #rlx-dispute .rlx-d-log { margin-top:1.1em; padding-top:.7em;
+      border-top:1px solid rgba(127,127,127,.28); }
+    #rlx-dispute .rlx-d-loghead { display:flex; align-items:center; gap:.45em;
+      flex-wrap:wrap; }
+    #rlx-dispute .rlx-d-count { flex:1 1 auto; font-size:12px; text-transform:uppercase;
+      letter-spacing:.04em; opacity:.6; }
+    #rlx-dispute .rlx-d-tools { display:flex; gap:.4em; flex-wrap:wrap; }
+    #rlx-dispute .rlx-d-tools button { font-size:12px; padding:.3em .6em; }
+    #rlx-dispute .rlx-d-rows { margin-top:.5em; max-height:16em; overflow:auto; }
+    #rlx-dispute .rlx-d-row { display:flex; align-items:baseline; gap:.5em;
+      padding:.35em 0; border-top:1px solid rgba(127,127,127,.16); }
+    #rlx-dispute .rlx-d-row:first-child { border-top:0; }
+    #rlx-dispute .rlx-d-what { flex:1 1 auto; min-width:0; }
+    #rlx-dispute .rlx-d-rule { font-size:12px; opacity:.7; }
+    #rlx-dispute .rlx-d-why { font-size:13px; }
+    #rlx-dispute .rlx-d-row button { font-size:11px; padding:.2em .45em; opacity:.6; }
+    #rlx-dispute .rlx-d-row button:hover { opacity:1; }
+
     @media (prefers-color-scheme: dark) {
       #rlx-note { background:#1f2937; color:#f3f4f6; }
       #rlx-note .rlx-snippet { border-left-color:#4b5563; color:#d1d5db; }
       #rlx-note .rlx-alert { border-color:rgba(251,191,36,.4); background:rgba(245,158,11,.18);
         color:#fcd34d; }
       #rlx-cite-note { background:#1f2937; color:#f3f4f6; }
+      #rlx-dispute .rlx-d-panel { background:#1f2937; color:#f3f4f6; }
+      #rlx-dispute .rlx-d-snippet { border-left-color:#4b5563; color:#d1d5db; }
+      #rlx-dispute .rlx-d-about { border-left-color:#6b7280; }
     }
   `);
 
@@ -1494,6 +1585,7 @@
       <span class="rlx-sep rlx-sep-tools"></span>
       <button data-act="copy" title="Copy the message (c)">Copy</button>
       <button data-act="propose" title="Add this to the shared list (p)">+ Name</button>
+      <button data-act="dispute" title="The rule is wrong here: write it down (d)">&#9873; Log</button>
       <button data-act="reload" title="Ask the linter again">Re-lint</button>
       <button data-act="flip" class="rlx-flip" title="Move the bar to the other edge (t)">&#8645;</button>
       <button data-act="close" class="rlx-close" title="Close (Esc)">&times;</button>
@@ -1533,6 +1625,7 @@
   function destroyStage() {
     if (!stage.live) return;
     stage.live = false;
+    closeDispute();
     stage.layer?.remove(); stage.note?.remove(); stage.bar?.remove();
     removeEventListener('scroll', scheduleDraw, true);
     removeEventListener('resize', scheduleDraw);
@@ -2086,6 +2179,19 @@
       add.textContent = on ? on.button : '+ Name';
       add.title = on ? `Add '${offer}' to the shared ${on.of} (p)` : '';
     }
+
+    /* How many findings you have written off as the rule's fault, on the
+     * button that opens them. A log you cannot see the size of is a log you
+     * forget you are keeping — and the whole point of it is to be read back
+     * once there is enough in it to be worth somebody's time. */
+    const log = stage.bar.querySelector('[data-act="dispute"]');
+    if (log) {
+      const n = disputeCount();
+      log.textContent = n ? `⚑ Log ${n}` : '⚑ Log';
+      log.title = f && f.state === 'open'
+        ? 'The rule is wrong here: write it down (d)'
+        : 'What you have written down, and the two ways out of it (d)';
+    }
   }
 
   // ————————————————————————————————————————————————— navigation and actions
@@ -2169,6 +2275,10 @@
         placeNote();
         return;
       }
+      /* The box, and the log under it. Not disabled when there is no finding
+       * in hand: with the walk over it opens on the log alone, which is where
+       * Copy Markdown and Download CSV live. */
+      case 'dispute': return openDispute();
       case 'flip': return setBarTop(!barIsTop());
       case 'reload': return runLint(stage.slug, { force: true });
       case 'close': return destroyStage();
@@ -2186,6 +2296,12 @@
     if (!stage.live) return;
     if (e.metaKey || e.ctrlKey) return;
 
+    /* Nothing while you are typing in the log — not even the Alt shortcuts,
+     * which are exempt from `isTyping` further down precisely so that they
+     * work inside the editor. The box has its own two keys and answers for
+     * itself; Esc there closes the box, not the stage. */
+    if (disputeIsOpen()) return;
+
     /* With Alt the shortcuts work even while you are typing in the editor.
      *
      * The same letters as on the page, not the arrows. Alt + arrow is how you
@@ -2199,14 +2315,14 @@
      * those characters from being typed. */
     if (e.altKey) {
       const m = { KeyJ: 'next', KeyK: 'prev', KeyS: 'done', KeyX: 'ignore',
-                  Enter: 'done', NumpadEnter: 'done' }[e.code];
+                  KeyD: 'dispute', Enter: 'done', NumpadEnter: 'done' }[e.code];
       if (m) { e.preventDefault(); act(m); }
       return;
     }
     if (isTyping(e.target)) return;
 
     const m = { j: 'next', k: 'prev', s: 'done', x: 'ignore', u: 'undo',
-                c: 'copy', p: 'propose', t: 'flip', Escape: 'close' }[e.key];
+                c: 'copy', p: 'propose', d: 'dispute', t: 'flip', Escape: 'close' }[e.key];
     if (m) { e.preventDefault(); act(m); }
   }
 
@@ -2237,6 +2353,382 @@
       draw();
       updateBar();
     }, 700);
+  }
+
+  // ———————————————————————————————————————————————— the disagreement log
+
+  /* Some findings are not mistakes in the article. They are the rule meeting a
+   * case it was not written for: `<em>TERT</em>` caught by Emphasis, where
+   * italicising a gene symbol is the convention and not a lapse; `YEARS` and
+   * `PERC` caught by Acronyms, which are the names of trials and expand to
+   * nothing; `'10 -6'` caught by NumberSpacing, which is `<sup>-6</sup>` read
+   * as prose. Pressing Ignore makes those go away for the afternoon. It does
+   * not make them go away next month, on the next article, for everybody.
+   *
+   * `supportsExceptions` — the mechanism that would, which the API itself
+   * carries on every finding — belongs to Radiopaedia's own editors (see the
+   * note at the top of this file). What is left to us is the argument for
+   * opening it: not "the linter is sometimes wrong", which is an opinion, but
+   * twenty cases grouped by rule, each with the article, the line, the words,
+   * what the linter said and why it does not hold there. That is a thing to
+   * read. This is where you collect it.
+   *
+   * It never leaves the browser. `localStorage`, like the list of words you
+   * have proposed and for the same reason — it has to outlive the tab — and
+   * `localStorage` rather than `GM_setValue` because this script has no such
+   * grant and gains nothing by asking for one. Copy Markdown and Download CSV
+   * are how the log gets out: through you, into whatever you were going to
+   * write to the editorial team anyway. */
+
+  function disputes() {
+    try { return JSON.parse(localStorage.getItem(DISPUTES_KEY) || '{}') || {}; }
+    catch { return {}; }
+  }
+
+  function writeDisputes(all) {
+    try { localStorage.setItem(DISPUTES_KEY, JSON.stringify(all)); }
+    catch { /* this session only */ }
+  }
+
+  /* One record per finding per article, so pressing d twice on the same one
+   * corrects what you wrote rather than filing it again. `fp` is the
+   * fingerprint the findings already carry — check, message, snippet, line —
+   * which is as close to an identity as a finding has. */
+  function disputeKey(f) {
+    return f ? `${currentSlug() || 'article'}|${f.fp}` : null;
+  }
+
+  function disputeCount() { return Object.keys(disputes()).length; }
+
+  function putDispute(key, record) {
+    const all = disputes();
+    all[key] = record;
+    writeDisputes(all);
+  }
+
+  function dropDispute(key) {
+    const all = disputes();
+    if (!(key in all)) return;
+    delete all[key];
+    writeDisputes(all);
+  }
+
+  /* What goes in, and it is mostly not what you typed: the rule's own name,
+   * the words it flagged, the line they sit on and the message as it came. A
+   * record you have to reconstruct from memory a month later is no use to
+   * anybody, least of all to somebody who has to decide whether the rule
+   * should change. */
+  function disputeRecord(f, why, fix) {
+    const slug = currentSlug();
+    return {
+      at: new Date().toISOString().slice(0, 10),
+      slug: slug || '',
+      url: slug ? `https://radiopaedia.org/articles/${slug}` : location.href,
+      condition: f.condition || '',
+      check: f.check || '',
+      severity: f.severity || '',
+      line: f.line || '',
+      message: f.message || '',
+      words: f.words || '',
+      snippet: f.snippet || '',
+      why,
+      fix,
+    };
+  }
+
+  /* Grouped by rule, commonest rule first. The grouping is the argument: one
+   * case is a judgement call, nine cases of Emphasis against nine gene symbols
+   * is a rule that needs a clause about gene symbols. */
+  function disputesMarkdown() {
+    const all = Object.values(disputes());
+    if (!all.length) return '';
+
+    const days = all.map((r) => r.at).filter(Boolean).sort();
+    const slugs = new Set(all.map((r) => r.slug).filter(Boolean));
+    const span = days.length && days[0] !== days[days.length - 1]
+      ? `${days[0]} to ${days[days.length - 1]}` : (days[0] || '');
+
+    const byRule = new Map();
+    for (const r of all) {
+      const rule = r.condition || r.check || 'unknown rule';
+      if (!byRule.has(rule)) byRule.set(rule, []);
+      byRule.get(rule).push(r);
+    }
+
+    const out = ['# Linter findings where the rule does not fit', ''];
+    out.push(`${plural(all.length, 'finding')} on ${plural(slugs.size, 'article')}` +
+             (span ? `, ${span}` : '') + '.', '');
+
+    for (const [rule, rows] of [...byRule].sort((a, b) => b[1].length - a[1].length)) {
+      out.push(`## ${rule} — ${plural(rows.length, 'case')}`, '');
+      for (const r of rows) {
+        out.push(`### ${r.slug || 'article'}${r.line ? ` · line ${r.line}` : ''}`, '');
+        if (r.snippet) out.push(`> ${r.snippet}`, '');
+        if (r.words) out.push(`- **Flagged:** \`${r.words}\``);
+        if (r.message) out.push(`- **The linter says:** ${r.message}`);
+        out.push(`- **Why it does not fit here:** ${r.why}`);
+        if (r.fix) out.push(`- **Suggested change:** ${r.fix}`);
+        if (r.url) out.push(`- ${r.url}`);
+        out.push('');
+      }
+    }
+    return out.join('\n');
+  }
+
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+  /* Every field quoted, every quote doubled: the messages have commas in them,
+   * the snippets have quotation marks in them, and a spreadsheet that opens
+   * wrong is a log nobody looks at twice. */
+  const CSV_COLUMNS = [
+    ['recorded', 'at'], ['article', 'slug'], ['url', 'url'],
+    ['rule', 'condition'], ['check', 'check'], ['severity', 'severity'],
+    ['where', 'line'], ['the linter says', 'message'], ['flagged', 'words'],
+    ['the line it is on', 'snippet'], ['why it does not fit', 'why'],
+    ['suggested change', 'fix'],
+  ];
+
+  const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+
+  function disputesCsv() {
+    const rows = [CSV_COLUMNS.map(([head]) => csvCell(head)).join(',')];
+    for (const r of Object.values(disputes())) {
+      rows.push(CSV_COLUMNS.map(([, field]) => csvCell(r[field])).join(','));
+    }
+    return rows.join('\r\n');
+  }
+
+  /* A file rather than the clipboard, because this one is going into a
+   * spreadsheet and not into a sentence. The object URL is revoked on a timer:
+   * the click is handled asynchronously, so revoking it on the next line
+   * cancels the download it was for. */
+  function saveFile(name, text, type) {
+    let url;
+    try { url = URL.createObjectURL(new Blob([text], { type })); } catch { return; }
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+
+  // ————————————————————————————————————————————————— and the box you type in
+
+  let disputeBox = null;
+  const disputeIsOpen = () => !!disputeBox;
+
+  function closeDispute() {
+    disputeBox?.remove();
+    disputeBox = null;
+  }
+
+  function openDispute() {
+    if (disputeBox) return;
+    const f = stage.findings[stage.i] || null;
+    const key = disputeKey(f);
+    const already = key ? disputes()[key] : null;
+
+    const el = document.createElement('div');
+    disputeBox = el;
+    el.id = 'rlx-dispute';
+    /* No interpolation anywhere in here: everything that comes from the linter
+       is put in with textContent below. The messages carry markup as TEXT —
+       "Italics should be used only in exceptional circumstances: '<em>TERT</em>'"
+       is the message, angle brackets and all — and the note shows them the same
+       way, for the same reason. */
+    el.innerHTML = `
+      <div class="rlx-d-panel" role="dialog" aria-label="Disagreement log">
+        <div class="rlx-d-head">
+          <span class="rlx-d-title"></span>
+          <button data-d="close" class="rlx-d-x" title="Close (Esc)">&times;</button>
+        </div>
+        <div class="rlx-d-about" hidden>
+          <div class="rlx-d-where"></div>
+          <div class="rlx-d-msg"></div>
+          <div class="rlx-d-words" hidden></div>
+          <div class="rlx-d-snippet" hidden></div>
+        </div>
+        <div class="rlx-d-form" hidden>
+          <label class="rlx-d-label" for="rlx-d-why">Why the rule does not fit here</label>
+          <textarea id="rlx-d-why" rows="3"></textarea>
+          <label class="rlx-d-label" for="rlx-d-fix">What the rule should do instead &mdash; optional</label>
+          <textarea id="rlx-d-fix" rows="2"></textarea>
+          <div class="rlx-d-acts">
+            <button data-d="save" class="rlx-d-primary">Record it</button>
+            <button data-d="close">Cancel</button>
+            <span class="rlx-d-say"></span>
+          </div>
+        </div>
+        <div class="rlx-d-none" hidden></div>
+        <div class="rlx-d-log">
+          <div class="rlx-d-loghead">
+            <span class="rlx-d-count"></span>
+            <span class="rlx-d-tools">
+              <button data-d="md">Copy Markdown</button>
+              <button data-d="csv">Download CSV</button>
+              <button data-d="clear">Clear the log</button>
+            </span>
+          </div>
+          <div class="rlx-d-rows"></div>
+        </div>
+      </div>`;
+
+    const q = (sel) => el.querySelector(sel);
+    const why = q('#rlx-d-why');
+    const fix = q('#rlx-d-fix');
+    const say = (words) => { q('.rlx-d-say').textContent = words || ''; };
+
+    q('.rlx-d-title').textContent = f
+      ? (already ? 'What you said about this finding' : 'The rule does not fit here')
+      : 'The disagreement log';
+
+    if (f) {
+      q('.rlx-d-about').hidden = false;
+      q('.rlx-d-form').hidden = false;
+      q('.rlx-d-where').textContent =
+        [f.check, f.severity, f.line ? `line ${f.line}` : ''].filter(Boolean).join(' · ');
+      q('.rlx-d-msg').textContent = f.message || '';
+      if (f.words) { q('.rlx-d-words').hidden = false; q('.rlx-d-words').textContent = f.words; }
+      if (f.snippet) { q('.rlx-d-snippet').hidden = false; q('.rlx-d-snippet').textContent = f.snippet; }
+      why.placeholder = 'Gene symbols are italicised by convention, so the italics here are correct.';
+      fix.placeholder = 'Skip the check inside a gene symbol, or let the exception list cover it.';
+      if (already) {
+        why.value = already.why || '';
+        fix.value = already.fix || '';
+        q('[data-d="save"]').textContent = 'Correct it';
+      }
+    } else {
+      /* Reached with nothing selected — the walk is over, or it never started.
+         There is no finding to describe, but the log and the two ways out of it
+         are exactly what you came for. */
+      q('.rlx-d-none').hidden = false;
+      q('.rlx-d-none').textContent =
+        'No finding is in hand, so there is nothing to add from here. What is in the log:';
+    }
+
+    const save = () => {
+      const words = why.value.trim();
+      if (!f || !key) return say('No finding in hand.');
+      if (!words) { say('Say why it does not fit, and it goes in.'); why.focus(); return; }
+      putDispute(key, disputeRecord(f, words, fix.value.trim()));
+      closeDispute();
+
+      /* Recorded, and out of the walk. Saying the rule is wrong IS skipping the
+         finding — the two were always one gesture, done with two keys — but it
+         does not move you on, any more than fixing one does: the note turns and
+         waits where the words are, and u puts it back. The record stays either
+         way, because it is a note about the rule and not about this finding's
+         state. */
+      if (f.state === 'open') {
+        stage.history.push({ i: stage.i, state: f.state });
+        f.state = 'ignored';
+        f.range = null;
+      }
+      draw();
+      updateBar();
+    };
+
+    const fillLog = () => {
+      const all = disputes();
+      const keys = Object.keys(all);
+      q('.rlx-d-count').textContent = keys.length
+        ? `${plural(keys.length, 'finding')} in the log` : 'nothing in the log yet';
+      for (const name of ['md', 'csv', 'clear']) q(`[data-d="${name}"]`).disabled = !keys.length;
+
+      const wipe = q('[data-d="clear"]');
+      delete wipe.dataset.sure;
+      wipe.textContent = 'Clear the log';
+
+      const rows = q('.rlx-d-rows');
+      rows.textContent = '';
+      // Newest first here, oldest first in the exports: this is a list you
+      // check, those are a document somebody reads from the top.
+      for (const k of keys.reverse()) {
+        const r = all[k];
+        const row = document.createElement('div');
+        row.className = 'rlx-d-row';
+        const what = document.createElement('div');
+        what.className = 'rlx-d-what';
+        const rule = document.createElement('div');
+        rule.className = 'rlx-d-rule';
+        rule.textContent = [r.at, r.slug, r.condition || r.check].filter(Boolean).join(' · ');
+        const line = document.createElement('div');
+        line.className = 'rlx-d-why';
+        line.textContent = r.why || '';
+        what.append(rule, line);
+        const x = document.createElement('button');
+        x.dataset.del = k;
+        x.textContent = '×';
+        x.title = 'Take this one out of the log';
+        row.append(what, x);
+        rows.appendChild(row);
+      }
+    };
+
+    el.addEventListener('click', (e) => {
+      // The dim behind the panel is the panel's own padding: a click that lands
+      // on it is a click outside, and that closes.
+      if (e.target === el) return closeDispute();
+
+      const gone = e.target.closest('[data-del]');
+      if (gone) {
+        // Two clicks, because the first thing in the row is prose you typed.
+        if (gone.dataset.sure !== '1') {
+          gone.dataset.sure = '1';
+          gone.textContent = 'remove?';
+          return;
+        }
+        dropDispute(gone.dataset.del);
+        fillLog();
+        updateBar();
+        return;
+      }
+
+      switch (e.target.closest('[data-d]')?.dataset.d) {
+        case 'save': return save();
+        case 'close': return closeDispute();
+        case 'md': {
+          navigator.clipboard?.writeText(disputesMarkdown());
+          say('The whole log is on the clipboard.');
+          return;
+        }
+        case 'csv':
+          saveFile(`radiopaedia-lint-log-${new Date().toISOString().slice(0, 10)}.csv`,
+                   disputesCsv(), 'text/csv;charset=utf-8');
+          return;
+        case 'clear': {
+          const b = el.querySelector('[data-d="clear"]');
+          if (b.dataset.sure !== '1') {
+            b.dataset.sure = '1';
+            b.textContent = 'Clear it all?';
+            return;
+          }
+          writeDisputes({});
+          fillLog();
+          updateBar();
+          return;
+        }
+      }
+    });
+
+    /* The stage's own keys are off while this is open — see `onKey` — so these
+       are the only two the box answers to. Enter alone is a newline: what you
+       are typing into is prose, and prose has paragraphs. */
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return closeDispute(); }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'Enter' || e.code === 'NumpadEnter')) {
+        e.preventDefault();
+        e.stopPropagation();
+        save();
+      }
+    }, true);
+
+    document.body.appendChild(el);
+    fillLog();
+    (f ? why : el.querySelector('[data-d="close"]')).focus();
   }
 
   // ————————————————————————————————————————————————————————— the button
