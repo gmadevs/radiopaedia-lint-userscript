@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.6.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there — a Fix button writes it into the editor, the smallest change that does it and nothing else. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
+// @version      3.7.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them — a Fix button writes it into the editor, the smallest change that does it and nothing else. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -88,17 +88,26 @@
  * rule, which is the shape an argument for changing one has to be in. Nothing
  * is sent from there either — see `the disagreement log`, further down.
  *
- * Eight of the checks have one right answer rather than a judgement to make —
- * the Oxford comma, the two hyphen rules, a list item's capital, an e.g. list
- * ending in 'and', the Latin forms, the isotope notation, a comma inside a
- * quotation mark. On those, `f` writes the correction in. What it writes is
- * read off the EDITOR and not off the linter's quote, because the quote is of
- * the article as published and the text in the form has moved on; and what
- * reaches the document is the SMALLEST edit that does it — the comma, the
- * hyphen, the one letter — through `insertText`, which is the editor's own
- * command, so TinyMCE marks the form dirty and Ctrl + Z takes it back. A
- * change that would cross a tag is refused rather than flattened. See
- * `the fixes`.
+ * Eleven of the checks have one right answer rather than a judgement to make.
+ * Eight are about the words — the Oxford comma, the two hyphen rules, a list
+ * item's capital, an e.g. list ending in 'and', the Latin forms, the isotope
+ * notation, a comma inside a quotation mark — and on those `f` writes the
+ * SMALLEST edit that does it, the comma or the hyphen or the one letter, never
+ * the phrase, so a link inside the phrase is not selected and not touched. A
+ * change that would cross a tag is refused rather than flattened.
+ *
+ * Three are about the markup: italics and bold taken off a word, and the colon
+ * of a bold intro moved outside it. Those have no corrected string to show —
+ * `<em>TERT</em>` reads the same either way — so the note describes them, and
+ * they go in through `bold` and `italic`. Those commands TOGGLE, which is the
+ * whole difficulty: the selection has to be exactly the formatted run, or a
+ * phrase that is half italic comes out all italic.
+ *
+ * All of it is written with the editor's own commands rather than by touching
+ * the DOM, so TinyMCE marks the form dirty and Ctrl + Z takes it back. What is
+ * proposed is read off the EDITOR and not off the linter's quote, because the
+ * quote is of the article as published and the text in the form has moved on.
+ * See `the fixes`.
  *
  * The references at the bottom of the article are checked by a second tool at
  * the same host, `radiopaedia.work/cite`: it takes a reference, works out what
@@ -1136,7 +1145,7 @@
    * the usual case: of the thirty-odd checks the linter runs, these eight are
    * the ones where the answer does not depend on knowing what the sentence is
    * trying to say. */
-  const FIXES = {
+  const TEXT_FIXES = {
     'Radiopaedia.OxfordComma': oxfordComma,
     'Radiopaedia.AdjectivalHyphens': dropHyphen,
     'Radiopaedia.PrefixHyphens': dropHyphen,
@@ -1147,6 +1156,90 @@
     'Radiopaedia.Quotes': punctuationOutside,
   };
 
+  /* ————— and the three that are about the markup rather than the words.
+
+   * `<em>TERT</em>` with the italics taken off reads exactly as it did
+   * before: the change is to the tags, and there is no corrected string to
+   * show. So these are described rather than quoted, and they are applied
+   * with `bold` and `italic` — the editor's own commands again, for the same
+   * three reasons `insertText` was chosen over touching the DOM.
+   *
+   * Those commands TOGGLE. Run `italic` over a selection that is half
+   * italicised and the whole of it comes out italic, which is the opposite of
+   * what was asked for, so everything here is about making sure the selection
+   * is exactly the formatted run and nothing else.
+   */
+  const MARKUP_FIXES = {
+    'Radiopaedia.Emphasis': { tags: 'em, i', command: 'italic', say: 'Takes the italics off.' },
+    'Radiopaedia.Strong': { tags: 'strong, b', command: 'bold', say: 'Takes the bold off.' },
+    'Radiopaedia.StrongListColonPosition':
+      { colon: true, command: 'bold', say: 'Moves the colon out of the bold.' },
+  };
+
+  /* The element whose formatting this finding is about, as a range over its
+   * whole contents — or nothing, which is the answer surprisingly often.
+   *
+   * Two conditions, and both earn their place on the real findings. The words
+   * have to sit inside ONE `em`/`strong`: a third of the Emphasis findings
+   * quote two of them with plain text in between — `<em>Neu</em> or receptor
+   * tyrosine-protein kinase <em>erbB-2</em>` — and a toggle across that would
+   * italicise the words between them. And the element has to hold exactly the
+   * words the linter quoted, which is what tells `<strong>ovarian torsion</strong>`
+   * from the `<strong> </strong>` sitting in the middle of a sentence that the
+   * same check also reports.
+   *
+   * The whole element rather than the highlighted part of it, because the
+   * trailing space inside `<em>Tityus trinitatis </em>` is inside the italics
+   * too, and leaving it behind as `<em> </em>` would swap one finding for
+   * another — that stray bold space is itself what half the Strong findings
+   * are about.
+   *
+   * An element with tags inside it is refused. `<em>Buthus quinquestriatus
+   * <sup>31</sup></em>` comes back from the command with an empty `style`
+   * attribute on the `<sup>`, and an attribute this script did not mean to
+   * add is not something to publish into somebody's article. */
+  function wrapping(f, tags) {
+    const node = f.range.commonAncestorContainer;
+    const el = (node.nodeType === 1 ? node : node.parentElement)?.closest(tags);
+    if (!el || el.children.length) return null;
+    if (fold(el.textContent || '') !== fold(f.words || '')) return null;
+    const r = el.ownerDocument.createRange();
+    try { r.selectNodeContents(el); } catch { return null; }
+    return r;
+  }
+
+  /* The colon at the end of a bold intro, and the whitespace after it: the
+   * one stretch of that `<strong>` that should not be bold.
+   *
+   * `<strong>DWI: </strong>intratumoural` has the space inside the bold as
+   * well, and unbolding the colon alone would leave `<strong> </strong>`
+   * behind. Taking both is what makes `<strong>DWI</strong>: intratumoural`
+   * rather than a second finding.
+   *
+   * The colon has to be in the LAST text of the element, with nothing but
+   * space after it — which is what `/:\s*$/` on the whole element says. A
+   * colon in the middle of a bold run is somebody's prose, not an intro. */
+  function boldColon(range) {
+    for (const piece of piecesOf(range)) {
+      const el = piece.node.parentElement?.closest('strong, b');
+      if (!el || !/:\s*$/.test(el.textContent || '')) continue;
+
+      const text = piece.node.nodeValue || '';
+      const at = text.lastIndexOf(':');
+      if (at < piece.from || at >= piece.to) continue;
+      // Anything after it inside the element would be left dangling.
+      if (!/^\s*$/.test(text.slice(at + 1))) continue;
+
+      const r = piece.node.ownerDocument.createRange();
+      try {
+        r.setStart(piece.node, at);
+        r.setEnd(piece.node, text.length);
+      } catch { return null; }
+      return r;
+    }
+    return null;
+  }
+
   /* What this finding would have the text read instead, or nothing at all.
    *
    * Called on every draw, so it stays cheap: a lookup, a `toString()` and a
@@ -1156,13 +1249,22 @@
    * proposal for a sentence that may no longer be there. */
   function proposal(f) {
     if (!f || f.state !== 'open' || !f.range || !f.narrowed) return null;
-    const fix = FIXES[f.condition];
-    if (!fix) return null;
-    let before;
-    try { before = f.range.toString(); } catch { return null; }
-    if (!before) return null;
-    const after = fix(before, f);
-    return after && after !== before ? { before, after } : null;
+
+    const text = TEXT_FIXES[f.condition];
+    if (text) {
+      let before;
+      try { before = f.range.toString(); } catch { return null; }
+      if (!before) return null;
+      const after = text(before, f);
+      if (!after || after === before) return null;
+      return { say: after, quoted: true, apply: () => writeText(f, before, after) };
+    }
+
+    const spec = MARKUP_FIXES[f.condition];
+    if (!spec) return null;
+    const target = spec.colon ? boldColon(f.range) : wrapping(f, spec.tags);
+    if (!target) return null;
+    return { say: spec.say, quoted: false, apply: () => unformat(target, spec.command) };
   }
 
   /* The smallest edit that turns one string into the other: the common start
@@ -1229,11 +1331,15 @@
    * The selection is left on what was written. That is not a flourish: you
    * asked for a change to a sentence you are reading, and the cursor sitting
    * on it is how you see which words moved. */
+  /* `null` is what a successful write returns, so this cannot be written with
+   * `??` — that would turn every success into the refusal below. */
   function applyFix(f) {
     const p = proposal(f);
-    if (!p) return 'no fix for this one — it needs a person';
+    return p ? p.apply() : 'no fix for this one — it needs a person';
+  }
 
-    const edit = narrow(p.before, p.after);
+  function writeText(f, before, after) {
+    const edit = narrow(before, after);
     const pieces = piecesOf(f.range);
     const from = placeAt(pieces, edit.at);
     const to = placeAt(pieces, edit.at + edit.remove);
@@ -1241,8 +1347,7 @@
     if (from.node !== to.node) return 'that change crosses the markup — fix it by hand';
 
     const doc = from.node.ownerDocument;
-    const win = doc.defaultView;
-    if (!doc || !win) return 'the editor is not there any more';
+    if (!doc) return 'the editor is not there any more';
 
     const target = doc.createRange();
     try {
@@ -1250,9 +1355,47 @@
       target.setEnd(to.node, to.offset);
     } catch { return 'the words moved while that was being worked out'; }
 
-    // The editable the text lives in has to hold the focus, or the command
-    // is run against whatever else does and lands somewhere else entirely.
-    const host = from.node.parentElement?.closest('[contenteditable="true"], body');
+    /* Taking a hyphen out is a deletion, not an insertion of nothing:
+       `insertText` with an empty string is a no-op in some browsers, and a
+       no-op that reports success is worse than a refusal. */
+    return edit.insert
+      ? runCommand(target, 'insertText', edit.insert)
+      : runCommand(target, 'delete');
+  }
+
+  /* Bold or italics off the selection. The command is a toggle and the
+   * selection was built to be exactly the formatted run, so off is what it
+   * does — see `wrapping` and `boldColon` for how much work that is.
+   *
+   * `styleWithCSS` is turned off around it and put back as it was found.
+   * With it on, taking the bold off a few words leaves
+   * `<span style="font-weight:normal">` behind instead of simply ending the
+   * `<strong>`, and a span carrying a style is not what the rule was asking
+   * for. It is the editor's setting, not ours, which is why it is restored. */
+  function unformat(target, command) {
+    const doc = target.startContainer.ownerDocument;
+    let was = null;
+    try { was = doc.queryCommandState('styleWithCSS'); } catch { /* never mind */ }
+    try { doc.execCommand('styleWithCSS', false, false); } catch { /* never mind */ }
+    const trouble = runCommand(target, command);
+    if (was !== null) {
+      try { doc.execCommand('styleWithCSS', false, was); } catch { /* never mind */ }
+    }
+    return trouble;
+  }
+
+  /* Select it, and let the editor do it. Shared by both, because the part
+   * that matters is the same either way: the editable has to hold the focus
+   * or the command is run against whatever else does and lands somewhere
+   * else entirely. */
+  function runCommand(target, command, value) {
+    const doc = target.startContainer.ownerDocument;
+    const win = doc?.defaultView;
+    if (!doc || !win) return 'the editor is not there any more';
+
+    const node = target.startContainer;
+    const host = (node.nodeType === 1 ? node : node.parentElement)
+      ?.closest('[contenteditable="true"], body');
     try { win.focus(); } catch { /* another document's window: never mind */ }
     try { host?.focus({ preventScroll: true }); } catch { host?.focus(); }
 
@@ -1261,14 +1404,11 @@
     sel.removeAllRanges();
     sel.addRange(target);
 
-    /* Taking a hyphen out is a deletion, not an insertion of nothing:
-       `insertText` with an empty string is a no-op in some browsers, and a
-       no-op that reports success is worse than a refusal. */
     let wrote = false;
     try {
-      wrote = edit.insert
-        ? doc.execCommand('insertText', false, edit.insert)
-        : doc.execCommand('delete');
+      wrote = value === undefined
+        ? doc.execCommand(command)
+        : doc.execCommand(command, false, value);
     } catch { wrote = false; }
     if (!wrote) {
       sel.removeAllRanges();
@@ -2148,7 +2288,7 @@
        second is still worth printing on a finding that could not be anchored:
        it says what the answer is, even where nothing can write it. */
     const would = proposal(f);
-    const reads = would ? would.after : (!settled ? f.point?.fixed : null);
+    const reads = would ? would.say : (!settled ? f.point?.fixed : null);
     if (reads) {
       const fix = document.createElement('div');
       fix.className = 'rlx-fix';

@@ -193,25 +193,36 @@ The highlights and the structure rail are layers over the page, drawn from the t
 rectangles.
 
 **One thing writes inside an editor root, and only on a keystroke of yours.** `f` — the Fix button
-— applies one of eight corrections where the check has a single right answer. What it writes is
-worth being precise about, because this is the only place the script changes the article:
+— applies one of eleven corrections where the check has a single right answer. What it writes is
+worth being precise about, because this is the only place the script changes the article.
+
+Common to all eleven:
 
 - It runs on the current finding and nowhere else. There is no sweep, no "fix all", and no
   automatic anything: one press, one correction, and the button is not even shown unless that
-  finding is one of the eight and its words have been found in the text.
-- What goes in is the **smallest** edit that applies the rule — the comma, the hyphen, the one
-  letter — computed as the difference between the text under the highlight and what the rule
-  would have it read. An edit that would span more than one text node is refused in a sentence
-  rather than written, so a link or a `<sup>` inside the phrase can never be flattened by it.
-- It goes in through `document.execCommand('insertText')` (or `'delete'`, where the rule removes
-  a character) on a selection set to exactly that span. That is the editor's own editing command:
-  TinyMCE sees it, the form is marked dirty, and <kbd>Ctrl</kbd> + <kbd>Z</kbd> takes it back,
-  because the change is on the browser's own undo stack. Setting `nodeValue` directly would do
-  none of those things.
+  finding is one of the eleven and its words have been found in the text.
+- Everything goes in through `document.execCommand` on a selection this script sets and then
+  releases — the editor's own editing commands. TinyMCE sees them, the form is marked dirty, and
+  <kbd>Ctrl</kbd> + <kbd>Z</kbd> takes the change back, because it is on the browser's own undo
+  stack. Touching `nodeValue` or moving nodes would do none of those things.
 - It does **not** reach for the page's `tinymce` object, and `@grant` still has no `unsafeWindow`.
-  The command is run against the editor's own `document`, which is reachable without it.
+  The commands are run against the editor's own `document`, which is reachable without it.
 - Nothing is saved. The article is published when you press Radiopaedia's Save button, which this
   script never touches and never looks for.
+
+The eight that change the words use `insertText`, or `delete` where the rule removes a character
+(an empty insertion is a no-op in some browsers, and a no-op that reports success is worse than a
+refusal). What goes in is the **smallest** edit that applies the rule — the comma, the hyphen, the
+one letter — computed as the difference between the text under the highlight and what the rule
+would have it read. An edit that would span more than one text node is refused in a sentence
+rather than written, so a link or a `<sup>` inside the phrase can never be flattened by it.
+
+The three that change the markup use `bold` and `italic`. Those commands toggle, so the selection
+is built to be exactly the formatted run and the fix is refused outright when it cannot be: the
+words must sit inside a single `<em>`/`<strong>` that holds exactly what the linter quoted and
+has no tags of its own inside it. `styleWithCSS` is switched off around the command and put back
+as it was found — with it on, unbolding leaves a `<span style="font-weight:normal">` behind
+instead of simply ending the `<strong>`.
 
 The citation chips are the one thing put inside the page rather than over it, and they are still
 inside that rule: they go in the reference **form**, beside Radiopaedia's own "Format citation"

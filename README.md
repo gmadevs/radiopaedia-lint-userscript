@@ -62,7 +62,8 @@ article_type                                            └─  the ones missing
 - [Nothing to lint](#nothing-to-lint)
 - [Working through the findings](#working-through-the-findings)
 - [The ones with one right answer](#the-ones-with-one-right-answer)
-  - [Which eight](#which-eight)
+  - [Which eleven](#which-eleven)
+  - [The three about the markup](#the-three-about-the-markup)
   - [What it will not do](#what-it-will-not-do)
 - [Proper nouns and acronyms](#proper-nouns-and-acronyms)
   - [Adding one](#adding-one)
@@ -298,8 +299,9 @@ Its own message is a keystroke away either way — <kbd>c</kbd>, or **Copy** on 
 ## The ones with one right answer
 
 Most findings need you. A few do not: `post-biopsy` loses its hyphen, `68Ga` becomes `Ga-68`,
-`aka` becomes `a.k.a.`, a comma goes in before the last `and`. There is nothing to decide in
-those, only typing to do, and **✎ Fix** on the bar — <kbd>f</kbd> — does the typing.
+`aka` becomes `a.k.a.`, a comma goes in before the last `and`, italics come off a word that
+should not have them. There is nothing to decide in those, only typing to do, and **✎ Fix** on
+the bar — <kbd>f</kbd> — does the typing.
 
 The note shows what it would write before you press it. Nothing happens until you do, nothing is
 saved, and <kbd>Ctrl</kbd> + <kbd>Z</kbd> in the editor takes it back: the change goes in through
@@ -320,7 +322,9 @@ the only thing selected and replaced was one character of punctuation. A change 
 to cross a tag — the hyphen of `post<em>-</em>biopsy`, say — is refused in so many words rather
 than flattened into plain text.
 
-### Which eight
+### Which eleven
+
+Eight of them change the words:
 
 | Check | What it writes |
 | :-- | :-- |
@@ -340,15 +344,48 @@ beside it, and that is the other answer.
 Latin reads the replacement out of the linter's own message rather than keeping a table of its
 own, which is why it cannot drift away from what the linter is asking for.
 
+### The three about the markup
+
+The other three change the tags rather than the words:
+
+| Check | What it does |
+| :-- | :-- |
+| Emphasis | takes the italics off: `<em>TERT</em>` → `TERT` |
+| Strong | takes the bold off: `<strong>ovarian torsion</strong>` → `ovarian torsion` |
+| Strong List Colon Position | moves the colon out: `<strong>T2:</strong> variable` → `<strong>T2</strong>: variable` |
+
+There is no corrected text to show for these — `TERT` reads the same with the italics as without
+— so the note describes what would happen instead of quoting a phrase back at you.
+
+They go in through the editor's own **bold** and **italic** commands, which *toggle*. That is the
+whole difficulty: run italic over a selection that is half italicised and all of it comes out
+italic, which is the opposite of what was asked. So most of the work is in making sure the
+selection is exactly the formatted run, and in refusing when it cannot be:
+
+- The words have to sit inside **one** `<em>` or `<strong>`. A third of the Emphasis findings
+  quote two of them with prose in between — `<em>Neu</em> or receptor tyrosine-protein kinase
+  <em>erbB-2</em>` — and a toggle across that would italicise the words between them.
+- That element has to hold **exactly** the words the linter quoted. This is what tells
+  `<strong>ovarian torsion</strong>` from the stray `<strong> </strong>` in the middle of a
+  sentence, which the same check also reports and which needs removing rather than unbolding.
+- The whole element goes, not just the highlighted part of it, because the trailing space inside
+  `<em>Tityus trinitatis </em>` is italic too and leaving it as `<em> </em>` would swap one
+  finding for another.
+- An element with tags inside it is refused. `<em>Buthus quinquestriatus <sup>31</sup></em>`
+  comes back from the browser's command with an empty `style` attribute on the `<sup>`, and an
+  attribute the script did not mean to add is not something to publish into an article.
+
+The colon rule takes the colon **and the space after it** where there is one, so
+`<strong>DWI: </strong>intratumoural` becomes `<strong>DWI</strong>: intratumoural` and not a
+bold space. A colon in the middle of a bold run is somebody's prose rather than an intro, and is
+left alone.
+
 ### What it will not do
 
 Everything else, which is most of it. Acronyms need an expansion looked up. Headings need moving.
 Semicolons, commas, parentheses, `There is`, the bracketed `e.g.` and the litotes all need the
 sentence rewritten, and a sentence rewritten by a machine in a radiology article is a sentence
 somebody has to check anyway.
-
-Bold and italics are missing from the list for a different reason: taking `<em>` off a word is
-markup surgery rather than a change to the text, and nothing here touches the markup yet.
 
 Number Spacing is missing for a third reason. Its findings are usually about `<sup>-6</sup>` read
 as prose — the article says 10⁻⁶ and the rule sees a space that is not in the text — so there is
