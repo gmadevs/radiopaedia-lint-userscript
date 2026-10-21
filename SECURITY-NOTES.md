@@ -23,7 +23,7 @@ request* — and that is the first thing to talk about rather than the last.
 
 ## Network
 
-Seven `GM_xmlhttpRequest` calls to three hosts — five GET and two POST, both of which are set
+Eight `GM_xmlhttpRequest` calls to three hosts — six GET and two POST, both of which are set
 out in full below. No `fetch`, no `XMLHttpRequest`, no beacon, no websocket, no remote image, font
 or stylesheet, no analytics. `@connect` names all three hosts in the header, which is also what
 confines the script to them.
@@ -34,13 +34,18 @@ slug, which is already in the URL of the page you are standing on. Up to v1.4.2 
 linter's rendered HTML page; since v1.5.0 it is the JSON API — same host, same slug, about 14 kB
 instead of 400.
 
-**2. The two shared lists** — `GET raw.githubusercontent.com/…/main/proper-nouns.txt` and
-`…/main/acronyms.txt` (`askList()`). Read-only, no headers of ours, no query string, nothing about
-you in either request: both URLs are constants, built from a fixed prefix and a filename that is a
-literal in the `LISTS` table. Each response is treated as text, capped at 256 kB, split on
-newlines, and never parsed as anything else. A failure resolves to `null` and that list switches
-itself off — nothing hidden, nothing offered. Once per tab session each, cached in
-`sessionStorage`, asked again only on **Re-lint**.
+**2. The three shared files** — `GET raw.githubusercontent.com/…/main/proper-nouns.txt`,
+`…/main/acronyms.txt` and `…/main/acronym-expansions.txt` (`askList()` for all three). Read-only,
+no headers of ours, no query string, nothing about you in any of them: every URL is a constant,
+built from a fixed prefix and a filename that is a literal in the source. Each response is treated
+as text, capped at 256 kB, split on newlines, and never parsed as anything else. A failure
+resolves to `null` and that file switches itself off — nothing hidden, nothing offered, no fix
+proposed. Once per tab session each, cached in `sessionStorage`, asked again only on **Re-lint**.
+
+The third one is the only one whose contents are ever written into an article: it says what an
+acronym stands for, and the Fix button puts that text in the article word for word. It ships
+empty, and a line in it is a line somebody with an account on this repository put there — the same
+trust as the other two files, which decide which findings you are shown at all.
 
 **3. The citation tool** — `GET https://radiopaedia.work/cite?search=<the reference>`
 (`askCite()`), same host as the linter. This one carries content out of the article you are
@@ -193,14 +198,14 @@ The highlights and the structure rail are layers over the page, drawn from the t
 rectangles.
 
 **One thing writes inside an editor root, and only on a keystroke of yours.** `f` — the Fix button
-— applies one of nineteen corrections where the check has a single right answer. What it writes is
+— applies one of twenty corrections where the check has a single right answer. What it writes is
 worth being precise about, because this is the only place the script changes the article.
 
 Common to all eleven:
 
 - It runs on the current finding and nowhere else. There is no sweep, no "fix all", and no
   automatic anything: one press, one correction, and the button is not even shown unless that
-  finding is one of the nineteen and its words have been found in the text.
+  finding is one of the twenty and its words have been found in the text.
 - Everything goes in through `document.execCommand` on a selection this script sets and then
   releases — the editor's own editing commands. TinyMCE sees them, the form is marked dirty, and
   <kbd>Ctrl</kbd> + <kbd>Z</kbd> takes the change back, because it is on the browser's own undo
@@ -210,12 +215,15 @@ Common to all eleven:
 - Nothing is saved. The article is published when you press Radiopaedia's Save button, which this
   script never touches and never looks for.
 
-The fifteen that change the words use `insertText`, or `delete` where the rule removes a character
+The sixteen that change the words use `insertText`, or `delete` where the rule removes a character
 (an empty insertion is a no-op in some browsers, and a no-op that reports success is worse than a
 refusal). What goes in is the **smallest** edit that applies the rule — the comma, the hyphen, the
 one letter — computed as the difference between the text under the highlight and what the rule
 would have it read. An edit that would span more than one text node is refused in a sentence
-rather than written, so a link or a `<sup>` inside the phrase can never be flattened by it.
+rather than written, so a link or a `<sup>` inside the phrase can never be flattened by it. An
+edit covering the **whole** text of an inline tag is refused for the same reason: the browser
+treats "replace everything inside this link" as "this link is gone", and takes the tag with the
+words.
 
 One rule, the bracketed `e.g.`, genuinely needs two changes — a bracket at each end of a phrase
 that often has a link in the middle. Those go in as two separate one-character edits, and the
@@ -255,7 +263,7 @@ nothing. What you copied reaches the article only by your pressing paste.
 | :-- | :-- |
 | `rlx-lint-cache:<slug>` | the last article's JSON answer; older ones deleted on every write |
 | `rlx-lint-pending` | a slug, for the hop to the edit page |
-| `rlx-names`, `rlx-acronyms` | the two shared lists as fetched |
+| `rlx-names`, `rlx-acronyms`, `rlx-expansions` | the three shared files as fetched |
 | `rlx-structure` | the canon, as fetched |
 | `rlx-cite:<hash>` | one citation answer per reference asked about |
 | `rlx-paste` | the heading you last copied and where it goes, for the marker on the edit page |

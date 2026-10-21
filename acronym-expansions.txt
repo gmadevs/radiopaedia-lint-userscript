@@ -1,0 +1,31 @@
+# What an acronym stands for, for the Fix button.
+#
+# "'EGFR' has no definition. Spell it out if it's unfamiliar to the audience."
+# is the commonest finding the linter has — around a third of everything it
+# reports — and the one thing a script cannot work out for itself is what the
+# letters stand for. This file is where it is told.
+#
+# One per line, the acronym, an equals sign, the expansion:
+#
+#   EGFR = epidermal growth factor receptor
+#
+# With that line in here, pressing f on the FIRST use of EGFR in an article
+# writes "epidermal growth factor receptor (EGFR)" in its place. Later uses in
+# the same article are offered nothing, because the article has its definition
+# by then and repeating it is not what the check asked for.
+#
+# Write the expansion as it should read in an article: lower case unless the
+# words are a proper noun, British spelling, no full stops inside the acronym.
+# It goes into somebody's article exactly as it is written here.
+#
+# Nothing goes in that is not certain. 'RV' is the right ventricle in one
+# article and the residual volume in another, and an acronym whose expansion
+# depends on which article it is in does not belong in a file that cannot see
+# the article. Leave those out: they stay a finding to answer by hand.
+#
+# This is not `acronyms.txt`. That file is the acronyms that need no spelling
+# out at all, and a word in there never reaches the walk. This one is for the
+# ones that do.
+#
+# `#` starts a comment, blank lines are ignored, and the acronym is matched
+# without regard to case or spacing.

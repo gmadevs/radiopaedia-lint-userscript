@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.8.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them — a Fix button writes it into the editor, the smallest change that does it and nothing else. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
+// @version      3.9.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of — a Fix button writes it into the editor, the smallest change that does it and nothing else. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -69,6 +69,12 @@
  * radiology article, and a few more are not abbreviations at all but the name
  * of a trial (YEARS, PERC) or of a consortium (cIMPACT-NOW).
  *
+ * `acronym-expansions.txt` is a third file and the opposite of the second:
+ * `acronyms.txt` holds the ones that need no spelling out, and that one holds
+ * what the letters stand for, for the ones that do. It ships empty, because
+ * what an acronym expands to is a fact about medicine that goes into somebody's
+ * article word for word.
+ *
  * `proper-nouns.txt` and `acronyms.txt`, next to this file in the repository,
  * are the lists of the ones we have met; a finding one of them answers never
  * reaches the stage. When the word is not in there yet, the bar offers to add
@@ -88,13 +94,14 @@
  * rule, which is the shape an argument for changing one has to be in. Nothing
  * is sent from there either — see `the disagreement log`, further down.
  *
- * Nineteen of the checks have one right answer rather than a judgement to
- * make. Fifteen are about the words — the Oxford comma, the two hyphen rules,
+ * Twenty of the checks have one right answer rather than a judgement to
+ * make. Sixteen are about the words — the Oxford comma, the two hyphen rules,
  * a list item's capital, an e.g. list ending in 'and', the Latin forms, the
  * isotope notation, a comma inside a quotation mark, two references written as
  * a range, a full stop on a list item, a possessive eponym, a range with
  * 'between' in front of it, a missing space after a full stop, an en-dash, and
- * a bracketed e.g. — and on those `f` writes the SMALLEST edit that does it,
+ * a bracketed e.g., and an acronym `acronym-expansions.txt` knows the
+ * expansion of — and on those `f` writes the SMALLEST edit that does it,
  * the comma or the hyphen or the one letter, never the phrase, so a link
  * inside the phrase is not selected and not touched. A change that would cross
  * a tag is refused rather than flattened; where a rule really does need two
@@ -103,6 +110,11 @@
  *
  * One more puts a space in front of a reference marker, which is a place
  * rather than a change to any word.
+ *
+ * Nothing is written that would empty a tag: `<a>PSMA</a>` with the whole of
+ * PSMA replaced is, to the browser, a link whose contents have all been
+ * deleted, and it takes the link out with them. Changing PART of a tag's text
+ * is what nearly every rule does and is always allowed.
  *
  * Three are about the markup: italics and bold taken off a word, and the colon
  * of a bold intro moved outside it. Those have no corrected string to show —
@@ -242,6 +254,66 @@
     list.editUrl = EDIT_URL + list.file;
     list.entries = null;    // what the file said, or `null` for "we could not read it"
     list.asked = null;      // the request in flight, so two callers make one
+  }
+
+  /* What the acronyms stand for.
+   *
+   * Not a `LISTS` entry, because it does not answer a finding: the lists say
+   * "this word is fine as it is" and hide it, and this says "here is what it
+   * stands for" and offers to write it in. The two are opposite sets — a word
+   * in `acronyms.txt` never reaches the walk at all — and keeping them apart
+   * is what keeps either file readable by the person editing it.
+   *
+   * It ships with no entries in it. What an acronym stands for is a fact
+   * about medicine and about the house style, and the expansion goes into
+   * somebody's article word for word; that is a thing for an editor to write
+   * down, not for this script to guess. Until a line is added the check is
+   * offered no fix, which is exactly what it was before this existed. */
+  const EXPANSIONS = {
+    file: 'acronym-expansions.txt',
+    cache: 'rlx-expansions',
+    url: RAW_URL + 'acronym-expansions.txt',
+    editUrl: EDIT_URL + 'acronym-expansions.txt',
+    entries: null,      // Map, or `null` for "we could not read it"
+    asked: null,
+  };
+
+  /* `EGFR = epidermal growth factor receptor`. Keyed in `flat()` shape, so
+   * the file can be written in the case anybody likes and still answer the
+   * acronym as the article spells it. An expansion with nothing after the
+   * equals sign is a line somebody started and did not finish, and is not an
+   * instruction to replace a word with nothing. */
+  function parseExpansions(text) {
+    const out = new Map();
+    for (const line of String(text ?? '').split(/\r?\n/)) {
+      const bare = line.replace(/#.*$/, '');
+      const at = bare.indexOf('=');
+      if (at < 1) continue;
+      const word = flat(bare.slice(0, at));
+      const says = tidy(bare.slice(at + 1));
+      if (word && says) out.set(word, says);
+    }
+    return out;
+  }
+
+  // The same bargain the lists get: once per tab, again on Re-lint, silent on
+  // failure — an unreadable file is "we do not know", and nothing is offered.
+  async function readExpansions({ force } = {}) {
+    if (!force && EXPANSIONS.entries) return EXPANSIONS.entries;
+    if (!force && EXPANSIONS.asked) return EXPANSIONS.asked;
+
+    EXPANSIONS.asked = (async () => {
+      let text = force ? null : sessionStorage.getItem(EXPANSIONS.cache);
+      if (text == null) {
+        text = await askList(EXPANSIONS);
+        if (text != null) {
+          try { sessionStorage.setItem(EXPANSIONS.cache, text); } catch { /* quota */ }
+        }
+      }
+      EXPANSIONS.entries = text == null ? null : parseExpansions(text);
+      return EXPANSIONS.entries;
+    })();
+    return EXPANSIONS.asked;
   }
 
   // What a Cloudflare interstitial carries instead of the results.
@@ -538,7 +610,10 @@
    * they are made at the same time, cached the same way and read once per tab:
    * the second one costs the wait it takes to arrive alongside the first,
    * which is none. */
-  const lists = (opts) => Promise.all(Object.values(LISTS).map((l) => readList(l, opts)));
+  const lists = (opts) => Promise.all([
+    ...Object.values(LISTS).map((l) => readList(l, opts)),
+    readExpansions(opts),
+  ]);
 
   /* Is this list item one of the names? By prefix, at a word boundary: the
    * file says "Alvarado" and the item is "Alvarado score"; the file says
@@ -1199,6 +1274,46 @@
     return /^[–—−]+$/.test(text) ? '-' : null;
   }
 
+  /* 'EGFR' → 'epidermal growth factor receptor (EGFR)', where the expansions
+   * file says what the letters stand for.
+   *
+   * The commonest finding the linter has, and the only one whose answer is a
+   * fact about the world rather than about the text. `acronym-expansions.txt`
+   * is where that fact is kept, and it ships empty: until somebody writes the
+   * line, this offers nothing.
+   *
+   * Only on the FIRST use in the article. The check reports every occurrence —
+   * in the sample, 76 of 141 findings were a repeat of an acronym already
+   * reported higher up the same article, `PSMA` eight times in one of them —
+   * and spelling it out at the fifth is not what was asked for: the article
+   * would define a word it has been using for three paragraphs. Written at the
+   * first, all the others answer themselves.
+   *
+   * The expansion is written as the file has it. It goes into an article word
+   * for word, which is why the file says to put nothing in it that is not
+   * certain. */
+  function spellOut(text, f) {
+    const says = EXPANSIONS.entries?.get(flat(text));
+    return says && firstUse(f) ? `${says} (${text})` : null;
+  }
+
+  /* Is this the first finding in the article quoting this word?
+   *
+   * `stage.findings` is in document order — `fromApi` sorts it that way so
+   * that walking with `j` walks the article from top to bottom — so the first
+   * one that quotes the word is the first use of it. State is not consulted on
+   * purpose: an occurrence you have marked done, or ignored, is still an
+   * occurrence standing in the text above this one. */
+  function firstUse(f) {
+    const word = fold(f.words || '');
+    if (!word) return false;
+    for (const other of stage.findings) {
+      if (other === f) return true;
+      if (other.condition === f.condition && fold(other.words || '') === word) return false;
+    }
+    return true;
+  }
+
   /* The whole list. A condition that is not in here has no fix, and that is
    * the usual case: of the thirty-odd checks the linter runs, these are the
    * ones where the answer does not depend on knowing what the sentence is
@@ -1219,6 +1334,7 @@
     'Radiopaedia.Spacing': oneSpace,
     'Radiopaedia.EnDash': hyphenMinus,
     'Radiopaedia.InlineEG': inlineEG,
+    'Radiopaedia.Acronyms': spellOut,
   };
 
   /* Fixes that need the character standing before the highlight as well.
@@ -1425,7 +1541,21 @@
       const edits = Array.isArray(out) ? out : null;
       const after = edits ? applyEdits(before, edits) : out;
       if (!after || after === before) return null;
-      return { say: after, apply: () => writeText(range, before, after, edits) };
+
+      /* Worked out here and not only on the press, so that a fix the editor
+         would refuse is never offered in the first place. A button that
+         appears and then says "fix it by hand" is worse than no button. The
+         plan is worked out AGAIN on the press, because the paragraph is being
+         edited while you look at it and the one made on the last redraw is a
+         plan for the text as it was. */
+      if (planText(range, before, after, edits).trouble) return null;
+      return {
+        say: after,
+        apply: () => {
+          const now = planText(range, before, after, edits);
+          return now.trouble || writeText(now);
+        },
+      };
     }
 
     const spot = SPOT_FIXES[f.condition];
@@ -1542,6 +1672,7 @@
     const from = placeAt(pieces, edit.at, 'start');
     const to = placeAt(pieces, edit.at + edit.remove, 'end');
     if (!from || !to || from.node !== to.node) return null;
+    if (wouldEmpty(from.node, from.offset, to.offset)) return null;
     const doc = from.node.ownerDocument;
     if (!doc) return null;
     const target = doc.createRange();
@@ -1552,25 +1683,47 @@
     return { target, insert: edit.insert, at: edit.at };
   }
 
+  /* Would this edit take a tag with it?
+   *
+   * Staying inside one text node is not enough on its own. `<a>PSMA</a>` with
+   * the whole of PSMA replaced is, to the browser, a link whose contents have
+   * all been deleted — and it removes the link along with them. Measured, and
+   * it was the right words with the link gone out of the article.
+   *
+   * So an edit covering the WHOLE text of an inline tag is refused. Changing
+   * part of it is fine, and that is what nearly every rule does: the comma,
+   * the hyphen, the first letter of a linked list item. */
+  const INLINE_TAGS = 'a, em, i, strong, b, sup, sub, abbr, code, mark';
+
+  function wouldEmpty(node, from, to) {
+    const el = node.parentElement?.closest(INLINE_TAGS);
+    if (!el || el.children.length) return false;
+    return node === el.firstChild && node === el.lastChild
+      && from === 0 && to === (node.nodeValue || '').length;
+  }
+
   /* Taking a hyphen out is a deletion, not an insertion of nothing:
      `insertText` with an empty string is a no-op in some browsers, and a
-     no-op that reports success is worse than a refusal. */
-  /* `html` is for one case and one value — see `spaceBeforeCitation`.
-     Measured, not assumed: `insertText` with a space at the end of a text
-     node writes a NON-BREAKING space, because a plain one would collapse
-     where it stands and the browser is being helpful. `insertHTML` with the
-     same character writes the character. */
+     no-op that reports success is worse than a refusal.
+
+     `html` is for one case and one value — see `spaceBeforeCitation`. Measured
+     as well: `insertText` with a space at the end of a run of text writes a
+     NON-BREAKING space, the browser being helpful about a space that would
+     otherwise collapse. `insertHTML` with the same character writes the
+     character. */
   const writeSpot = (spot) => spot.insert
     ? runCommand(spot.target, spot.html ? 'insertHTML' : 'insertText', spot.insert)
     : runCommand(spot.target, 'delete');
 
-  function writeText(range, before, after, edits) {
+  const CROSSES = 'that change crosses the markup — fix it by hand';
+
+  function planText(range, before, after, edits) {
     const pieces = piecesOf(range);
 
     /* One edit if one will do, and nearly always one will: the comma, the
        hyphen, the single letter. */
     const one = place(pieces, narrow(before, after));
-    if (one) return writeSpot(one);
+    if (one) return { spots: [one] };
 
     /* Otherwise the fix's own account of what changes — which for the
        bracketed e.g. is two single characters at either end of a phrase with
@@ -1582,16 +1735,20 @@
        already touched is counted in a node that may no longer be there. Edits
        sharing a node are the case `narrow` above already covers, and if that
        was refused for crossing the markup then these would be too. */
-    if (!edits || edits.length < 2) return 'that change crosses the markup — fix it by hand';
+    if (!edits || edits.length < 2) return { trouble: CROSSES };
 
     const spots = edits.map((e) => place(pieces, e));
-    if (spots.some((spot) => !spot)) return 'that change crosses the markup — fix it by hand';
+    if (spots.some((spot) => !spot)) return { trouble: CROSSES };
     if (new Set(spots.map((spot) => spot.target.startContainer)).size !== spots.length) {
-      return 'that change crosses the markup — fix it by hand';
+      return { trouble: CROSSES };
     }
 
     spots.sort((a, b) => b.at - a.at);
-    for (const spot of spots) {
+    return { spots };
+  }
+
+  function writeText(plan) {
+    for (const spot of plan.spots) {
       const trouble = writeSpot(spot);
       if (trouble) return trouble;
     }

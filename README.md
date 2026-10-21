@@ -62,7 +62,8 @@ article_type                                            └─  the ones missing
 - [Nothing to lint](#nothing-to-lint)
 - [Working through the findings](#working-through-the-findings)
 - [The ones with one right answer](#the-ones-with-one-right-answer)
-  - [Which nineteen](#which-nineteen)
+  - [Which twenty](#which-twenty)
+  - [Spelling out an acronym](#spelling-out-an-acronym)
   - [The three about the markup](#the-three-about-the-markup)
   - [What it will not do](#what-it-will-not-do)
 - [Proper nouns and acronyms](#proper-nouns-and-acronyms)
@@ -322,9 +323,9 @@ the only thing selected and replaced was one character of punctuation. A change 
 to cross a tag — the hyphen of `post<em>-</em>biopsy`, say — is refused in so many words rather
 than flattened into plain text.
 
-### Which nineteen
+### Which twenty
 
-Fifteen of them change the words:
+Sixteen of them change the words:
 
 | Check | What it writes |
 | :-- | :-- |
@@ -343,6 +344,7 @@ Fifteen of them change the words:
 | Ranges | the word off: `between 10-17` → `10-17` |
 | Spacing | the missing space after a full stop |
 | En Dash | `–` → `-` |
+| Acronyms | the expansion at the first use — see [below](#spelling-out-an-acronym) |
 
 And one puts a space in front of a reference marker — `intramural<sup>11</sup>` →
 `intramural <sup>11</sup>` — which is a place rather than a change to any word. Only where the
@@ -364,12 +366,52 @@ two different text nodes get there without the link being selected; a single rep
 have flattened it. Where a fix takes two edits it takes two presses of <kbd>Ctrl</kbd> +
 <kbd>Z</kbd> to undo. Every other rule is one of each.
 
+One more guard belongs with the other two, and it was measured rather than guessed. An edit
+covering the **whole** text of an inline tag is refused. `<a>PSMA</a>` with the whole of PSMA
+replaced is, to the browser, a link whose contents have all been deleted, and it removes the link
+along with them — the right words, with the link gone out of the article. Changing *part* of a
+tag's text is fine, which is what nearly every rule does: the comma, the hyphen, the first letter
+of a linked list item.
+
 List Caps refuses an item that begins with an acronym, because `MRI findings` would come back as
 `mRI findings`. It cannot tell you whether `Balthazar` is a name — but <kbd>p</kbd> is on the bar
 beside it, and that is the other answer.
 
 Latin reads the replacement out of the linter's own message rather than keeping a table of its
 own, which is why it cannot drift away from what the linter is asking for.
+
+### Spelling out an acronym
+
+`'EGFR' has no definition. Spell it out if it's unfamiliar to the audience.` is the commonest
+finding the linter has — about a third of everything it reports — and the one thing a script
+cannot work out for itself is what the letters stand for.
+
+[`acronym-expansions.txt`](acronym-expansions.txt) is where it is told. One per line:
+
+```
+EGFR = epidermal growth factor receptor
+```
+
+With that line in the file, pressing <kbd>f</kbd> on the **first** use of EGFR in an article
+writes `epidermal growth factor receptor (EGFR)` in its place.
+
+The first use, and no other. The check reports every occurrence: of 141 acronym findings across
+twenty-six articles, 76 were a repeat of one already reported higher up the same article, and one
+article said `PSMA` eight times. Spelling it out at the fifth would have the article define a
+word it has been using for three paragraphs. Written at the first, the rest answer themselves.
+
+**The file ships empty.** What an acronym stands for is a fact about medicine and about the house
+style, and the expansion goes into somebody's article word for word — that is a thing for an
+editor to write down. Until a line is added the check is offered no fix, which is what it had
+before the file existed.
+
+Leave out anything that is not certain. `RV` is the right ventricle in one article and the
+residual volume in another, and an acronym whose expansion depends on which article it is in does
+not belong in a file that cannot see the article.
+
+This is not `acronyms.txt`, and the two are opposite sets: that file holds the acronyms that need
+no spelling out at all, and a word in there never reaches the walk. This one is for the ones that
+do.
 
 ### The three about the markup
 
