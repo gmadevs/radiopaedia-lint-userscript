@@ -27,5 +27,51 @@
 # out at all, and a word in there never reaches the walk. This one is for the
 # ones that do.
 #
+# Which means names do not belong here. A score, a society, a trial or a
+# reporting system — APACHE, ASIA, WFNS, RSNA, UICC, BI-RADS, PI-RADS,
+# NINCDS-ADRDA — is not an abbreviation with an expansion to write into a
+# sentence; it is a name nobody spells out, and it belongs in `acronyms.txt`
+# so the finding is not shown at all.
+#
 # `#` starts a comment, blank lines are ignored, and the acronym is matched
 # without regard to case or spacing.
+
+# Every line below came from a finding the linter actually reported, on
+# twenty-six articles, that `acronyms.txt` does not already hide. Spelling is
+# Radiopaedia's: British, and taken from how the articles themselves write the
+# words — oedema, haemosiderin, tumour, standardised, leukoencephalopathy.
+
+# ——— Imaging and intervention ———
+
+PSIR = phase-sensitive inversion recovery
+SSFP = steady-state free precession
+FSE = fast spin echo
+EPI = echo-planar imaging
+SPIO = superparamagnetic iron oxide
+SUV = standardised uptake value
+PSMA = prostate-specific membrane antigen
+RFA = radiofrequency ablation
+FNA = fine needle aspiration
+
+# ——— Disease and anatomy ———
+
+TB = tuberculosis
+HBV = hepatitis B virus
+HCV = hepatitis C virus
+NMOSD = neuromyelitis optica spectrum disorder
+SEL = slowly expanding lesion
+PML-IRIS = progressive multifocal leukoencephalopathy immune reconstitution inflammatory syndrome
+ARIA-E = amyloid-related imaging abnormalities with oedema
+ARIA-H = amyloid-related imaging abnormalities with haemosiderin deposition
+UIP = usual interstitial pneumonia
+NSIP = non-specific interstitial pneumonia
+SVC = superior vena cava
+
+# ——— Laboratory, molecular and pharmacological ———
+
+RNA = ribonucleic acid
+TNF = tumour necrosis factor
+NMDA = N-methyl-D-aspartate
+JAK = Janus kinase
+ACE = angiotensin-converting enzyme
+NSAID = non-steroidal anti-inflammatory drug

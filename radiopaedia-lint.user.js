@@ -71,9 +71,11 @@
  *
  * `acronym-expansions.txt` is a third file and the opposite of the second:
  * `acronyms.txt` holds the ones that need no spelling out, and that one holds
- * what the letters stand for, for the ones that do. It ships empty, because
- * what an acronym expands to is a fact about medicine that goes into somebody's
- * article word for word.
+ * what the letters stand for, for the ones that do. What goes in it is a fact
+ * about medicine that will be written into somebody's article word for word,
+ * so the bar is certainty: an acronym that means one thing in one article and
+ * another in the next — RV, ACC, AP — is left out, and stays a finding to
+ * answer by hand.
  *
  * `proper-nouns.txt` and `acronyms.txt`, next to this file in the repository,
  * are the lists of the ones we have met; a finding one of them answers never
@@ -264,11 +266,12 @@
    * in `acronyms.txt` never reaches the walk at all — and keeping them apart
    * is what keeps either file readable by the person editing it.
    *
-   * It ships with no entries in it. What an acronym stands for is a fact
-   * about medicine and about the house style, and the expansion goes into
-   * somebody's article word for word; that is a thing for an editor to write
-   * down, not for this script to guess. Until a line is added the check is
-   * offered no fix, which is exactly what it was before this existed. */
+   * What an acronym stands for is a fact about medicine and about the house
+   * style, and the expansion goes into somebody's article word for word, so
+   * nothing goes in that is not certain: an acronym whose expansion depends on
+   * which article it is in is left out, and stays a finding to answer by hand.
+   * An acronym the file does not name is offered no fix, which is exactly what
+   * the check had before this existed. */
   const EXPANSIONS = {
     file: 'acronym-expansions.txt',
     cache: 'rlx-expansions',

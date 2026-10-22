@@ -400,14 +400,22 @@ twenty-six articles, 76 were a repeat of one already reported higher up the same
 article said `PSMA` eight times. Spelling it out at the fifth would have the article define a
 word it has been using for three paragraphs. Written at the first, the rest answer themselves.
 
-**The file ships empty.** What an acronym stands for is a fact about medicine and about the house
-style, and the expansion goes into somebody's article word for word — that is a thing for an
-editor to write down. Until a line is added the check is offered no fix, which is what it had
-before the file existed.
+It starts with twenty-six entries, every one of them taken from a finding the linter actually
+reported across twenty-six articles and that `acronyms.txt` does not already hide — PSMA, TB,
+NMOSD, SPIO, PSIR, ARIA-E and the rest. That answers 28 of the 59 first uses in that sample, in
+eleven of the twenty articles. The spelling is Radiopaedia's own, taken from how the articles
+write the words: *oedema*, *haemosiderin*, *tumour*, *standardised*.
 
-Leave out anything that is not certain. `RV` is the right ventricle in one article and the
-residual volume in another, and an acronym whose expansion depends on which article it is in does
-not belong in a file that cannot see the article.
+**Nothing goes in that is not certain.** The expansion is written into somebody's article word for
+word, so an acronym whose expansion depends on which article it is in is left out: `RV` is the
+right ventricle in one and the residual volume in another, `ACC` is the American College of
+Cardiology in one and adenoid cystic carcinoma in another, `AP` is anteroposterior or acute
+pancreatitis. Those stay findings to answer by hand, which is what they were before.
+
+Names do not go in either. A score, a society, a trial or a reporting system — APACHE, ASIA,
+WFNS, RSNA, UICC, BI-RADS, PI-RADS — is not an abbreviation with an expansion to write into a
+sentence; it is a name nobody spells out, and it belongs in `acronyms.txt` so the finding is not
+shown at all. Fourteen of the fifty-six uncovered acronyms in the sample are that.
 
 This is not `acronyms.txt`, and the two are opposite sets: that file holds the acronyms that need
 no spelling out at all, and a word in there never reaches the walk. This one is for the ones that
