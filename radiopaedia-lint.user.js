@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.9.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of — a Fix button writes it into the editor, the smallest change that does it and nothing else. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
+// @version      3.10.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -72,10 +72,13 @@
  * `acronym-expansions.txt` is a third file and the opposite of the second:
  * `acronyms.txt` holds the ones that need no spelling out, and that one holds
  * what the letters stand for, for the ones that do. What goes in it is a fact
- * about medicine that will be written into somebody's article word for word,
- * so the bar is certainty: an acronym that means one thing in one article and
- * another in the next — RV, ACC, AP — is left out, and stays a finding to
- * answer by hand.
+ * about medicine that will be written into somebody's article word for word.
+ *
+ * An acronym that means two things gets two lines — `RV = right ventricle`
+ * and `RV = residual volume` — and `f` asks which before it writes anything.
+ * Nothing is guessed from the article, because the thing that would have to
+ * be read to guess is the sentence. `e` is how a meaning is proposed, the
+ * same gesture as `p` next to it and the other answer to the same finding.
  *
  * `proper-nouns.txt` and `acronyms.txt`, next to this file in the repository,
  * are the lists of the ones we have met; a finding one of them answers never
@@ -216,6 +219,7 @@
   const LIST_MAX = 256 * 1024;      // a list of words; anything bigger is not one
   const PROPOSED_KEY = 'rlx-proposed';   // {word: the day you proposed it}
   const DISPUTES_KEY = 'rlx-disputes';   // {article|finding: what you said about it}
+  const MEANINGS_KEY = 'rlx-meanings';   // {acronym: the day you proposed a meaning for it}
 
   /* One entry per check a list answers. `condition` is what the API calls the
    * check; `match` is asked whether the word the linter quoted is already on
@@ -285,7 +289,22 @@
    * the file can be written in the case anybody likes and still answer the
    * acronym as the article spells it. An expansion with nothing after the
    * equals sign is a line somebody started and did not finish, and is not an
-   * instruction to replace a word with nothing. */
+   * instruction to replace a word with nothing.
+   *
+   * One acronym may have SEVERAL lines, and that is the whole provision for
+   * the words that mean two things:
+   *
+   *     RV = right ventricle
+   *     RV = residual volume
+   *
+   * Which makes the value a list rather than a string. A word with one meaning
+   * is a list of one and is written in without asking; a word with more is a
+   * question, and `f` asks it — see `openChoice`. Nothing is guessed from the
+   * article, because the thing that would have to be read to guess is the
+   * sentence, and a file cannot see it.
+   *
+   * The same meaning written twice is one meaning: the file is edited by hand
+   * by several people and a duplicate is a mistake, not a second option. */
   function parseExpansions(text) {
     const out = new Map();
     for (const line of String(text ?? '').split(/\r?\n/)) {
@@ -294,7 +313,11 @@
       if (at < 1) continue;
       const word = flat(bare.slice(0, at));
       const says = tidy(bare.slice(at + 1));
-      if (word && says) out.set(word, says);
+      if (!word || !says) continue;
+
+      const already = out.get(word);
+      if (!already) out.set(word, [says]);
+      else if (!already.some((one) => fold(one) === fold(says))) already.push(says);
     }
     return out;
   }
@@ -314,6 +337,7 @@
         }
       }
       EXPANSIONS.entries = text == null ? null : parseExpansions(text);
+      if (EXPANSIONS.entries) forgetMeanings([...EXPANSIONS.entries.keys()]);
       return EXPANSIONS.entries;
     })();
     return EXPANSIONS.asked;
@@ -698,6 +722,38 @@
     }
     if (!changed) return;
     try { localStorage.setItem(PROPOSED_KEY, JSON.stringify(all)); } catch { /* never mind */ }
+  }
+
+  /* The acronyms you have offered a meaning for, and the day you did. The
+   * same bargain as `proposed()` next door, kept in its own store because the
+   * two files are different files: a word can be waiting on a pull request to
+   * `acronyms.txt` and on another to `acronym-expansions.txt` at the same
+   * time, and they are opposite claims about it.
+   *
+   * Keyed in `flat()` shape, which is also the shape the expansions file is
+   * read into — so a meaning that has landed can be recognised and forgotten
+   * without a second pass over the words. */
+  function proposedMeanings() {
+    try { return JSON.parse(localStorage.getItem(MEANINGS_KEY) || '{}') || {}; }
+    catch { return {}; }
+  }
+
+  function rememberMeaning(word) {
+    const all = proposedMeanings();
+    all[flat(word)] = new Date().toISOString().slice(0, 10);
+    try { localStorage.setItem(MEANINGS_KEY, JSON.stringify(all)); }
+    catch { /* this session only */ }
+  }
+
+  function forgetMeanings(words) {
+    const all = proposedMeanings();
+    let changed = false;
+    for (const word of words) {
+      if (word in all) { delete all[word]; changed = true; }
+    }
+    if (!changed) return;
+    try { localStorage.setItem(MEANINGS_KEY, JSON.stringify(all)); }
+    catch { /* never mind */ }
   }
 
   /* How many findings each list answered, and how to say it: "2 known names",
@@ -1296,9 +1352,28 @@
    * for word, which is why the file says to put nothing in it that is not
    * certain. */
   function spellOut(text, f) {
-    const says = EXPANSIONS.entries?.get(flat(text));
-    return says && firstUse(f) ? `${says} (${text})` : null;
+    const says = meanings(text);
+    if (!says.length || !firstUse(f)) return null;
+    // One meaning is written in; several are a question, and `f.chosen` is
+    // your answer to it. Until that is there, this has nothing to say.
+    const one = says.length === 1 ? says[0] : f.chosen;
+    return one && says.includes(one) ? `${one} (${text})` : null;
   }
+
+  // What the file says this acronym stands for. Never `null`: "we could not
+  // read the file" and "the file does not name it" are both nothing to offer.
+  const meanings = (text) => EXPANSIONS.entries?.get(flat(text)) || [];
+
+  /* Fixes that are a question before they are an answer.
+   *
+   * One table because one condition needs it, and it is here as a table
+   * rather than an `if` inside `proposal` so that the next one is a line. */
+  const CHOICES = {
+    'Radiopaedia.Acronyms': (text, f) => {
+      const says = meanings(text);
+      return says.length > 1 && firstUse(f) ? says : null;
+    },
+  };
 
   /* Is this the first finding in the article quoting this word?
    *
@@ -1535,6 +1610,19 @@
       let before;
       try { before = range.toString(); } catch { return null; }
       if (!before) return null;
+
+      /* More than one reading, and none of them picked yet: there is nothing
+         to write until you say which. The button still appears, because there
+         IS a fix here — it is just that the next press opens the question
+         rather than the editor. */
+      const pick = CHOICES[f.condition]?.(before, f);
+      if (pick && !pick.includes(f.chosen)) {
+        /* Asked again where the answer is not one of the readings on offer.
+           It cannot be, the way `openChoice` works — but a stale answer, to a
+           file that has been edited since, should put the question back rather
+           than quietly leave the finding with no fix at all. */
+        return { say: `${pick.length} meanings — f to choose`, choose: pick };
+      }
 
       /* A fix answers with the words as they should read, or — where one
          replacement would have to span a link — with the handful of separate
@@ -2261,6 +2349,40 @@
     }
     #rlx-cite-note button:hover { background:rgba(127,127,127,.18); }
 
+    /* ————— the choice between two meanings.
+
+       Same shape as the log below and for the same reason — it is a question,
+       and a question cannot be asked by the note, which fades and lets the
+       pointer through the moment you reach for it. Smaller, because it holds
+       a handful of lines rather than a form. */
+    #rlx-pick {
+      position:fixed; inset:0; z-index:100000; display:flex;
+      align-items:center; justify-content:center; padding:1em;
+      background:rgba(17,24,39,.42);
+      font:14px/1.45 system-ui,-apple-system,sans-serif;
+    }
+    #rlx-pick .rlx-p-panel {
+      width:min(34em, 94vw); max-height:86vh; overflow:auto;
+      padding:.9em 1.1em 1em; border-radius:12px;
+      background:#fff; color:#111; box-shadow:0 10px 40px rgba(0,0,0,.4);
+    }
+    #rlx-pick .rlx-p-head { font-size:12px; text-transform:uppercase;
+      letter-spacing:.04em; opacity:.6; }
+    #rlx-pick .rlx-p-word { margin-top:.2em; font-weight:700; }
+    #rlx-pick .rlx-p-list { margin-top:.7em; display:flex; flex-direction:column; gap:.35em; }
+    #rlx-pick button {
+      display:flex; align-items:baseline; gap:.6em; width:100%; text-align:left;
+      padding:.5em .65em; border:1px solid rgba(127,127,127,.3); border-radius:8px;
+      background:transparent; color:inherit; font:inherit; cursor:pointer;
+    }
+    #rlx-pick button:hover, #rlx-pick button:focus-visible {
+      background:rgba(37,99,235,.12); border-color:#2563eb; outline:none;
+    }
+    #rlx-pick .rlx-p-key { flex:0 0 auto; width:1.4em; height:1.4em; border-radius:4px;
+      background:rgba(127,127,127,.2); font-size:11px; font-weight:700;
+      display:inline-flex; align-items:center; justify-content:center; }
+    #rlx-pick .rlx-p-hint { margin-top:.7em; font-size:12px; opacity:.6; }
+
     /* ————— the disagreement log.
 
        The one box in this script you type into, and that is why it is a box of
@@ -2346,6 +2468,7 @@
       #rlx-note .rlx-alert { border-color:rgba(251,191,36,.4); background:rgba(245,158,11,.18);
         color:#fcd34d; }
       #rlx-cite-note { background:#1f2937; color:#f3f4f6; }
+      #rlx-pick .rlx-p-panel { background:#1f2937; color:#f3f4f6; }
       #rlx-dispute .rlx-d-panel { background:#1f2937; color:#f3f4f6; }
       #rlx-dispute .rlx-d-snippet { border-left-color:#4b5563; color:#d1d5db; }
       #rlx-dispute .rlx-d-about { border-left-color:#6b7280; }
@@ -2392,6 +2515,7 @@
       <button data-act="fix" title="Write the correction into the editor (f)">&#9998; Fix</button>
       <button data-act="copy" title="Copy the message (c)">Copy</button>
       <button data-act="propose" title="Add this to the shared list (p)">+ Name</button>
+      <button data-act="meaning" title="Say what this acronym stands for (e)">+ Meaning</button>
       <button data-act="dispute" title="The rule is wrong here: write it down (d)">&#9873; Log</button>
       <button data-act="reload" title="Ask the linter again">Re-lint</button>
       <button data-act="flip" class="rlx-flip" title="Move the bar to the other edge (t)">&#8645;</button>
@@ -2433,6 +2557,7 @@
     if (!stage.live) return;
     stage.live = false;
     closeDispute();
+    closePick();
     stage.layer?.remove(); stage.note?.remove(); stage.bar?.remove();
     removeEventListener('scroll', scheduleDraw, true);
     removeEventListener('resize', scheduleDraw);
@@ -2714,6 +2839,21 @@
         ? `'${f.propose}' was proposed for the ${on.of} on ${when} — waiting for it to land.`
         : `'${f.propose}' is not in the ${on.of}. Press p to add it.`;
       stage.note.appendChild(line);
+    }
+
+    /* A meaning offered and not landed yet. The same sentence the lists get,
+       for the same reason: between the click and the merge there is a pull
+       request, and "have I already done this one?" should not mean "go and
+       look at your pull requests". */
+    if (!settled && f.condition === 'Radiopaedia.Acronyms' && f.words) {
+      const when = proposedMeanings()[flat(f.words)];
+      if (when) {
+        const line = document.createElement('div');
+        line.className = 'rlx-hint';
+        line.textContent =
+          `A meaning for '${f.words}' was proposed on ${when} — waiting for it to land.`;
+        stage.note.appendChild(line);
+      }
     }
 
     // Settled, and still on screen: the one thing left to say is how to leave.
@@ -3012,6 +3152,19 @@
       add.title = on ? `Add '${offer}' to the shared ${on.of} (p)` : '';
     }
 
+    /* Offered on an acronym the expansions file does not name yet, on its
+       first use, once. Not where the file could not be read at all: that is
+       "we do not know", and inviting a line for a word that may well be in
+       there already is the same mistake `propose` avoids next door. */
+    const meant = stage.bar.querySelector('[data-act="meaning"]');
+    if (meant) {
+      const ask = !!f && f.state === 'open' && f.condition === 'Radiopaedia.Acronyms'
+        && !!f.words && EXPANSIONS.entries != null && !meanings(f.words).length
+        && firstUse(f) && !proposedMeanings()[flat(f.words)];
+      meant.hidden = !ask;
+      meant.title = ask ? `Say what '${f.words}' stands for (e)` : '';
+    }
+
     /* How many findings you have written off as the rule's fault, on the
      * button that opens them. A log you cannot see the size of is a log you
      * forget you are keeping — and the whole point of it is to be read back
@@ -3072,9 +3225,25 @@
   function undo() {
     const p = stage.history.pop();
     if (!p) return;
+    // The meaning you picked belonged to the fix, not to the finding: a
+    // reopened finding asks again rather than quietly reusing the answer.
+    stage.findings[p.i].chosen = null;
     stage.findings[p.i].state = p.state;
     anchor(stage.findings, stage.roots);
     goTo(p.i);
+  }
+
+  /* What follows a fix, however it was asked for. Kept apart from `act`
+   * because the choice between several meanings is answered in a panel, long
+   * after the keystroke that opened it, and the two paths have to end the
+   * same way. */
+  function settleFix(k, f, trouble) {
+    if (trouble) { stage.said = trouble; updateBar(); return; }
+    stage.history.push({ i: k, state: f.state });
+    f.state = 'done';
+    f.range = null;
+    draw();
+    updateBar();
   }
 
   function act(what) {
@@ -3100,16 +3269,15 @@
        * takes the text back — the two are separate on purpose, because the
        * editor's undo is the editor's and this script does not own it. */
       case 'fix': {
-        const f = stage.findings[stage.i];
+        const k = stage.i;
+        const f = stage.findings[k];
         if (!f) return;
-        const trouble = applyFix(f);
-        if (trouble) { stage.said = trouble; updateBar(); return; }
-        stage.history.push({ i: stage.i, state: f.state });
-        f.state = 'done';
-        f.range = null;
-        draw();
-        updateBar();
-        return;
+        const p = proposal(f);
+        if (!p) { stage.said = 'no fix for this one — it needs a person'; updateBar(); return; }
+        // A fix that is a question first: nothing is written until it is
+        // answered, and the answer comes back through `settleFix` as well.
+        if (p.choose) return openChoice(k, f, p.choose);
+        return settleFix(k, f, p.apply());
       }
       /* The name to the clipboard, the file to a new tab. Two halves of one
        * gesture: GitHub has no way to prefill the contents of a file you are
@@ -3134,6 +3302,22 @@
        * in hand: with the walk over it opens on the log alone, which is where
        * Copy Markdown and Download CSV live. */
       case 'dispute': return openDispute();
+      /* The counterpart of `propose`, and the other answer to the same
+       * finding: `p` says this acronym needs no spelling out, `e` says here is
+       * what it spells out to. Same gesture either way — the line goes to the
+       * clipboard, the file opens on GitHub, and what reaches the repository
+       * is what you type into it. `ACRONYM = ` rather than the bare word,
+       * because the line wants finishing and this is half of it. */
+      case 'meaning': {
+        const f = stage.findings[stage.i];
+        if (!f || f.condition !== 'Radiopaedia.Acronyms' || !f.words) return;
+        navigator.clipboard?.writeText(`${f.words} = `);
+        rememberMeaning(f.words);
+        window.open(EXPANSIONS.editUrl, '_blank', 'noopener');
+        updateBar();
+        placeNote();
+        return;
+      }
       case 'flip': return setBarTop(!barIsTop());
       case 'reload': return runLint(stage.slug, { force: true });
       case 'close': return destroyStage();
@@ -3155,7 +3339,7 @@
      * which are exempt from `isTyping` further down precisely so that they
      * work inside the editor. The box has its own two keys and answers for
      * itself; Esc there closes the box, not the stage. */
-    if (disputeIsOpen()) return;
+    if (disputeIsOpen() || pickBox) return;
 
     /* With Alt the shortcuts work even while you are typing in the editor.
      *
@@ -3170,7 +3354,7 @@
      * those characters from being typed. */
     if (e.altKey) {
       const m = { KeyJ: 'next', KeyK: 'prev', KeyS: 'done', KeyX: 'ignore',
-                  KeyD: 'dispute', KeyF: 'fix',
+                  KeyD: 'dispute', KeyF: 'fix', KeyE: 'meaning',
                   Enter: 'done', NumpadEnter: 'done' }[e.code];
       if (m) { e.preventDefault(); act(m); }
       return;
@@ -3178,8 +3362,8 @@
     if (isTyping(e.target)) return;
 
     const m = { j: 'next', k: 'prev', s: 'done', x: 'ignore', u: 'undo',
-                c: 'copy', p: 'propose', d: 'dispute', f: 'fix', t: 'flip',
-                Escape: 'close' }[e.key];
+                c: 'copy', p: 'propose', d: 'dispute', f: 'fix', e: 'meaning',
+                t: 'flip', Escape: 'close' }[e.key];
     if (m) { e.preventDefault(); act(m); }
   }
 
@@ -3373,6 +3557,78 @@
   }
 
   // ————————————————————————————————————————————————— and the box you type in
+
+  /* Which of them did you mean?
+   *
+   * Only ever asked where the file itself says the acronym has more than one
+   * meaning. Nothing here reads the article to guess, and nothing defaults:
+   * the whole reason `RV` has two lines in that file is that no rule can tell
+   * the right ventricle from the residual volume without reading the sentence,
+   * and the person reading the sentence is you.
+   *
+   * Esc and the dim behind it both mean no, and no writes nothing. */
+  let pickBox = null;
+
+  function closePick() {
+    pickBox?.remove();
+    pickBox = null;
+  }
+
+  function openChoice(k, f, says) {
+    if (pickBox) return;
+
+    const el = document.createElement('div');
+    pickBox = el;
+    el.id = 'rlx-pick';
+    el.innerHTML = `
+      <div class="rlx-p-panel" role="dialog" aria-label="Which meaning">
+        <div class="rlx-p-head">spell it out as</div>
+        <div class="rlx-p-word"></div>
+        <div class="rlx-p-list"></div>
+        <div class="rlx-p-hint">1 to ${Math.min(says.length, 9)}, or Esc to leave it.</div>
+      </div>`;
+    el.querySelector('.rlx-p-word').textContent = f.words || '';
+
+    const list = el.querySelector('.rlx-p-list');
+    says.forEach((one, i) => {
+      const b = document.createElement('button');
+      b.dataset.says = one;
+      const key = document.createElement('span');
+      key.className = 'rlx-p-key';
+      key.textContent = i < 9 ? String(i + 1) : '·';
+      const words = document.createElement('span');
+      // What would actually be written, not the expansion on its own: the
+      // acronym stays in the text and the brackets are part of the answer.
+      words.textContent = `${one} (${f.words})`;
+      b.append(key, words);
+      list.appendChild(b);
+    });
+
+    const take = (one) => {
+      if (!one) return;
+      closePick();
+      f.chosen = one;
+      settleFix(k, f, applyFix(f));
+    };
+
+    el.addEventListener('click', (e) => {
+      if (e.target === el) return closePick();
+      take(e.target.closest('[data-says]')?.dataset.says);
+    });
+
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return closePick(); }
+      const n = Number(e.key);
+      if (n >= 1 && n <= says.length && n <= 9) {
+        e.preventDefault();
+        e.stopPropagation();
+        take(says[n - 1]);
+      }
+    }, true);
+
+    document.body.appendChild(el);
+    list.firstElementChild?.focus();
+  }
 
   let disputeBox = null;
   const disputeIsOpen = () => !!disputeBox;

@@ -254,6 +254,7 @@ linter should take from you while you are rewriting the sentence it is complaini
 | Copy the message | <kbd>c</kbd> | — |
 | Write the correction in | <kbd>f</kbd> | <kbd>Alt</kbd> + <kbd>f</kbd> |
 | Add a name or an acronym | <kbd>p</kbd> | — |
+| Say what an acronym stands for | <kbd>e</kbd> | <kbd>Alt</kbd> + <kbd>e</kbd> |
 | Write down that the rule is wrong | <kbd>d</kbd> | <kbd>Alt</kbd> + <kbd>d</kbd> |
 | Move the bar to the other edge | <kbd>t</kbd> | — |
 | Close | <kbd>Esc</kbd> | — |
@@ -402,9 +403,36 @@ word it has been using for three paragraphs. Written at the first, the rest answ
 
 It starts with twenty-six entries, every one of them taken from a finding the linter actually
 reported across twenty-six articles and that `acronyms.txt` does not already hide — PSMA, TB,
-NMOSD, SPIO, PSIR, ARIA-E and the rest. That answers 28 of the 59 first uses in that sample, in
-eleven of the twenty articles. The spelling is Radiopaedia's own, taken from how the articles
+NMOSD, SPIO, PSIR, ARIA-E and the rest. With the fourteen names moved into `acronyms.txt` where
+they belong, 76 acronym findings still reach the walk in that sample and 45 of them are a first
+use — the only place a fix is offered — and these entries answer 28 of those, in eleven of the
+eighteen articles. The spelling is Radiopaedia's own, taken from how the articles
 write the words: *oedema*, *haemosiderin*, *tumour*, *standardised*.
+
+**An acronym that means two things gets two lines.**
+
+```
+RV = right ventricle
+RV = residual volume
+```
+
+Then <kbd>f</kbd> asks which one before it writes anything, and each choice shows the sentence it
+would put in — *right ventricle (RV)*, *residual volume (RV)*. <kbd>1</kbd> to <kbd>9</kbd> pick
+one, <kbd>Esc</kbd> leaves it alone, and leaving it alone writes nothing. Nothing is guessed from
+the article: the thing that would have to be read to guess is the sentence, and a file cannot see
+it, which is the whole reason it asks. <kbd>u</kbd> reopens the finding and asks again rather
+than reusing the answer.
+
+Two lines are better than none, but not better than one right one. Add the second meaning when
+the acronym really is used both ways in Radiopaedia articles, not to cover every reading a
+dictionary gives — each one is a question to answer every time that acronym comes up.
+
+**To add one, press <kbd>e</kbd>** on the finding. `RV = ` goes to the clipboard and the file
+opens on GitHub, where you finish the line and propose the change — the same gesture as
+<kbd>p</kbd> beside it, and the other answer to the same finding: <kbd>p</kbd> says this acronym
+needs no spelling out at all, <kbd>e</kbd> says here is what it spells out to. What you proposed
+is remembered, so the same acronym is not offered again on the next article while the pull request
+is open.
 
 **Nothing goes in that is not certain.** The expansion is written into somebody's article word for
 word, so an acronym whose expansion depends on which article it is in is left out: `RV` is the
@@ -412,10 +440,12 @@ right ventricle in one and the residual volume in another, `ACC` is the American
 Cardiology in one and adenoid cystic carcinoma in another, `AP` is anteroposterior or acute
 pancreatitis. Those stay findings to answer by hand, which is what they were before.
 
-Names do not go in either. A score, a society, a trial or a reporting system — APACHE, ASIA,
-WFNS, RSNA, UICC, BI-RADS, PI-RADS — is not an abbreviation with an expansion to write into a
-sentence; it is a name nobody spells out, and it belongs in `acronyms.txt` so the finding is not
-shown at all. Fourteen of the fifty-six uncovered acronyms in the sample are that.
+Names do not go in either. A score, a society, a trial or a reporting system is not an
+abbreviation with an expansion to write into a sentence; it is a name nobody spells out, and it
+belongs in `acronyms.txt` so the finding is not shown at all. Fourteen of the fifty-six uncovered
+acronyms in the sample were that — APACHE, AIR, APPEND, ERICA, ASIA, WFNS, WASOG, RSNA, UICC,
+BI-RADS, PI-RADS, PRI-MUS, NINCDS-ADRDA and the `NOW` of cIMPACT-NOW — and they are in
+`acronyms.txt` now, beside NIHSS, TOAST and BT-RADS, which were already there.
 
 This is not `acronyms.txt`, and the two are opposite sets: that file holds the acronyms that need
 no spelling out at all, and a word in there never reaches the walk. This one is for the ones that

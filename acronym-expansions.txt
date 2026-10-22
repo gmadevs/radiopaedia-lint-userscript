@@ -18,10 +18,22 @@
 # words are a proper noun, British spelling, no full stops inside the acronym.
 # It goes into somebody's article exactly as it is written here.
 #
-# Nothing goes in that is not certain. 'RV' is the right ventricle in one
-# article and the residual volume in another, and an acronym whose expansion
-# depends on which article it is in does not belong in a file that cannot see
-# the article. Leave those out: they stay a finding to answer by hand.
+# An acronym that means two things gets two lines:
+#
+#   RV = right ventricle
+#   RV = residual volume
+#
+# and `f` asks which one before it writes anything. Nothing here is guessed
+# from the article — the thing that would have to be read to guess is the
+# sentence, and a file cannot see it, which is the whole reason it asks.
+#
+# So two lines are better than none, but they are not better than one right
+# one: add the second meaning when the acronym really is used both ways in
+# Radiopaedia articles, not to cover every reading a dictionary gives.
+#
+# Still nothing goes in that is not certain in SOME article. A reading nobody
+# would write here is one more question to answer every time the acronym comes
+# up.
 #
 # This is not `acronyms.txt`. That file is the acronyms that need no spelling
 # out at all, and a word in there never reaches the walk. This one is for the
@@ -35,6 +47,12 @@
 #
 # `#` starts a comment, blank lines are ignored, and the acronym is matched
 # without regard to case or spacing.
+#
+# To add one: the Lint bar offers it on the finding itself — press e, and
+# `ACRONYM = ` is copied and this file opens on GitHub, where you finish the
+# line and propose the change. The same gesture as p, which is the other
+# answer to the same finding: p says this acronym needs no spelling out at
+# all, e says here is what it spells out to.
 
 # Every line below came from a finding the linter actually reported, on
 # twenty-six articles, that `acronyms.txt` does not already hide. Spelling is

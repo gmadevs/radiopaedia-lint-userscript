@@ -57,6 +57,20 @@ AJCC        # American Joint Committee on Cancer
 TNM         # tumour, node, metastasis
 BT-RADS     # Brain Tumor Reporting and Data System 
 PE-RADS     # Pulmonary Embolism Reporting and Data System
+BI-RADS     # Breast Imaging Reporting and Data System
+PI-RADS     # Prostate Imaging Reporting and Data System
+PRI-MUS     # Prostate Risk Identification using Micro-UltraSound
+APACHE      # Acute Physiology and Chronic Health Evaluation
+AIR         # Appendicitis Inflammatory Response score
+APPEND      # APPEND score (appendicitis)
+ERICA       # Entorhinal cortex atrophy scale
+ASIA        # American Spinal Injury Association (impairment scale)
+WFNS        # World Federation of Neurosurgical Societies (grading)
+WASOG       # World Association of Sarcoidosis and Other Granulomatous Disorders
+RSNA        # Radiological Society of North America
+UICC        # Union for International Cancer Control
+NINCDS-ADRDA   # Alzheimer disease diagnostic criteria
+NOW         # The -NOW of cIMPACT-NOW, a consortium's updates
 
 # ——— Statistics ———
 

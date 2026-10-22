@@ -282,10 +282,12 @@ the rest, so it is held in memory for the life of the page and fetched again on 
 | `rlx-profile` | `{slug: the kind of article you said it was}` |
 | `rlx-hushed` | `{slug: [sections you said that article does not need]}` |
 | `rlx-proposed` | `{word: YYYY-MM-DD}`, the names and acronyms you have proposed, so the same one is not offered again while the pull request is open |
+| `rlx-meanings` | `{acronym: YYYY-MM-DD}`, the same thing for a meaning proposed for `acronym-expansions.txt` |
 | `rlx-disputes` | the findings you recorded as the rule's fault: the rule, the article, the line, the words, the linter's message, and what you wrote about why it does not hold |
 
-The last four are the only ones with anything of yours in them: article slugs you edited, section
-names you dismissed, words you met while editing, and sentences you wrote about rules.
+The last five are the only ones with anything of yours in them: article slugs you edited, section
+names you dismissed, words and acronyms you met while editing, and sentences you wrote about
+rules.
 `rlx-disputes` is the only one that holds prose of yours, and the only one with a button that
 copies it out — Copy Markdown and Download CSV, both of which hand it to you rather than send it
 anywhere. Worth knowing before you paste a
