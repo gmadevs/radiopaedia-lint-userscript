@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.12.1
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
+// @version      3.13.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -1674,6 +1674,7 @@
       if (planText(range, before, after, edits).trouble) return null;
       return {
         say: after,
+        before,          // for the comparison the note draws on hover
         apply: () => {
           const now = planText(range, before, after, edits);
           return now.trouble || writeText(now);
@@ -2286,6 +2287,12 @@
     #rlx-note .rlx-hint { margin-top:.4em; font-size:13px; opacity:.62; }
     #rlx-note .rlx-fix { margin-top:.4em; padding:.25em .5em; border-radius:6px;
       background:rgba(127,127,127,.14); font-weight:600; }
+    /* The two lines of a comparison. No grey box and no bold on these: the
+       washes are what is being read here, and a fill behind them fights. */
+    #rlx-note .rlx-fix-label { margin-top:.5em; font-size:12px; font-weight:600;
+      text-transform:uppercase; letter-spacing:1.1px; opacity:.55; }
+    #rlx-note .rlx-fix-was, #rlx-note .rlx-fix-now {
+      margin-top:.1em; padding:.1em 0; background:transparent; font-weight:400; }
     #rlx-note .rlx-snippet { margin-top:.4em; padding-left:.6em; border-left:2px solid #e5e7eb;
       color:#4b5563; font-style:italic; }
     /* Said only when the words cannot be found in the editor: the note has
@@ -2316,8 +2323,14 @@
       position:fixed; left:0; right:0; margin:0 auto; bottom:18px; z-index:99999;
       display:flex; align-items:center; gap:.45em; flex-wrap:wrap; justify-content:center;
       width:fit-content; max-width:min(64em, 96vw); padding:.5em .7em; border-radius:2px;
-      border:1px solid var(--rlx-edge);
-      background:var(--rlx-face); color:var(--rlx-text); box-shadow:var(--rlx-float);
+      /* Louder than the rest of the floating layer, and deliberately: this one
+         is always there while you work, over somebody's article, and it has to
+         be findable at a glance rather than merely separated from the page.
+         The purple along the top is theirs — the colour of their headings, and
+         of the word Lint at the other end of the bar. */
+      border:1px solid rgba(0,0,0,.3); border-top:3px solid var(--rlx-head);
+      background:var(--rlx-face); color:var(--rlx-text);
+      box-shadow:0 8px 28px rgba(0,0,0,.28);
       font:600 var(--rlx-size)/var(--rlx-line) var(--rlx-type);
     }
     /* Their ".btn-default", at the smaller padding a bar of a dozen of them
@@ -2454,9 +2467,10 @@
       background:rgba(127,127,127,.10); word-break:break-word; }
     /* The two words that differ, rather than the two paragraphs that contain
        them: a reference is eighty words long and the thing wrong with it is
-       usually one of them. */
-    #rlx-cite-note .rlx-was { background:rgba(220,38,38,.18); border-radius:2px; }
-    #rlx-cite-note .rlx-now { background:rgba(5,150,105,.20); border-radius:2px; }
+       usually one of them. Unscoped, because the note asks the same question
+       about a correction that the citation panel asks about a reference. */
+    .rlx-was { background:rgba(220,38,38,.18); border-radius:2px; }
+    .rlx-now { background:rgba(5,150,105,.20); border-radius:2px; }
     #rlx-cite-note .rlx-cite-acts { display:flex; gap:.4em; margin-top:.7em; flex-wrap:wrap; }
     #rlx-cite-note button {
       padding:3px 8px; border-radius:1px; border:1px solid transparent;
@@ -2602,6 +2616,7 @@
     history: [],      // for "undo": {i, state}
     layer: null, note: null, bar: null,
     said: null,       // what the last action had to say, until you move
+    diff: false,      // are you pointing at Fix?
     live: false,
   };
 
@@ -2647,6 +2662,18 @@
       if (what) act(what);
     });
 
+    /* Pointing at Fix asks what it would do, and the note answers. One pair of
+       listeners on the bar rather than a pair per button, the same way the
+       clicks are handled; `focusin` and `focusout` are there so that the
+       answer is not reserved for people using a mouse. */
+    const over = (e, on) => {
+      if (e.target.closest?.('[data-act="fix"]')) showDiff(on);
+    };
+    stage.bar.addEventListener('mouseover', (e) => over(e, true));
+    stage.bar.addEventListener('mouseout', (e) => over(e, false));
+    stage.bar.addEventListener('focusin', (e) => over(e, true));
+    stage.bar.addEventListener('focusout', (e) => over(e, false));
+
     addEventListener('scroll', scheduleDraw, true);
     addEventListener('resize', scheduleDraw);
     document.addEventListener('keydown', onKey, true);
@@ -2672,6 +2699,12 @@
     }
   }
 
+  function showDiff(on) {
+    if (stage.diff === on) return;
+    stage.diff = on;
+    placeNote();
+  }
+
   function destroyStage() {
     if (!stage.live) return;
     stage.live = false;
@@ -2683,7 +2716,7 @@
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('mousemove', onMove, true);
     stage.findings = []; stage.hidden = {}; stage.i = -1; stage.history = [];
-    stage.said = null;
+    stage.said = null; stage.diff = false;
   }
 
   // ———————————————————————————————————————————————— the all-clear banner
@@ -2893,6 +2926,14 @@
 
   const onMove = (e) => ghostNote(e, null);
 
+  // The small grey word over one of the two lines of a comparison.
+  function label(words) {
+    const el = document.createElement('div');
+    el.className = 'rlx-fix-label';
+    el.textContent = words;
+    return el;
+  }
+
   function placeNote() {
     const f = stage.findings[stage.i];
     if (!f || !stage.live) { if (stage.note) stage.note.hidden = true; return; }
@@ -2929,15 +2970,35 @@
     const would = proposal(f);
     const reads = would ? would.say : (!settled ? f.point?.fixed : null);
     if (reads) {
-      const fix = document.createElement('div');
-      fix.className = 'rlx-fix';
-      fix.style.color = c.ink;
-      fix.textContent = reads;
-      stage.note.appendChild(fix);
+      /* Point at Fix and the one line becomes two: the words as they stand
+         with what goes lit red, and the words as they would stand with what
+         arrives lit green. The same comparison the citation chips draw, off
+         the same `wordDiff` — printing both forms and leaving you to find the
+         difference is printing the problem twice.
+
+         Only where there is a before to compare against. Taking the italics
+         off a word changes no words at all, and two identical lines under a
+         red and a green label would be a comparison that says nothing. */
+      const runs = stage.diff && would?.before ? wordDiff(would.before, would.say) : null;
+      if (runs) {
+        stage.note.append(
+          label('as it reads'),
+          diffLine(runs, 'was', 'rlx-was', would.before, 'rlx-fix rlx-fix-was'),
+          label('as it would read'),
+          diffLine(runs, 'now', 'rlx-now', would.say, 'rlx-fix rlx-fix-now'));
+      } else {
+        const fix = document.createElement('div');
+        fix.className = 'rlx-fix';
+        fix.style.color = c.ink;
+        fix.textContent = reads;
+        stage.note.appendChild(fix);
+      }
       if (would) {
         const how = document.createElement('div');
         how.className = 'rlx-hint';
-        how.textContent = 'Press f to write it in. Ctrl + Z in the editor takes it back.';
+        how.textContent = would.before
+          ? 'Press f to write it in, or point at Fix to see what changes.'
+          : 'Press f to write it in. Ctrl + Z in the editor takes it back.';
         stage.note.appendChild(how);
       }
     }
@@ -5739,9 +5800,9 @@
    * it says with the words that arrive highlighted. Text nodes and `<span>`s,
    * never `innerHTML` — what is being displayed here came off somebody else's
    * page. */
-  function diffLine(runs, keep, mark, fallback) {
+  function diffLine(runs, keep, mark, fallback, cls = 'rlx-cite-text') {
     const line = document.createElement('div');
-    line.className = 'rlx-cite-text';
+    line.className = cls;
     if (!runs) { line.textContent = fallback; return line; }
     for (const run of runs) {
       if (run.kind !== 'same' && run.kind !== keep) continue;

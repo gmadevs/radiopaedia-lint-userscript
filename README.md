@@ -279,6 +279,11 @@ a panel is deeper than the one under a button. And the type on them is a point o
 copy — 13px, which is one of their own sizes, the one their **Submit** button uses — because 12px
 is right for a column of prose and small for a row of controls.
 
+The bar is louder than the rest of it again, and deliberately: it is the one thing that is always
+there while you work, over somebody's article, so it has to be findable at a glance rather than
+merely separated from the page. A darker edge, a deeper shadow, and a three-pixel line of their
+heading purple along the top — the colour of the word **Lint** at the other end of the bar.
+
 That applies only to what floats. The button by the title, the structure rail, the citation chips
 and the heading marker all sit in the page among Radiopaedia's own furniture and keep the site's
 sizes exactly: the Lint button is thirty-two pixels tall because **Edit article** beside it is.
@@ -341,7 +346,13 @@ Most findings need you. A few do not: `post-biopsy` loses its hyphen, `68Ga` bec
 should not have them. There is nothing to decide in those, only typing to do, and **✎ Fix** on
 the bar — <kbd>f</kbd> — does the typing.
 
-The note shows what it would write before you press it. Nothing happens until you do, nothing is
+The note shows what it would write before you press it. **Point at Fix** and the one line becomes
+two: the words as they stand with what goes lit red, and the words as they would stand with what
+arrives lit green — *tissue,* ~~citrate~~ *and polyamine* against *tissue,* **citrate,** *and
+polyamine*. It is the same comparison the citation chips draw, off the same word diff, for the
+same reason: printing both forms and leaving you to find the difference is printing the problem
+twice. The three markup rules have no comparison to draw, because taking the italics off a word
+changes no words at all. Nothing happens until you do, nothing is
 saved, and <kbd>Ctrl</kbd> + <kbd>Z</kbd> in the editor takes it back: the change goes in through
 the editor's own insert command, so it lands on the editor's undo stack exactly as though you had
 typed it, and the form knows it has been edited. The finding is marked done once it is written;
