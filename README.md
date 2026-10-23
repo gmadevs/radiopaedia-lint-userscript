@@ -272,6 +272,17 @@ the note, the all-clear banner and the two panels are white surfaces with a hair
 the site's own drop shadow, Open Sans at 12px on an 18px line, and corners of one or two pixels.
 The word **Lint** on the bar is the purple of their headings.
 
+Two things are deliberately not theirs, and both are about floating. Their hairline border is for
+things that sit *in* the page, where the page around them does the separating; ours float over an
+article and have to draw their own edge, so the border is darker than theirs and the shadow under
+a panel is deeper than the one under a button. And the type on them is a point over their body
+copy — 13px, which is one of their own sizes, the one their **Submit** button uses — because 12px
+is right for a column of prose and small for a row of controls.
+
+That applies only to what floats. The button by the title, the structure rail, the citation chips
+and the heading marker all sit in the page among Radiopaedia's own furniture and keep the site's
+sizes exactly: the Lint button is thirty-two pixels tall because **Edit article** beside it is.
+
 Two button faces, and which is which matters. The one by the title sits among Radiopaedia's own
 article buttons and wears their flat grey, like **Edit article** beside it. Everything on the bar
 and in the panels is an action of ours and wears their *other* one — `.btn.btn-default`, #333 and
