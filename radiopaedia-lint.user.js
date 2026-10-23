@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.15.0
+// @version      3.15.1
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -549,6 +549,14 @@
    * light up, and counting them in `flat()` shape is what keeps that number
    * true in the editor, where the markup is gone and the spacing is not the
    * linter's. */
+  /* The checks whose subject IS a reference marker, and which therefore must
+   * be allowed to narrow onto one. */
+  const ABOUT_CITATIONS = new Set([
+    'Radiopaedia.CitationPrecedingSpace',
+    'Radiopaedia.CitationSyntax',
+    'Radiopaedia.ListPunctuation',
+  ]);
+
   function nthInLine(lint) {
     const needle = flat(plain(lint.matched));
     const position = Number(lint.position);
@@ -561,8 +569,15 @@
      * position is about the reference list, and there is no way to tell which
      * comma of the prose was meant — because none was. Lighting the whole
      * sentence says what the message says; lighting a comma inside the
-     * superscript points at the one place the reader cannot act on. */
-    if (inCitation(lint.match, position - 1)) return 0;
+     * superscript points at the one place the reader cannot act on.
+     *
+     * Unless the check is about the citation. On those the position lands in
+     * a `<sup>` because that is where the thing being reported IS, and
+     * refusing to narrow leaves a finding spread over a whole paragraph with
+     * nothing to act on — which is how "Do not put full stops at the end of a
+     * list item" came to offer no fix on a list item whose full stop follows a
+     * reference. */
+    if (!ABOUT_CITATIONS.has(lint.condition) && inCitation(lint.match, position - 1)) return 0;
 
     const before = flat(plain(unref(String(lint.match).slice(0, position - 1))));
     let n = 1;
@@ -1615,6 +1630,29 @@
     const sup = (node.nodeType === 1 ? node : node.parentElement)?.closest('sup');
     if (!sup || !CITATION_NUMBERS.test(tidy(sup.textContent || ''))) return null;
 
+    /* Only where the thing in front of the marker is TEXT.
+     *
+     * The space belongs between the words and the marker, and getting it
+     * there turns out to depend entirely on what is immediately in front.
+     * Four ways of asking, all measured on a page with ordinary white-space
+     * handling, which is what an article is:
+     *
+     *   a caret at the end of the text before it, insertHTML " "
+     *       → a plain space, both sides untouched. This one.
+     *   replacing the marker with " " + the marker
+     *       → a plain space in front, and the space AFTER the marker rewritten
+     *         to a non-breaking one, because the text following it moved.
+     *   a caret between two tags (before the marker, after the link, or a
+     *   fresh empty text node in the gap)
+     *       → all three slide the caret into the link, and the space lands
+     *         inside it: `<a>CT </a>`, a link whose words now end in a space.
+     *   replacing the marker and the text after it, writing both out
+     *       → the leading space is dropped on the way in.
+     *
+     * So where a citation sits directly against a tag — `…</a><sup>4</sup>` —
+     * this offers nothing rather than one of those three. An editor can put
+     * that space in by hand in a second; none of the three is a second's work
+     * to undo. */
     const before = sup.previousSibling;
     if (!before || before.nodeType !== 3) return null;
     const text = before.nodeValue || '';
@@ -1626,8 +1664,8 @@
       target.setEnd(before, text.length);
     } catch { return null; }
     /* A space, through `insertHTML`, because `insertText` would put a
-       non-breaking one here. The value is this constant and nothing else:
-       no part of it comes from the article or from the linter. */
+       non-breaking one here. The value is this constant and nothing else: no
+       part of it comes from the article or from the linter. */
     return { target, insert: ' ', html: true };
   }
 

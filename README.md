@@ -397,7 +397,10 @@ Sixteen of them change the words:
 And one puts a space in front of a reference marker — `intramural<sup>11</sup>` →
 `intramural <sup>11</sup>` — which is a place rather than a change to any word. Only where the
 marker is a reference: `<sup>-6</sup>` is an exponent, the article says 10⁻⁶, and a space there
-would be wrong. That one goes in with `insertHTML` rather than `insertText`, because measured
+would be wrong. And only where the thing in front of the marker is **text**: a citation sitting
+straight against a tag, `…</a><sup>4</sup>`, is left alone, because every way of putting a space
+into that gap either tucks it inside the link or rewrites the space after the marker into a
+non-breaking one. Four ways were measured; the comment in `spaceBeforeCitation` lists them. That one goes in with `insertHTML` rather than `insertText`, because measured
 rather than assumed: `insertText` with a space at the end of a run of text writes a
 *non-breaking* space, the browser being helpful about a space that would otherwise collapse. The
 value passed is that one character and nothing else.
