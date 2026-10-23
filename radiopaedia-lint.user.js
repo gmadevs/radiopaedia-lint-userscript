@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.10.0
+// @version      3.11.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -1903,6 +1903,38 @@
   // ———————————————————————————————————————————————————————————— the stage
 
   GM_addStyle(`
+    /* ————— Radiopaedia's own look, for the things of ours that sit on it.
+
+       The button beside the title has copied their "Edit article" since it was
+       written — ".btn.btn-flat", down to the numbers read off it. What did not
+       was everything that FLOATS: the bar, the note, the banner, the two
+       panels. Those were a dark tool parked on somebody else's page.
+
+       These are the rest of the numbers, read off radiopaedia.org the same
+       way rather than guessed:
+
+         .btn.btn-flat     #ededed on #555, a 2px corner, a hairline border
+                           going darker along the bottom, an inset highlight
+         .btn-primary      #a172f8, white, a 1px corner, 0 4px 8px of lift
+         h1                #65419b
+         body              "Open Sans", 12px on an 18px line
+         a                 #41699b
+
+       The site is light and has no dark mode, and all of this sits ON the
+       site, so neither does any of this any more. A dark panel over a white
+       article is the thing that looks out of place, whatever the browser has
+       been told to prefer. */
+    :root {
+      --rlx-face: #fff;              /* a surface of ours */
+      --rlx-text: #555;              /* their body ink */
+      --rlx-edge: rgba(0,0,0,.12);
+      --rlx-lift: 0 4px 8px rgba(0,0,0,.1);
+      --rlx-flat: #ededed;           /* their flat button */
+      --rlx-key: #a172f8;            /* their primary */
+      --rlx-head: #65419b;           /* their headings */
+      --rlx-type: "Open Sans", system-ui, -apple-system, sans-serif;
+    }
+
     /* The pair — the button and its switch — travel together: the title is a
        flex container and would otherwise treat them as two things to squeeze
        independently. */
@@ -2174,9 +2206,10 @@
 
     #rlx-note {
       position:fixed; z-index:99999; max-width:min(30em, 78vw);
-      padding:.6em .8em; border-radius:8px; border-left:4px solid;
-      background:#fff; color:#111; box-shadow:0 6px 24px rgba(0,0,0,.22);
-      font:14px/1.45 system-ui,-apple-system,sans-serif;
+      padding:.6em .8em; border-radius:2px; border:1px solid var(--rlx-edge);
+      border-left:4px solid;
+      background:var(--rlx-face); color:var(--rlx-text); box-shadow:var(--rlx-lift);
+      font:12px/18px var(--rlx-type);
     }
     /* Reach the note with the pointer and it gets out of the way: faded, and
        click-through, so the words underneath can be selected with the mouse
@@ -2191,7 +2224,8 @@
     #rlx-note { transition: opacity .12s ease; }
     #rlx-note.rlx-ghost { opacity:.12; pointer-events:none; }
     #rlx-note .rlx-head { display:flex; gap:.5em; align-items:baseline;
-      font-size:12px; text-transform:uppercase; letter-spacing:.04em; opacity:.8; }
+      font-size:11px; font-weight:600; text-transform:uppercase;
+      letter-spacing:1.1px; opacity:.8; }
     #rlx-note .rlx-msg { margin-top:.35em; }
     #rlx-note .rlx-hint { margin-top:.4em; font-size:12px; opacity:.62; }
     #rlx-note .rlx-fix { margin-top:.4em; padding:.25em .5em; border-radius:6px;
@@ -2225,26 +2259,42 @@
          nothing in it once half the buttons are gone. */
       position:fixed; left:0; right:0; margin:0 auto; bottom:18px; z-index:99999;
       display:flex; align-items:center; gap:.45em; flex-wrap:wrap; justify-content:center;
-      width:fit-content; max-width:min(64em, 96vw); padding:.5em .7em; border-radius:13px;
-      background:#111827; color:#f9fafb; box-shadow:0 8px 30px rgba(0,0,0,.35);
-      font:14px/1.4 system-ui,-apple-system,sans-serif;
+      width:fit-content; max-width:min(64em, 96vw); padding:.5em .7em; border-radius:2px;
+      border:1px solid var(--rlx-edge);
+      background:var(--rlx-face); color:var(--rlx-text); box-shadow:var(--rlx-lift);
+      font:600 12px/18px var(--rlx-type);
     }
-    #rlx-bar button { flex:0 0 auto; padding:.4em .8em; border:0; border-radius:8px;
-      background:#374151; color:#e5e7eb; font:inherit; font-weight:600; cursor:pointer; }
-    #rlx-bar button:hover:not([disabled]) { background:#4b5563; color:#fff; }
-    #rlx-bar button[disabled] { opacity:.35; cursor:default; }
+    /* Their flat button, at the smaller padding a bar of a dozen of them
+       wants: same fill, same ink, same 2px corner, same hairline that goes
+       darker along the bottom, same inset highlight. */
+    #rlx-bar button { flex:0 0 auto; padding:5px 10px; border-radius:2px;
+      border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
+      background:var(--rlx-flat); color:var(--rlx-text); font:inherit; cursor:pointer;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05); }
+    #rlx-bar button:hover:not([disabled]) { background:#e2e2e2; color:#333; }
+    #rlx-bar button[disabled] { opacity:.45; cursor:default; }
 
     /* Done is the one you press a hundred times an afternoon, and it was the
        same grey as Re-lint, which you press once. Green rather than the
        severity's own colour: red on the button you are meant to press reads as
        a warning about pressing it, and green is already what the finding turns
        when you do. */
-    #rlx-bar .rlx-primary { background:#059669; color:#fff; }
+    /* Shaped like their primary — the 1px corner and the lift — and filled
+       green rather than their purple, which is the one place this parts from
+       the site on purpose. Two languages are at work on this bar: theirs for
+       the chrome, and this script's own for the VERDICTS, where red, amber,
+       blue and green mean something and have meant it since the first
+       version. Done is a verdict, and green is what the finding turns when you
+       press it. (Their #a172f8 is one word away, in --rlx-key, for anyone who
+       would rather have the site's.) */
+    #rlx-bar .rlx-primary { background:#059669; color:#fff; border-radius:1px;
+      border-color:transparent; box-shadow:var(--rlx-lift); }
     #rlx-bar .rlx-primary:hover:not([disabled]) { background:#047857; color:#fff; }
 
     /* The arrows are arrows, not buttons: no fill until you point at them. */
-    #rlx-bar .rlx-step { background:transparent; padding:.28em .5em;
-      font-size:17px; line-height:1; }
+    #rlx-bar .rlx-step { background:transparent; border-color:transparent;
+      box-shadow:none; padding:.28em .5em; font-size:17px; line-height:1; }
+    #rlx-bar .rlx-step:hover:not([disabled]) { background:rgba(0,0,0,.06); }
 
     #rlx-bar .rlx-count { display:flex; align-items:center; gap:.42em; flex:0 0 auto;
       font-variant-numeric:tabular-nums; }
@@ -2255,27 +2305,34 @@
     #rlx-bar .rlx-dot { width:.62em; height:.62em; border-radius:50%; }
     #rlx-bar .rlx-sepdot { opacity:.4; }
     #rlx-bar .rlx-known { opacity:.65; }
-    #rlx-bar .rlx-title { font-weight:700; flex:0 0 auto; }
+    /* Their headings are #65419b, and their own uppercase buttons carry a
+       wide letter-spacing. One word in both says whose bar this is. */
+    #rlx-bar .rlx-title { font-weight:600; flex:0 0 auto; color:var(--rlx-head);
+      text-transform:uppercase; letter-spacing:1.3px; }
     /* flex-basis 0, so the line is measured as though the status were not
        there: it never pushes itself onto a second row, it takes whatever room
        is left over and ends in an ellipsis. Wrapping is still on for a window
        narrow enough that the buttons alone will not fit — better a second row
        than a button off the edge — but the sentence cannot cause it. */
     #rlx-bar .rlx-status { flex:1 1 0; min-width:0; overflow:hidden;
-      text-overflow:ellipsis; white-space:nowrap; opacity:.85; }
-    #rlx-bar .rlx-sep { width:1px; align-self:stretch; background:#4b5563; flex:0 0 auto; }
-    #rlx-bar .rlx-close, #rlx-bar .rlx-flip { background:transparent; font-size:16px;
+      text-overflow:ellipsis; white-space:nowrap; color:#777; font-weight:400; }
+    #rlx-bar .rlx-sep { width:1px; align-self:stretch; background:var(--rlx-edge);
+      flex:0 0 auto; }
+    #rlx-bar .rlx-close, #rlx-bar .rlx-flip { background:transparent;
+      border-color:transparent; box-shadow:none; font-size:16px;
       line-height:1; padding:.3em .5em; }
+    #rlx-bar .rlx-close:hover, #rlx-bar .rlx-flip:hover { background:rgba(0,0,0,.06); }
 
     #rlx-banner {
       position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:99999;
       display:flex; align-items:center; gap:.6em;
-      max-width:min(42em, 94vw); padding:.7em 1em; border-radius:12px;
-      background:#111827; color:#f9fafb; box-shadow:0 8px 30px rgba(0,0,0,.35);
-      font:14px/1.45 system-ui,-apple-system,sans-serif; cursor:pointer;
+      max-width:min(42em, 94vw); padding:.7em 1em; border-radius:2px;
+      border:1px solid var(--rlx-edge);
+      background:var(--rlx-face); color:var(--rlx-text); box-shadow:var(--rlx-lift);
+      font:600 12px/18px var(--rlx-type); cursor:pointer;
       animation: rlx-banner-in .18s ease-out;
     }
-    #rlx-banner .rlx-tick { color:#34d399; font-size:17px; line-height:1; }
+    #rlx-banner .rlx-tick { color:#059669; font-size:17px; line-height:1; }
     #rlx-banner .rlx-sub { display:block; margin-top:.15em; font-size:12.5px; opacity:.75; }
     @keyframes rlx-banner-in {
       from { opacity:0; transform:translate(-50%, -8px); }
@@ -2325,9 +2382,10 @@
 
     #rlx-cite-note {
       position:fixed; z-index:99999; width:min(38em, 84vw);
-      padding:.7em .9em; border-radius:8px; border-left:4px solid #6b7280;
-      background:#fff; color:#111; box-shadow:0 6px 24px rgba(0,0,0,.22);
-      font:13px/1.5 system-ui,-apple-system,sans-serif;
+      padding:.7em .9em; border-radius:2px; border:1px solid var(--rlx-edge);
+      border-left:4px solid #6b7280;
+      background:var(--rlx-face); color:var(--rlx-text); box-shadow:var(--rlx-lift);
+      font:12px/18px var(--rlx-type);
     }
     #rlx-cite-note .rlx-cite-head { display:flex; gap:.5em; align-items:baseline;
       font-size:11px; text-transform:uppercase; letter-spacing:.04em; opacity:.8; }
@@ -2343,11 +2401,13 @@
     #rlx-cite-note .rlx-now { background:rgba(5,150,105,.20); border-radius:2px; }
     #rlx-cite-note .rlx-cite-acts { display:flex; gap:.4em; margin-top:.7em; flex-wrap:wrap; }
     #rlx-cite-note button {
-      padding:3px 8px; border-radius:2px; border:1px solid rgba(127,127,127,.35);
-      background:transparent; color:inherit; cursor:pointer;
-      font:600 11px/16px system-ui,-apple-system,sans-serif;
+      padding:3px 8px; border-radius:2px;
+      border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
+      background:var(--rlx-flat); color:var(--rlx-text); cursor:pointer;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05);
+      font:600 11px/16px var(--rlx-type);
     }
-    #rlx-cite-note button:hover { background:rgba(127,127,127,.18); }
+    #rlx-cite-note button:hover { background:#e2e2e2; color:#333; }
 
     /* ————— the choice between two meanings.
 
@@ -2358,29 +2418,33 @@
     #rlx-pick {
       position:fixed; inset:0; z-index:100000; display:flex;
       align-items:center; justify-content:center; padding:1em;
-      background:rgba(17,24,39,.42);
-      font:14px/1.45 system-ui,-apple-system,sans-serif;
+      background:rgba(42,41,42,.42);
+      font:12px/18px var(--rlx-type);
     }
     #rlx-pick .rlx-p-panel {
       width:min(34em, 94vw); max-height:86vh; overflow:auto;
-      padding:.9em 1.1em 1em; border-radius:12px;
-      background:#fff; color:#111; box-shadow:0 10px 40px rgba(0,0,0,.4);
+      padding:.9em 1.1em 1em; border-radius:2px; border:1px solid var(--rlx-edge);
+      background:var(--rlx-face); color:var(--rlx-text); box-shadow:0 10px 40px rgba(0,0,0,.3);
     }
-    #rlx-pick .rlx-p-head { font-size:12px; text-transform:uppercase;
-      letter-spacing:.04em; opacity:.6; }
+    #rlx-pick .rlx-p-head { font-size:11px; font-weight:600; text-transform:uppercase;
+      letter-spacing:1.1px; color:var(--rlx-head); }
     #rlx-pick .rlx-p-word { margin-top:.2em; font-weight:700; }
     #rlx-pick .rlx-p-list { margin-top:.7em; display:flex; flex-direction:column; gap:.35em; }
     #rlx-pick button {
       display:flex; align-items:baseline; gap:.6em; width:100%; text-align:left;
-      padding:.5em .65em; border:1px solid rgba(127,127,127,.3); border-radius:8px;
-      background:transparent; color:inherit; font:inherit; cursor:pointer;
+      padding:6px 12px; border-radius:2px;
+      border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
+      background:var(--rlx-flat); color:var(--rlx-text); font:inherit; cursor:pointer;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05);
     }
     #rlx-pick button:hover, #rlx-pick button:focus-visible {
-      background:rgba(37,99,235,.12); border-color:#2563eb; outline:none;
+      background:var(--rlx-key); border-color:transparent; color:#fff; outline:none;
     }
-    #rlx-pick .rlx-p-key { flex:0 0 auto; width:1.4em; height:1.4em; border-radius:4px;
-      background:rgba(127,127,127,.2); font-size:11px; font-weight:700;
+    #rlx-pick .rlx-p-key { flex:0 0 auto; width:1.4em; height:1.4em; border-radius:2px;
+      background:rgba(0,0,0,.08); font-size:11px; font-weight:600;
       display:inline-flex; align-items:center; justify-content:center; }
+    #rlx-pick button:hover .rlx-p-key, #rlx-pick button:focus-visible .rlx-p-key {
+      background:rgba(255,255,255,.25); }
     #rlx-pick .rlx-p-hint { margin-top:.7em; font-size:12px; opacity:.6; }
 
     /* ————— the disagreement log.
@@ -2398,16 +2462,17 @@
     #rlx-dispute {
       position:fixed; inset:0; z-index:100000; display:flex;
       align-items:center; justify-content:center; padding:1em;
-      background:rgba(17,24,39,.42);
-      font:14px/1.45 system-ui,-apple-system,sans-serif;
+      background:rgba(42,41,42,.42);
+      font:12px/18px var(--rlx-type);
     }
     #rlx-dispute .rlx-d-panel {
       width:min(42em, 94vw); max-height:86vh; overflow:auto;
-      padding:.9em 1.1em 1.1em; border-radius:12px;
-      background:#fff; color:#111; box-shadow:0 10px 40px rgba(0,0,0,.4);
+      padding:.9em 1.1em 1.1em; border-radius:2px; border:1px solid var(--rlx-edge);
+      background:var(--rlx-face); color:var(--rlx-text); box-shadow:0 10px 40px rgba(0,0,0,.3);
     }
     #rlx-dispute .rlx-d-head { display:flex; align-items:baseline; gap:.6em; }
-    #rlx-dispute .rlx-d-title { font-weight:700; flex:1 1 auto; }
+    #rlx-dispute .rlx-d-title { font-weight:600; flex:1 1 auto; color:var(--rlx-head);
+      text-transform:uppercase; letter-spacing:1.1px; font-size:11px; }
     #rlx-dispute .rlx-d-x { background:transparent; border:0; color:inherit;
       font-size:18px; line-height:1; padding:0 .2em; cursor:pointer; opacity:.6; }
     #rlx-dispute .rlx-d-x:hover { opacity:1; }
@@ -2432,15 +2497,20 @@
       border:1px solid rgba(127,127,127,.45); border-radius:8px;
       background:transparent; color:inherit; font:inherit; resize:vertical;
     }
-    #rlx-dispute textarea:focus { outline:2px solid #2563eb; outline-offset:-1px; }
+    #rlx-dispute textarea:focus { outline:2px solid var(--rlx-key); outline-offset:-1px; }
     #rlx-dispute .rlx-d-acts { display:flex; align-items:center; gap:.45em;
       margin-top:.8em; flex-wrap:wrap; }
-    #rlx-dispute button { flex:0 0 auto; padding:.4em .8em; border:0; border-radius:8px;
-      background:rgba(127,127,127,.2); color:inherit; font:inherit; font-weight:600;
-      cursor:pointer; }
-    #rlx-dispute button:hover { background:rgba(127,127,127,.34); }
-    #rlx-dispute .rlx-d-primary { background:#059669; color:#fff; }
-    #rlx-dispute .rlx-d-primary:hover { background:#047857; color:#fff; }
+    #rlx-dispute button { flex:0 0 auto; padding:5px 10px; border-radius:2px;
+      border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
+      background:var(--rlx-flat); color:var(--rlx-text); font:inherit; font-weight:600;
+      cursor:pointer;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05); }
+    #rlx-dispute button:hover { background:#e2e2e2; color:#333; }
+    /* Their primary. Recording a disagreement is not a verdict on a finding,
+       so there is nothing here for the script's own green to mean. */
+    #rlx-dispute .rlx-d-primary { background:var(--rlx-key); color:#fff;
+      border-color:transparent; border-radius:1px; box-shadow:var(--rlx-lift); }
+    #rlx-dispute .rlx-d-primary:hover { background:#8f5cf0; color:#fff; }
     #rlx-dispute .rlx-d-say { font-size:12.5px; opacity:.75; }
     #rlx-dispute .rlx-d-none { margin-top:.8em; opacity:.75; }
 
@@ -2462,17 +2532,6 @@
     #rlx-dispute .rlx-d-row button { font-size:11px; padding:.2em .45em; opacity:.6; }
     #rlx-dispute .rlx-d-row button:hover { opacity:1; }
 
-    @media (prefers-color-scheme: dark) {
-      #rlx-note { background:#1f2937; color:#f3f4f6; }
-      #rlx-note .rlx-snippet { border-left-color:#4b5563; color:#d1d5db; }
-      #rlx-note .rlx-alert { border-color:rgba(251,191,36,.4); background:rgba(245,158,11,.18);
-        color:#fcd34d; }
-      #rlx-cite-note { background:#1f2937; color:#f3f4f6; }
-      #rlx-pick .rlx-p-panel { background:#1f2937; color:#f3f4f6; }
-      #rlx-dispute .rlx-d-panel { background:#1f2937; color:#f3f4f6; }
-      #rlx-dispute .rlx-d-snippet { border-left-color:#4b5563; color:#d1d5db; }
-      #rlx-dispute .rlx-d-about { border-left-color:#6b7280; }
-    }
   `);
 
   const stage = {

@@ -193,7 +193,9 @@ your selection, and it puts back the selection it found.
 ## The editor
 
 The only DOM the script creates is `<div>`, `<span>` and `<button>` elements with `rlx-` ids and
-classes, appended to `document.body` or to the article's title. Save and submit are never touched.
+classes, appended to `document.body` or to the article's title. Its one stylesheet goes in through
+`GM_addStyle`; the only thing it declares outside its own `rlx-` selectors is a handful of custom
+properties on `:root`, every one of them named `--rlx-…`. Save and submit are never touched.
 The highlights and the structure rail are layers over the page, drawn from the text's own
 rectangles.
 

@@ -263,6 +263,23 @@ Everything is on the bottom bar too, including **Re-lint** to ask the linter aga
 saved. Nothing on this list happens by itself: editing the text can close a finding, but only
 these move you to another one.
 
+### It looks like the page it is on
+
+The button beside the title has copied Radiopaedia's own **Edit article** since it was written —
+`.btn.btn-flat`, down to the numbers read off it. Everything that *floats* now does too: the bar,
+the note, the all-clear banner and the two panels are white surfaces with a hairline border and
+the site's own drop shadow, Open Sans at 12px on an 18px line, corners of one or two pixels, and
+buttons in the site's flat grey. The word **Lint** on the bar is the purple of their headings.
+
+Two colours are not theirs, and on purpose. The severities — red, amber, blue — and the green a
+finding turns when it is answered are this script's own language, and they mean something: the
+same green is on the highlight, on the note and on the **Done** button. Radiopaedia's primary
+purple is used where there is no verdict to state, as on **Record it** in the log.
+
+There is no dark mode any more. The site is light and has none, and all of this sits on the site:
+a dark panel over a white article is the thing that looks out of place, whatever the browser has
+been told to prefer.
+
 ### The bar keeps out of the way
 
 It measures what is under it before it settles: a sticky promo strip, the Tags field, anything the
