@@ -23,8 +23,8 @@ request* — and that is the first thing to talk about rather than the last.
 
 ## Network
 
-Eight `GM_xmlhttpRequest` calls to three hosts — six GET and two POST, both of which are set
-out in full below. No `fetch`, no `XMLHttpRequest`, no beacon, no websocket, no remote image, font
+Nine `GM_xmlhttpRequest` calls to three hosts, and a fourth on your own machine if you start it —
+six GET and three POST, all of which are set out in full below. No `fetch`, no `XMLHttpRequest`, no beacon, no websocket, no remote image, font
 or stylesheet, no analytics. `@connect` names all three hosts in the header, which is also what
 confines the script to them.
 
@@ -135,6 +135,26 @@ finding already on your screen and writes it to the clipboard, and that is the w
 is no model at the other end of this script, no API key in it, and no host in `@connect` that
 could take one. What you then do with the clipboard is outside the script, and the rewritten text
 comes back into the article by your hand.
+
+**5. The bridge, and only if you start one** — `POST http://127.0.0.1:<port>/rewrite`
+(`askBridge()`). Off unless you have pasted in the address `tools/claude-bridge.py` prints, which
+exists only while that script is running: the key in it is 32 random characters made fresh on
+every start. `@connect 127.0.0.1` and `@connect localhost` are in the header for it, and
+`BRIDGE_HOST` refuses anything else whatever has been pasted — a host that merely *starts* with
+`localhost` is refused, and there is a test for that. What leaves is the rewrite prompt: one
+paragraph of the article you are editing, with its markup replaced by markers, and the check that
+fired. The key goes in an `X-Bridge-Key` header, never in the URL; it is carried in the address as
+a `#fragment`, which is the part a browser never puts in a request.
+
+The server itself is twenty lines of logic: it binds the loopback address and nothing else, sends
+no CORS headers of any kind (so a page cannot read a reply from it), requires the key, runs the
+`claude` CLI with a fixed argument list and the prompt on **stdin** — no shell, so nothing in the
+text can become a command — and takes one request at a time with a size cap and a timeout. It
+logs nothing: the prompt is somebody's article.
+
+What comes back is treated exactly as a pasted answer is, which is to say not trusted at all: the
+markers are counted, the comparison is drawn, and nothing reaches the article until you press the
+button.
 
 **Nothing of yours is ever written to a server.** Proposing a name or an acronym copies a word to the
 clipboard and opens `https://github.com/…/edit/main/proper-nouns.txt` in a new tab with
@@ -299,6 +319,7 @@ the rest, so it is held in memory for the life of the page and fetched again on 
 | `rlx-hushed` | `{slug: [sections you said that article does not need]}` |
 | `rlx-proposed` | `{word: YYYY-MM-DD}`, the names and acronyms you have proposed, so the same one is not offered again while the pull request is open |
 | `rlx-meanings` | `{acronym: YYYY-MM-DD}`, the same thing for a meaning proposed for `acronym-expansions.txt` |
+| `rlx-bridge` | the loopback address you pasted for `tools/claude-bridge.py`, key and all — absent unless you use it |
 | `rlx-disputes` | the findings you recorded as the rule's fault: the rule, the article, the line, the words, the linter's message, and what you wrote about why it does not hold |
 
 The last five are the only ones with anything of yours in them: article slugs you edited, section

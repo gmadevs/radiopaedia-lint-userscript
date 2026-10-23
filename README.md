@@ -577,10 +577,35 @@ What comes back is read as text; every element in what gets written is a clone o
 was already in that paragraph. A `<script>` typed into that box arrives in the article as the
 seven characters `<script`.
 
-**Nothing is sent.** There is no model at the other end of this script and no key in it — this is
-a clipboard, a form of words and a box. Where the question goes is your business. The whole prompt
-is written out in `the ones that need a sentence`, in order, where it can be read and argued
-with.
+**Nothing is sent, unless you start the bridge.** There is no model at the other end of this
+script and no key in it — this is a clipboard, a form of words and a box, and where the question
+goes is your business. The whole prompt is written out in `the ones that need a sentence`, in
+order, where it can be read and argued with.
+
+If carrying it by hand gets tiresome, [`tools/claude-bridge.py`](tools/claude-bridge.py) will do
+the carrying:
+
+```bash
+python3 tools/claude-bridge.py
+```
+
+It prints one address. Paste it into the box once and **Ask Claude** fills the answer in, which
+you then read and write in exactly as before. It is a loopback server with one route that runs the
+`claude` CLI you are already logged in to, with the prompt on its standard input — no API key,
+nothing stored, nothing logged, and one rewrite of your usage allowance per press.
+
+It is small on purpose, because it is a thing that runs a program when something asks it to. It
+binds `127.0.0.1` and nothing else; every request must carry a key that is made fresh on each
+start; it sends no CORS headers, so a page in your browser cannot read a reply from it even if it
+guesses the key; the prompt goes to the CLI on stdin with a fixed argument list, so no shell and
+nothing in the text that could become a command; one request at a time, with a size cap and a
+timeout. The key travels as the `#fragment` of that address, which is the part a browser never
+sends in a request — the script splits it off and puts it in a header.
+
+The script's side of it refuses any address that is not `127.0.0.1` or `localhost`, whatever you
+paste, and the two are the only hosts `@connect` will allow it to reach. Nothing about the answer
+is trusted any more than before: the markers are counted, the comparison is drawn, and nothing
+reaches the article until you press the button.
 
 Number Spacing is missing for a third reason. Its findings are usually about `<sup>-6</sup>` read
 as prose — the article says 10⁻⁶ and the rule sees a space that is not in the text — so there is

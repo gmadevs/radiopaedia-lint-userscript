@@ -6,12 +6,14 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.14.0
+// @version      3.15.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
 // @connect      eutils.ncbi.nlm.nih.gov
+// @connect      127.0.0.1
+// @connect      localhost
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @run-at       document-idle
@@ -154,8 +156,14 @@
  * ARTICLE. What comes back is read as text, and every element in what gets
  * written is a clone of an element that was already in that paragraph.
  *
- * Nothing is sent: there is no model at the other end of this script and no
- * key in it. See `keeping the markup out of the round trip`.
+ * Nothing is sent by default: there is no model at the other end of this
+ * script and no key in it. `tools/claude-bridge.py` is the opt-in — a loopback
+ * server that runs the `claude` CLI you are already logged in to, which the
+ * box can ask instead of waiting for you to carry the prompt somewhere. It is
+ * off until you paste in the address it prints, the address only exists while
+ * it is running, and `askBridge` refuses anything that is not 127.0.0.1 or
+ * localhost whatever has been pasted. See `keeping the markup out of the round
+ * trip`.
  *
  * The references at the bottom of the article are checked by a second tool at
  * the same host, `radiopaedia.work/cite`: it takes a reference, works out what
@@ -243,6 +251,76 @@
   const PROPOSED_KEY = 'rlx-proposed';   // {word: the day you proposed it}
   const DISPUTES_KEY = 'rlx-disputes';   // {article|finding: what you said about it}
   const MEANINGS_KEY = 'rlx-meanings';   // {acronym: the day you proposed a meaning for it}
+
+  /* The bridge, if you are running one.
+   *
+   * `tools/claude-bridge.py` in this repository is a loopback server with one
+   * route that runs the `claude` CLI you are already logged in to, with the
+   * prompt on its standard input. With it running, the box that takes a
+   * rewritten paragraph can ask for one instead of waiting for you to carry
+   * the prompt somewhere and bring the answer back.
+   *
+   * It is OFF unless you have pasted its address in, and the address only
+   * exists while the thing is running: the key in it is made fresh on every
+   * start. `@connect 127.0.0.1` and `@connect localhost` are in the header
+   * for it, and they are the two hosts a request can reach — see `askBridge`,
+   * which refuses anything else whatever has been pasted.
+   *
+   * The address carries the key as a FRAGMENT, after a '#'. A fragment is
+   * never sent in an HTTP request, so an address pasted into the wrong box,
+   * or sitting in a browser history, is an address with the key stripped out
+   * of every request it could possibly make. The script splits it off and
+   * sends it as a header. */
+  const BRIDGE_KEY = 'rlx-bridge';     // the address you pasted, if you did
+  const BRIDGE_TIMEOUT = 200_000;      // the CLI is allowed three minutes at the far end
+  const BRIDGE_HOST = /^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/[^#]*$/;
+
+  const bridgeAddress = () => {
+    try { return localStorage.getItem(BRIDGE_KEY) || ''; } catch { return ''; }
+  };
+
+  function rememberBridge(address) {
+    try {
+      if (address) localStorage.setItem(BRIDGE_KEY, address);
+      else localStorage.removeItem(BRIDGE_KEY);
+    } catch { /* this session only */ }
+  }
+
+  /* One paragraph out, one paragraph back. Resolves either way — a bridge
+   * that is not running is an ordinary thing to say, not an exception to
+   * throw, and the box carries on with the clipboard. */
+  function askBridge(address, prompt) {
+    return new Promise((resolve) => {
+      const at = String(address || '').indexOf('#');
+      const url = at < 0 ? '' : address.slice(0, at);
+      const key = at < 0 ? '' : address.slice(at + 1);
+      if (!key || !BRIDGE_HOST.test(url)) {
+        resolve({ trouble: 'that is not an address the bridge printed' });
+        return;
+      }
+      GM_xmlhttpRequest({
+        method: 'POST',
+        url,
+        timeout: BRIDGE_TIMEOUT,
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-Bridge-Key': key,
+        },
+        data: JSON.stringify({ prompt }),
+        onload: (r) => {
+          let said = null;
+          try { said = JSON.parse(r.responseText || ''); } catch { /* said below */ }
+          if (!said) return resolve({ trouble: 'the bridge answered something that is not an answer' });
+          if (said.error) return resolve({ trouble: said.error });
+          const text = typeof said.text === 'string' ? said.text.trim() : '';
+          resolve(text ? { text } : { trouble: 'the bridge answered with nothing' });
+        },
+        onerror: () => resolve({ trouble: 'the bridge is not running, or it is not on a loopback address' }),
+        ontimeout: () => resolve({ trouble: 'the bridge did not answer in time' }),
+      });
+    });
+  }
 
   /* One entry per check a list answers. `condition` is what the API calls the
    * check; `match` is asked whether the word the linter quoted is already on
@@ -2512,6 +2590,11 @@
       font-size:19px; line-height:1; padding:0 .2em; cursor:pointer; opacity:.6; }
     #rlx-answer .rlx-a-x:hover { opacity:1; }
     #rlx-answer .rlx-a-hint { margin-top:.2em; font-size:13px; opacity:.6; }
+    #rlx-answer .rlx-a-bridge { display:flex; gap:.45em; margin-top:.6em; align-items:stretch; }
+    #rlx-answer .rlx-a-url { flex:1 1 auto; min-width:0; padding:.4em .55em;
+      border:1px solid rgba(127,127,127,.45); border-radius:2px;
+      background:transparent; color:inherit; font:inherit; font-size:12px; }
+    #rlx-answer .rlx-a-url:focus { outline:2px solid var(--rlx-key); outline-offset:-1px; }
     #rlx-answer .rlx-a-text {
       display:block; width:100%; box-sizing:border-box; margin-top:.6em;
       padding:.5em .6em; border:1px solid rgba(127,127,127,.45); border-radius:2px;
@@ -4197,6 +4280,11 @@
           <button data-a="close" class="rlx-a-x" title="Close (Esc)">&times;</button>
         </div>
         <div class="rlx-a-hint">The prompt is on your clipboard. Paste what comes back.</div>
+        <div class="rlx-a-bridge">
+          <input class="rlx-a-url" type="text" spellcheck="false"
+                 placeholder="http://127.0.0.1:8765/rewrite#… — what tools/claude-bridge.py prints">
+          <button data-a="ask">Ask Claude</button>
+        </div>
         <textarea class="rlx-a-text" rows="7" spellcheck="false"></textarea>
         <div class="rlx-a-say"></div>
         <div class="rlx-a-diff"></div>
@@ -4211,7 +4299,11 @@
     const say = q('.rlx-a-say');
     const diff = q('.rlx-a-diff');
     const use = q('[data-a="use"]');
+    const url = q('.rlx-a-url');
+    const ask = q('[data-a="ask"]');
     let ready = null;
+
+    url.value = bridgeAddress();
 
     const look = () => {
       const answer = box.value.trim();
@@ -4248,6 +4340,33 @@
       if (e.target === el) return closeAnswer();
       const what = e.target.closest('[data-a]')?.dataset.a;
       if (what === 'close') return closeAnswer();
+
+      /* Asking the bridge. Remembered only once it has answered: an address
+         that was mistyped is not one to keep, and the one thing worse than
+         pasting it again is wondering why the button does nothing. */
+      if (what === 'ask') {
+        const where = url.value.trim();
+        if (!where) { url.focus(); return; }
+        ask.disabled = true;
+        ask.textContent = 'Asking…';
+        say.className = 'rlx-a-say';
+        say.textContent = '';
+        askBridge(where, rewritePrompt(f)).then((back) => {
+          ask.disabled = false;
+          ask.textContent = 'Ask Claude';
+          if (back.trouble) {
+            say.className = 'rlx-a-say rlx-a-no';
+            say.textContent = `No answer: ${back.trouble}`;
+            return;
+          }
+          rememberBridge(where);
+          box.value = back.text;
+          look();
+          box.focus();
+        });
+        return;
+      }
+
       if (what !== 'use' || !ready) return;
       closeAnswer();
       settleFix(k, f, writeBlock(held.block, ready));
