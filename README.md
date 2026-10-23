@@ -552,11 +552,35 @@ the evidence out of a sentence in a medical article. Then: change nothing but th
 a rewrite that reads better and says something slightly different is worse than the sentence that
 tripped the check. Then British spelling and plain prose, about as long as it was.
 
+**The tags do not travel.** A paragraph that leaves as plain text comes back as plain text, and
+everything that was not a word is gone — the reference markers above all, which are `<sup>41</sup>`
+in the editor and a bare `41` once the tags are off. Paste that back and the article has lost its
+evidence. So each piece of markup is replaced by a marker before the paragraph goes out:
+
+```
+CT pulmonary angiography (CTPA) will show ⟦1⟧filling defects⟦/1⟧ within the
+pulmonary vasculature; acute emboli are seen ⟦2⟧.
+```
+
+A reference is one marker on its own and is opaque: it may move with the clause it belongs to,
+and nothing about it may change. A link or an emphasis is a **pair** around its own words — those
+words are prose and may be rewritten, and the tag that goes back around them afterwards is the one
+that was there before, `href` and all. The prompt says which marker is which.
+
+Pressing <kbd>r</kbd> copies the question and opens a box to paste the answer into. It counts the
+markers as you paste: every one back exactly once, in order, or it says what is missing and the
+button stays dark. Then it shows the red/green comparison, and **Write it in** replaces the
+paragraph.
+
+That gives one property worth stating plainly: **no tag a model wrote ever reaches the article.**
+What comes back is read as text; every element in what gets written is a clone of an element that
+was already in that paragraph. A `<script>` typed into that box arrives in the article as the
+seven characters `<script`.
+
 **Nothing is sent.** There is no model at the other end of this script and no key in it — this is
-a clipboard and a form of words. Where the question goes is your business, and the answer comes
-back the way a corrected citation does: by your hand, through the editor, after you have read it.
-The whole prompt is written out in `the ones that need a sentence`, in order, where it can be read
-and argued with.
+a clipboard, a form of words and a box. Where the question goes is your business. The whole prompt
+is written out in `the ones that need a sentence`, in order, where it can be read and argued
+with.
 
 Number Spacing is missing for a third reason. Its findings are usually about `<sup>-6</sup>` read
 as prose — the article says 10⁻⁶ and the rule sees a space that is not in the text — so there is

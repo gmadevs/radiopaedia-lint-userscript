@@ -122,6 +122,14 @@ to `innerHTML`, and never written into the editor; every value that reaches the 
 the `textContent` of a node this script built. A failure is caught and the panel says PubMed could
 not be asked — the index still answers, and an answer from one source says so.
 
+<kbd>r</kbd> opens the one place where text from outside the article can be written into it, and
+it is worth being exact about what can get through. The paragraph goes out with its markup
+replaced by numbered markers. What you paste back is never parsed as HTML: it is scanned for those
+markers, and the result is assembled from escaped text plus `outerHTML` of elements **already in
+that paragraph** — so a tag in the pasted text becomes visible characters, not markup, and a
+reference or a link that did not come back is a refusal rather than a silent loss. The button does
+not enable until every marker is accounted for, and nothing is written until you press it.
+
 <kbd>r</kbd> — the rewrite prompt — makes no request of any kind. It builds a string from the
 finding already on your screen and writes it to the clipboard, and that is the whole of it: there
 is no model at the other end of this script, no API key in it, and no host in `@connect` that

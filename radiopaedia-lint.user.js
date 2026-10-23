@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.13.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
+// @version      3.14.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -139,10 +139,23 @@
  * the sample — and not one of them has an answer a rule could write. `r`
  * builds the question instead: the paragraph, the check, the linter's own
  * words, and the things a Radiopaedia sentence must not lose on the way
- * through somebody else's model — the bare numbers that are its references
- * above all. It goes on the clipboard. Nothing is sent: there is no model at
- * the other end of this script and no key in it, and the answer comes back by
- * your hand, through the editor, like a corrected citation.
+ * through somebody else's model. It goes on the clipboard, and a box opens to
+ * paste the answer into.
+ *
+ * The tags do not travel. A paragraph that leaves as plain text comes back as
+ * plain text with its references gone, so each piece of markup is replaced by
+ * a marker before it goes and put back when it returns — a reference is one
+ * opaque marker that may move but not change, a link or an emphasis is a pair
+ * around its own words, which may be rewritten inside a tag that is kept. The
+ * markers that come back are counted, and a paragraph that lost one is
+ * refused rather than patched up.
+ *
+ * Which is the property worth stating: NO TAG A MODEL WROTE EVER REACHES THE
+ * ARTICLE. What comes back is read as text, and every element in what gets
+ * written is a clone of an element that was already in that paragraph.
+ *
+ * Nothing is sent: there is no model at the other end of this script and no
+ * key in it. See `keeping the markup out of the round trip`.
  *
  * The references at the bottom of the article are checked by a second tool at
  * the same host, `radiopaedia.work/cite`: it takes a reference, works out what
@@ -2480,6 +2493,47 @@
     }
     #rlx-cite-note button:hover { background:var(--rlx-btn-lit); }
 
+    /* ————— where the rewritten paragraph comes back in. */
+    #rlx-answer {
+      position:fixed; inset:0; z-index:100000; display:flex;
+      align-items:center; justify-content:center; padding:1em;
+      background:rgba(42,41,42,.42);
+      font:var(--rlx-size)/var(--rlx-line) var(--rlx-type);
+    }
+    #rlx-answer .rlx-a-panel {
+      width:min(46em, 94vw); max-height:88vh; overflow:auto;
+      padding:.9em 1.1em 1em; border-radius:2px; border:1px solid var(--rlx-edge);
+      background:var(--rlx-face); color:var(--rlx-text); box-shadow:0 10px 40px rgba(0,0,0,.3);
+    }
+    #rlx-answer .rlx-a-head { display:flex; align-items:baseline; gap:.6em; }
+    #rlx-answer .rlx-a-title { flex:1 1 auto; font-size:12px; font-weight:600;
+      text-transform:uppercase; letter-spacing:1.1px; color:var(--rlx-head); }
+    #rlx-answer .rlx-a-x { background:transparent; border:0; color:inherit;
+      font-size:19px; line-height:1; padding:0 .2em; cursor:pointer; opacity:.6; }
+    #rlx-answer .rlx-a-x:hover { opacity:1; }
+    #rlx-answer .rlx-a-hint { margin-top:.2em; font-size:13px; opacity:.6; }
+    #rlx-answer .rlx-a-text {
+      display:block; width:100%; box-sizing:border-box; margin-top:.6em;
+      padding:.5em .6em; border:1px solid rgba(127,127,127,.45); border-radius:2px;
+      background:transparent; color:inherit; font:inherit; resize:vertical;
+    }
+    #rlx-answer .rlx-a-text:focus { outline:2px solid var(--rlx-key); outline-offset:-1px; }
+    #rlx-answer .rlx-a-say { margin-top:.5em; font-size:13px; min-height:1.2em; }
+    #rlx-answer .rlx-a-no { color:#b91c1c; font-weight:600; }
+    #rlx-answer .rlx-a-yes { color:#047857; font-weight:600; }
+    #rlx-answer .rlx-a-line { margin-top:.1em; padding:.1em 0; }
+    #rlx-answer .rlx-fix-label { margin-top:.5em; font-size:12px; font-weight:600;
+      text-transform:uppercase; letter-spacing:1.1px; opacity:.55; }
+    #rlx-answer .rlx-a-acts { display:flex; align-items:center; gap:.45em; margin-top:.9em; }
+    #rlx-answer button { flex:0 0 auto; padding:5px 10px; border-radius:1px;
+      border:1px solid transparent;
+      background:var(--rlx-btn); color:#fff; font:inherit; font-weight:600;
+      cursor:pointer; box-shadow:var(--rlx-lift); }
+    #rlx-answer button:hover:not([disabled]) { background:var(--rlx-btn-lit); }
+    #rlx-answer button[disabled] { opacity:.4; cursor:default; }
+    #rlx-answer .rlx-a-primary { background:var(--rlx-key); border-color:transparent; }
+    #rlx-answer .rlx-a-primary:hover:not([disabled]) { background:#8f5cf0; }
+
     /* ————— the choice between two meanings.
 
        Same shape as the log below and for the same reason — it is a question,
@@ -2710,6 +2764,7 @@
     stage.live = false;
     closeDispute();
     closePick();
+    closeAnswer();
     stage.layer?.remove(); stage.note?.remove(); stage.bar?.remove();
     removeEventListener('scroll', scheduleDraw, true);
     removeEventListener('resize', scheduleDraw);
@@ -3503,10 +3558,12 @@
        * back — a rewritten paragraph is pasted into the editor by hand, the
        * same as a corrected citation. */
       case 'rewrite': {
-        const f = stage.findings[stage.i];
+        const k = stage.i;
+        const f = stage.findings[k];
         if (!f || !REWRITES.has(f.condition)) return;
         navigator.clipboard?.writeText(rewritePrompt(f));
-        stage.said = 'prompt copied — paste the answer into the editor yourself';
+        stage.said = 'prompt copied';
+        openAnswer(k, f);
         updateBar();
         return;
       }
@@ -3548,7 +3605,7 @@
      * which are exempt from `isTyping` further down precisely so that they
      * work inside the editor. The box has its own two keys and answers for
      * itself; Esc there closes the box, not the stage. */
-    if (disputeIsOpen() || pickBox) return;
+    if (disputeIsOpen() || pickBox || answerBox) return;
 
     /* With Alt the shortcuts work even while you are typing in the editor.
      *
@@ -3631,6 +3688,76 @@
    * prompt is written out in full here rather than assembled from fragments:
    * what goes on your clipboard is in this file, in order, where it can be
    * read and argued with. */
+  /* ————— keeping the markup out of the round trip.
+   *
+   * A paragraph that leaves as plain text comes back as plain text, and
+   * everything that was not a word is gone: the reference markers above all,
+   * which are `<sup>41</sup>` in the editor and a bare "41" once the tags are
+   * off. Paste that back and the article has lost its evidence.
+   *
+   * So the tags do not travel. Markers do.
+   *
+   *   CT pulmonary angiography ⟦1⟧will show ⟦2⟧filling defects⟦/2⟧ ⟦3⟧
+   *
+   * A reference is one marker on its own and is opaque: it may MOVE with the
+   * clause it belongs to, and nothing about it may change. Everything else —
+   * a link, an emphasis — is a PAIR around its own words: the words between
+   * them are prose and may be rewritten, and the tag that goes back around
+   * them afterwards is the one that was there before, href and all.
+   *
+   * Which is the whole safety property, and it is worth stating plainly: no
+   * tag that a model wrote ever reaches the article. What comes back is read
+   * as text, and the only elements in what gets written are clones of
+   * elements already in that paragraph. */
+  const OPEN = '⟦', SHUT = '⟧';
+  const MARKER = /⟦(\/?)(\d+)⟧/g;
+
+  // A citation marker, as opposed to a superscript that is part of the prose.
+  const CITATION_SUP = /^\d+(?:\s*[,–-]\s*\d+)*$/;
+
+  /* The block, as text with markers, and the elements the markers stand for.
+   *
+   * An inline element holding other elements is opaque too: unpicking a link
+   * around an italic around a reference is three ways to get it wrong, and
+   * those are rare enough to hand back whole. */
+  function protect(block) {
+    const keep = [];
+    let text = '';
+
+    for (const node of block.childNodes) {
+      if (node.nodeType === 3) { text += node.nodeValue || ''; continue; }
+      if (node.nodeType !== 1) continue;
+
+      const el = node;
+      const inline = el.matches?.(INLINE_TAGS);
+      const n = keep.length + 1;
+      const opaque = !inline
+        || el.children.length > 0
+        || (el.tagName === 'SUP' && CITATION_SUP.test(tidy(el.textContent || '')));
+
+      keep.push({ el, opaque });
+      text += opaque
+        ? `${OPEN}${n}${SHUT}`
+        : `${OPEN}${n}${SHUT}${el.textContent || ''}${OPEN}/${n}${SHUT}`;
+    }
+    return { block, text: text.replace(/\s+/g, ' ').trim(), keep };
+  }
+
+  /* What the markers are, in a list the prompt can carry. */
+  function legend(keep) {
+    return keep.map(({ el, opaque }, i) => {
+      const n = i + 1;
+      const what = el.tagName === 'SUP' ? 'a reference marker'
+        : el.tagName === 'A' ? 'a link'
+        : el.tagName === 'EM' || el.tagName === 'I' ? 'italics'
+        : el.tagName === 'STRONG' || el.tagName === 'B' ? 'bold'
+        : `a <${el.tagName.toLowerCase()}>`;
+      return opaque
+        ? `  ${OPEN}${n}${SHUT} is ${what}: "${tidy(el.textContent || '')}". Keep it exactly, move it if the clause it belongs to moves.`
+        : `  ${OPEN}${n}${SHUT} … ${OPEN}/${n}${SHUT} is ${what} around its own words. The words inside may be rewritten; the pair must stay, and stay in that order.`;
+    }).join('\n');
+  }
+
   const REWRITES = new Set([
     'Radiopaedia.Semicolons',
     'Radiopaedia.ThereIs',
@@ -3651,10 +3778,6 @@
    * rewritten sentence that reads better and says something slightly
    * different is worse than the sentence that tripped the check. */
   const HOUSE = [
-    'Keep every reference marker exactly where it is. In this text a citation',
-    'is a bare number after a clause, as in "...in adults 41." — it is not a',
-    'typo and must not be moved, merged or removed.',
-    '',
     'Change nothing but the wording. Every fact, number, hedge and qualifier',
     'stays as it is: do not add a claim, drop one, or make one more or less',
     'certain than it was.',
@@ -3663,6 +3786,86 @@
     'no italics, no new abbreviations, no words of praise for the findings.',
     'Keep it about as long as it was.',
   ].join('\n');
+
+  /* The same warning, for the one path where the references are not markers.
+   * A finding that never anchored has nothing but the line the linter quoted,
+   * and in that line a citation is a bare number with a full stop after it —
+   * which reads exactly like a typo to anybody who has not been told. */
+  const BARE_CITATIONS = [
+    'Keep every reference marker exactly where it is. In this text a citation',
+    'is a bare number after a clause, as in "...in adults 41." — it is not a',
+    'typo and must not be moved, merged or removed.',
+  ].join('\n');
+
+  // Text, as it would be written inside a tag.
+  function escaped(str) {
+    const box = document.createElement('span');
+    box.textContent = str;
+    return box.innerHTML;
+  }
+
+  // The markers out, for anything that wants to read the words alone.
+  const bare = (text) => String(text ?? '').replace(MARKER, '').replace(/\s+/g, ' ').trim();
+
+  /* The answer, with the markup put back — or a sentence saying why it cannot
+   * be.
+   *
+   * Every refusal here is the same refusal: the markers that went out are not
+   * the markers that came back, so something was invented, dropped or moved
+   * into something else. On a paragraph of a medical article that is not a
+   * thing to patch up and hope; it is a thing to say out loud and leave alone.
+   *
+   * What it builds is a string of HTML in which every TAG is the outerHTML of
+   * an element already in that paragraph and every WORD is escaped text. */
+  function restore(answer, keep) {
+    const used = new Array(keep.length).fill(0);
+    const out = [];
+    let open = null, buffer = '', at = 0, m;
+    MARKER.lastIndex = 0;
+
+    const take = (str) => {
+      if (open) buffer += str;
+      else if (str) out.push(escaped(str));
+    };
+
+    while ((m = MARKER.exec(answer))) {
+      take(answer.slice(at, m.index));
+      at = m.index + m[0].length;
+
+      const shut = m[1] === '/';
+      const n = Number(m[2]);
+      const item = keep[n - 1];
+      const name = `${OPEN}${shut ? '/' : ''}${n}${SHUT}`;
+      if (!item) return { trouble: `${name} was not in the paragraph that went out.` };
+
+      if (!shut) {
+        if (open) return { trouble: `${name} opens inside ${OPEN}${open.n}${SHUT}.` };
+        if (item.opaque) {
+          if (used[n - 1]++) return { trouble: `${name} is there more than once.` };
+          out.push(item.el.outerHTML);
+        } else {
+          open = { n, item };
+          buffer = '';
+        }
+      } else {
+        if (!open || open.n !== n) return { trouble: `${name} closes something that is not open.` };
+        if (used[n - 1]++) return { trouble: `${name} is there more than once.` };
+        const clone = open.item.el.cloneNode(false);
+        clone.textContent = buffer;
+        out.push(clone.outerHTML);
+        open = null;
+      }
+    }
+    take(answer.slice(at));
+    if (open) return { trouble: `${OPEN}${open.n}${SHUT} is never closed.` };
+
+    const lost = used.map((n, i) => (n ? null : i + 1)).filter(Boolean);
+    if (lost.length) {
+      return { trouble: `the answer has lost ${lost.map((n) => OPEN + n + SHUT).join(', ')}.` };
+    }
+    if (!out.length) return { trouble: 'there is nothing in the answer.' };
+    return { html: out.join('') };
+  }
 
   /* One finding, as a question. The check's name and the linter's own message
    * go in unedited — the message is the whole of what was asked for, and
@@ -3682,6 +3885,9 @@
   function rewritePrompt(f) {
     const quoted = f.narrowed && f.target ? plain(f.words || '') : '';
     const words = worthNaming(quoted, f.message || '') ? quoted : '';
+    const held = heldFor(f);
+    const marked = held && held.keep.length;
+
     return [
       'Rewrite one paragraph from a Radiopaedia radiology article.',
       '',
@@ -3689,15 +3895,39 @@
       `The check is ${f.condition || f.check}.`,
       words ? `It is about: ${words}` : '',
       '',
-      'The paragraph:',
+      marked ? 'The paragraph, with its markup replaced by markers:'
+             : 'The paragraph:',
       '',
-      f.snippet,
+      held ? held.text : f.snippet,
       '',
+      marked ? [
+        'The markers stand for the markup, which is not yours to write:',
+        '',
+        legend(held.keep),
+        '',
+        'Give every marker back, each exactly once, spelled exactly as it is',
+        'here. Anything with a marker in it that does not come back is a link',
+        'or a reference lost out of the article.',
+      ].join('\n') : '',
+      marked ? '' : BARE_CITATIONS,
+      marked ? null : '',
       HOUSE,
       '',
       'Answer with the rewritten paragraph and nothing else — no preamble, no',
       'explanation, no quotation marks around it.',
-    ].filter((line, i, all) => !(line === '' && all[i - 1] === '')).join('\n');
+    ].filter((line) => line !== null)
+     .filter((line, i, all) => !(line === '' && all[i - 1] === ''))
+     .join('\n');
+  }
+
+  /* The block this finding sits in, as markers and the elements they stand
+   * for — or nothing, where the finding never got anchored and all there is
+   * to go on is the line the linter quoted. */
+  function heldFor(f) {
+    const block = f?.home?.el;
+    if (!block || !block.isConnected) return null;
+    const held = protect(block);
+    return held.text ? held : null;
   }
 
   // ———————————————————————————————————————————————— the disagreement log
@@ -3932,6 +4162,115 @@
 
     document.body.appendChild(el);
     list.firstElementChild?.focus();
+  }
+
+  /* Where the rewritten paragraph comes back in.
+   *
+   * It has to come back through here rather than through the editor, and that
+   * is the whole point of the panel: paste a paragraph straight into TinyMCE
+   * and it arrives as plain text, with the references and the links gone. Here
+   * the markers are read, the article's own tags are put back around the new
+   * words, and what is written is markup this script built out of elements
+   * that were already in that paragraph.
+   *
+   * Nothing is written until you press the button, and the button does not
+   * light up until the markers add up. */
+  let answerBox = null;
+
+  function closeAnswer() {
+    answerBox?.remove();
+    answerBox = null;
+  }
+
+  function openAnswer(k, f) {
+    closeAnswer();
+    const held = heldFor(f);
+    if (!held) { stage.said = 'the paragraph is not in the editor to write back to'; return; }
+
+    const el = document.createElement('div');
+    answerBox = el;
+    el.id = 'rlx-answer';
+    el.innerHTML = `
+      <div class="rlx-a-panel" role="dialog" aria-label="The rewritten paragraph">
+        <div class="rlx-a-head">
+          <span class="rlx-a-title">the rewritten paragraph</span>
+          <button data-a="close" class="rlx-a-x" title="Close (Esc)">&times;</button>
+        </div>
+        <div class="rlx-a-hint">The prompt is on your clipboard. Paste what comes back.</div>
+        <textarea class="rlx-a-text" rows="7" spellcheck="false"></textarea>
+        <div class="rlx-a-say"></div>
+        <div class="rlx-a-diff"></div>
+        <div class="rlx-a-acts">
+          <button data-a="use" class="rlx-a-primary" disabled>Write it in</button>
+          <button data-a="close">Cancel</button>
+        </div>
+      </div>`;
+
+    const q = (sel) => el.querySelector(sel);
+    const box = q('.rlx-a-text');
+    const say = q('.rlx-a-say');
+    const diff = q('.rlx-a-diff');
+    const use = q('[data-a="use"]');
+    let ready = null;
+
+    const look = () => {
+      const answer = box.value.trim();
+      say.textContent = '';
+      diff.textContent = '';
+      ready = null;
+      use.disabled = true;
+      if (!answer) return;
+
+      const back = restore(answer, held.keep);
+      if (back.trouble) {
+        say.className = 'rlx-a-say rlx-a-no';
+        say.textContent = `Not written: ${back.trouble}`;
+        return;
+      }
+      ready = back.html;
+      say.className = 'rlx-a-say rlx-a-yes';
+      say.textContent = held.keep.length
+        ? `All ${plural(held.keep.length, 'marker')} accounted for.`
+        : 'Ready.';
+
+      const runs = wordDiff(bare(held.text), bare(answer));
+      diff.append(
+        label('as it reads'),
+        diffLine(runs, 'was', 'rlx-was', bare(held.text), 'rlx-a-line'),
+        label('as it would read'),
+        diffLine(runs, 'now', 'rlx-now', bare(answer), 'rlx-a-line'));
+      use.disabled = false;
+    };
+
+    box.addEventListener('input', look);
+
+    el.addEventListener('click', (e) => {
+      if (e.target === el) return closeAnswer();
+      const what = e.target.closest('[data-a]')?.dataset.a;
+      if (what === 'close') return closeAnswer();
+      if (what !== 'use' || !ready) return;
+      closeAnswer();
+      settleFix(k, f, writeBlock(held.block, ready));
+    });
+
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeAnswer(); }
+    }, true);
+
+    document.body.appendChild(el);
+    box.focus();
+  }
+
+  /* The paragraph, replaced in one go. `insertHTML` rather than `insertText`
+   * because what is going in has tags in it — the article's own, put back
+   * around the new words by `restore`. */
+  function writeBlock(block, html) {
+    if (!block?.isConnected) return 'the paragraph is no longer there';
+    const doc = block.ownerDocument;
+    const target = doc.createRange();
+    try { target.selectNodeContents(block); }
+    catch { return 'the paragraph moved while that was being worked out'; }
+    return runCommand(target, 'insertHTML', html);
   }
 
   let disputeBox = null;
