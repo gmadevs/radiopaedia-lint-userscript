@@ -255,6 +255,7 @@ linter should take from you while you are rewriting the sentence it is complaini
 | Write the correction in | <kbd>f</kbd> | <kbd>Alt</kbd> + <kbd>f</kbd> |
 | Add a name or an acronym | <kbd>p</kbd> | — |
 | Say what an acronym stands for | <kbd>e</kbd> | <kbd>Alt</kbd> + <kbd>e</kbd> |
+| Copy a prompt for rewriting this | <kbd>r</kbd> | <kbd>Alt</kbd> + <kbd>r</kbd> |
 | Write down that the rule is wrong | <kbd>d</kbd> | <kbd>Alt</kbd> + <kbd>d</kbd> |
 | Move the bar to the other edge | <kbd>t</kbd> | — |
 | Close | <kbd>Esc</kbd> | — |
@@ -268,8 +269,15 @@ these move you to another one.
 The button beside the title has copied Radiopaedia's own **Edit article** since it was written —
 `.btn.btn-flat`, down to the numbers read off it. Everything that *floats* now does too: the bar,
 the note, the all-clear banner and the two panels are white surfaces with a hairline border and
-the site's own drop shadow, Open Sans at 12px on an 18px line, corners of one or two pixels, and
-buttons in the site's flat grey. The word **Lint** on the bar is the purple of their headings.
+the site's own drop shadow, Open Sans at 12px on an 18px line, and corners of one or two pixels.
+The word **Lint** on the bar is the purple of their headings.
+
+Two button faces, and which is which matters. The one by the title sits among Radiopaedia's own
+article buttons and wears their flat grey, like **Edit article** beside it. Everything on the bar
+and in the panels is an action of ours and wears their *other* one — `.btn.btn-default`, #333 and
+white with a 1px corner, which is what RadioUpdater's **Check all references** is. Only the hover
+is not theirs: their dark button does not light up, and a bar you press a hundred times an
+afternoon has to answer when you point at it.
 
 Two colours are not theirs, and on purpose. The severities — red, amber, blue — and the green a
 finding turns when it is answered are this script's own language, and they mean something: the
@@ -506,10 +514,27 @@ left alone.
 
 ### What it will not do
 
-Everything else, which is most of it. Acronyms need an expansion looked up. Headings need moving.
-Semicolons, commas, parentheses, `There is`, the bracketed `e.g.` and the litotes all need the
-sentence rewritten, and a sentence rewritten by a machine in a radiology article is a sentence
-somebody has to check anyway.
+Everything else, which is most of it. Headings need moving, and moving a heading means moving what
+is under it, which no editing command does reliably.
+
+Five checks ask for the sentence to be written again — **Semicolons** (48 findings in the
+sample), **There Is** (10), **Commas** (8), **Parentheses** (4) and **Litotes** (2) — and not one
+of them has an answer a rule could write. <kbd>r</kbd> builds the question instead and puts it on
+the clipboard: the paragraph, the check, the linter's own words, and the things a Radiopaedia
+sentence must not lose on the way through somebody else's model.
+
+Three of those instructions are not style advice, they are ways these sentences get broken. The
+reference markers come first and matter most: in the editor's text a citation is a bare number —
+*…in adults 41.* — and a model reading that sees a typo and tidies it away, which silently takes
+the evidence out of a sentence in a medical article. Then: change nothing but the wording, because
+a rewrite that reads better and says something slightly different is worse than the sentence that
+tripped the check. Then British spelling and plain prose, about as long as it was.
+
+**Nothing is sent.** There is no model at the other end of this script and no key in it — this is
+a clipboard and a form of words. Where the question goes is your business, and the answer comes
+back the way a corrected citation does: by your hand, through the editor, after you have read it.
+The whole prompt is written out in `the ones that need a sentence`, in order, where it can be read
+and argued with.
 
 Number Spacing is missing for a third reason. Its findings are usually about `<sup>-6</sup>` read
 as prose — the article says 10⁻⁶ and the rule sees a space that is not in the text — so there is

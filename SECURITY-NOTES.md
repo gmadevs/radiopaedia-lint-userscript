@@ -122,6 +122,12 @@ to `innerHTML`, and never written into the editor; every value that reaches the 
 the `textContent` of a node this script built. A failure is caught and the panel says PubMed could
 not be asked — the index still answers, and an answer from one source says so.
 
+<kbd>r</kbd> — the rewrite prompt — makes no request of any kind. It builds a string from the
+finding already on your screen and writes it to the clipboard, and that is the whole of it: there
+is no model at the other end of this script, no API key in it, and no host in `@connect` that
+could take one. What you then do with the clipboard is outside the script, and the rewritten text
+comes back into the article by your hand.
+
 **Nothing of yours is ever written to a server.** Proposing a name or an acronym copies a word to the
 clipboard and opens `https://github.com/…/edit/main/proper-nouns.txt` in a new tab with
 `window.open(url, '_blank', 'noopener')`; the paste and the pull request are yours, in GitHub's

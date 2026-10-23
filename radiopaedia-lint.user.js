@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.11.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
+// @version      3.12.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -133,6 +133,16 @@
  * proposed is read off the EDITOR and not off the linter's quote, because the
  * quote is of the article as published and the text in the form has moved on.
  * See `the fixes`.
+ *
+ * Five more ask for the sentence again rather than for a correction —
+ * Semicolons, ThereIs, Commas, Parentheses, Litotes, seventy-two findings in
+ * the sample — and not one of them has an answer a rule could write. `r`
+ * builds the question instead: the paragraph, the check, the linter's own
+ * words, and the things a Radiopaedia sentence must not lose on the way
+ * through somebody else's model — the bare numbers that are its references
+ * above all. It goes on the clipboard. Nothing is sent: there is no model at
+ * the other end of this script and no key in it, and the answer comes back by
+ * your hand, through the editor, like a corrected citation.
  *
  * The references at the bottom of the article are checked by a second tool at
  * the same host, `radiopaedia.work/cite`: it takes a reference, works out what
@@ -521,6 +531,28 @@
    * second 'NOW' of a paragraph looking for a second paragraph, and it
    * reported "snippet not found" for the rest of the run. Which of the four
    * lights up is `targetNth`'s business, not this one's. */
+  /* The line, as long as the linter really has it.
+   *
+   * `trimmed` is `match` with the tags taken out, done at the far end, and it
+   * is cut short wherever the prose itself contains a '<'. "paediatric-onset
+   * multiple sclerosis (onset <16-18 years of age)" ends the string at
+   * "(onset", and two hundred characters of paragraph go with it — five
+   * findings in two hundred and twenty did that in the sample.
+   *
+   * `plain()` here does not make that mistake, because DOMParser follows the
+   * HTML rule the hand-written strip does not: a '<' is only a tag when a
+   * LETTER follows it, so "<16" is three characters of text. So where the
+   * markup yields more of the same line, the longer one is the line.
+   *
+   * Only ever an extension, never a replacement: the longer string has to
+   * begin with the shorter one, or this is not the same line and the
+   * linter's own answer stands. */
+  function fullLine(lint) {
+    const trimmed = plain(lint.trimmed || lint.display || lint.match);
+    const whole = plain(lint.match);
+    return whole.length > trimmed.length && whole.startsWith(trimmed) ? whole : trimmed;
+  }
+
   function fromApi(data) {
     const inOrder = [...(data.lints || [])].sort(
       (a, b) => ((+a.line || 0) - (+b.line || 0)) || ((+a.position || 0) - (+b.position || 0)));
@@ -532,7 +564,7 @@
       if (!message) continue;
       const check = checkName(lint.condition);
       const severity = tidy(lint.severity).toLowerCase();
-      const snippet = plain(lint.trimmed || lint.display || lint.match);
+      const snippet = fullLine(lint);
       const where = lint.line == null ? null
         : (lint.position == null ? String(lint.line) : `${lint.line}:${lint.position}`);
 
@@ -1913,12 +1945,24 @@
        These are the rest of the numbers, read off radiopaedia.org the same
        way rather than guessed:
 
+         .btn.btn-default  #333, white, a 1px corner, 0 4px 8px of lift —
+                           the one RadioUpdater's "Check all references" is,
+                           and the one a button of ours is
          .btn.btn-flat     #ededed on #555, a 2px corner, a hairline border
-                           going darker along the bottom, an inset highlight
+                           going darker along the bottom, an inset highlight —
+                           their "Edit article", which the button by the title
+                           has copied since it was written
          .btn-primary      #a172f8, white, a 1px corner, 0 4px 8px of lift
          h1                #65419b
          body              "Open Sans", 12px on an 18px line
          a                 #41699b
+
+       Two button faces, and which is which matters. The one by the TITLE sits
+       among their own article buttons and is flat grey like them; everything
+       on the bar and in the panels is an action of ours and wears their dark
+       one. Hovering is the one number not theirs: their dark button does not
+       change colour, and a bar you press a hundred times an afternoon has to
+       answer when you point at it.
 
        The site is light and has no dark mode, and all of this sits ON the
        site, so neither does any of this any more. A dark panel over a white
@@ -1929,7 +1973,9 @@
       --rlx-text: #555;              /* their body ink */
       --rlx-edge: rgba(0,0,0,.12);
       --rlx-lift: 0 4px 8px rgba(0,0,0,.1);
-      --rlx-flat: #ededed;           /* their flat button */
+      --rlx-flat: #ededed;           /* their flat button, by the title */
+      --rlx-btn: #333;               /* their default button, on ours */
+      --rlx-btn-lit: #4a4a4a;        /* ours: they do not light up */
       --rlx-key: #a172f8;            /* their primary */
       --rlx-head: #65419b;           /* their headings */
       --rlx-type: "Open Sans", system-ui, -apple-system, sans-serif;
@@ -2264,15 +2310,14 @@
       background:var(--rlx-face); color:var(--rlx-text); box-shadow:var(--rlx-lift);
       font:600 12px/18px var(--rlx-type);
     }
-    /* Their flat button, at the smaller padding a bar of a dozen of them
-       wants: same fill, same ink, same 2px corner, same hairline that goes
-       darker along the bottom, same inset highlight. */
-    #rlx-bar button { flex:0 0 auto; padding:5px 10px; border-radius:2px;
-      border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
-      background:var(--rlx-flat); color:var(--rlx-text); font:inherit; cursor:pointer;
-      box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05); }
-    #rlx-bar button:hover:not([disabled]) { background:#e2e2e2; color:#333; }
-    #rlx-bar button[disabled] { opacity:.45; cursor:default; }
+    /* Their ".btn-default", at the smaller padding a bar of a dozen of them
+       wants: same fill, same white, same 1px corner, same lift. */
+    #rlx-bar button { flex:0 0 auto; padding:5px 10px; border-radius:1px;
+      border:1px solid transparent;
+      background:var(--rlx-btn); color:#fff; font:inherit; cursor:pointer;
+      box-shadow:var(--rlx-lift); }
+    #rlx-bar button:hover:not([disabled]) { background:var(--rlx-btn-lit); }
+    #rlx-bar button[disabled] { opacity:.4; cursor:default; }
 
     /* Done is the one you press a hundred times an afternoon, and it was the
        same grey as Re-lint, which you press once. Green rather than the
@@ -2291,10 +2336,12 @@
       border-color:transparent; box-shadow:var(--rlx-lift); }
     #rlx-bar .rlx-primary:hover:not([disabled]) { background:#047857; color:#fff; }
 
-    /* The arrows are arrows, not buttons: no fill until you point at them. */
+    /* The arrows are arrows, not buttons: no fill until you point at them,
+       and the bar's own ink rather than the buttons' white. */
     #rlx-bar .rlx-step { background:transparent; border-color:transparent;
-      box-shadow:none; padding:.28em .5em; font-size:17px; line-height:1; }
-    #rlx-bar .rlx-step:hover:not([disabled]) { background:rgba(0,0,0,.06); }
+      box-shadow:none; color:var(--rlx-text);
+      padding:.28em .5em; font-size:17px; line-height:1; }
+    #rlx-bar .rlx-step:hover:not([disabled]) { background:rgba(0,0,0,.06); color:#333; }
 
     #rlx-bar .rlx-count { display:flex; align-items:center; gap:.42em; flex:0 0 auto;
       font-variant-numeric:tabular-nums; }
@@ -2319,9 +2366,10 @@
     #rlx-bar .rlx-sep { width:1px; align-self:stretch; background:var(--rlx-edge);
       flex:0 0 auto; }
     #rlx-bar .rlx-close, #rlx-bar .rlx-flip { background:transparent;
-      border-color:transparent; box-shadow:none; font-size:16px;
-      line-height:1; padding:.3em .5em; }
-    #rlx-bar .rlx-close:hover, #rlx-bar .rlx-flip:hover { background:rgba(0,0,0,.06); }
+      border-color:transparent; box-shadow:none; color:var(--rlx-text);
+      font-size:16px; line-height:1; padding:.3em .5em; }
+    #rlx-bar .rlx-close:hover, #rlx-bar .rlx-flip:hover {
+      background:rgba(0,0,0,.06); color:#333; }
 
     #rlx-banner {
       position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:99999;
@@ -2401,13 +2449,12 @@
     #rlx-cite-note .rlx-now { background:rgba(5,150,105,.20); border-radius:2px; }
     #rlx-cite-note .rlx-cite-acts { display:flex; gap:.4em; margin-top:.7em; flex-wrap:wrap; }
     #rlx-cite-note button {
-      padding:3px 8px; border-radius:2px;
-      border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
-      background:var(--rlx-flat); color:var(--rlx-text); cursor:pointer;
-      box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05);
+      padding:3px 8px; border-radius:1px; border:1px solid transparent;
+      background:var(--rlx-btn); color:#fff; cursor:pointer;
+      box-shadow:var(--rlx-lift);
       font:600 11px/16px var(--rlx-type);
     }
-    #rlx-cite-note button:hover { background:#e2e2e2; color:#333; }
+    #rlx-cite-note button:hover { background:var(--rlx-btn-lit); }
 
     /* ————— the choice between two meanings.
 
@@ -2500,12 +2547,11 @@
     #rlx-dispute textarea:focus { outline:2px solid var(--rlx-key); outline-offset:-1px; }
     #rlx-dispute .rlx-d-acts { display:flex; align-items:center; gap:.45em;
       margin-top:.8em; flex-wrap:wrap; }
-    #rlx-dispute button { flex:0 0 auto; padding:5px 10px; border-radius:2px;
-      border:1px solid rgba(0,0,0,.1); border-bottom-color:rgba(0,0,0,.25);
-      background:var(--rlx-flat); color:var(--rlx-text); font:inherit; font-weight:600;
-      cursor:pointer;
-      box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 2px rgba(0,0,0,.05); }
-    #rlx-dispute button:hover { background:#e2e2e2; color:#333; }
+    #rlx-dispute button { flex:0 0 auto; padding:5px 10px; border-radius:1px;
+      border:1px solid transparent;
+      background:var(--rlx-btn); color:#fff; font:inherit; font-weight:600;
+      cursor:pointer; box-shadow:var(--rlx-lift); }
+    #rlx-dispute button:hover { background:var(--rlx-btn-lit); }
     /* Their primary. Recording a disagreement is not a verdict on a finding,
        so there is nothing here for the script's own green to mean. */
     #rlx-dispute .rlx-d-primary { background:var(--rlx-key); color:#fff;
@@ -2529,8 +2575,11 @@
     #rlx-dispute .rlx-d-what { flex:1 1 auto; min-width:0; }
     #rlx-dispute .rlx-d-rule { font-size:12px; opacity:.7; }
     #rlx-dispute .rlx-d-why { font-size:13px; }
-    #rlx-dispute .rlx-d-row button { font-size:11px; padding:.2em .45em; opacity:.6; }
-    #rlx-dispute .rlx-d-row button:hover { opacity:1; }
+    /* The × on a row is a mark on that row, not one more thing to press:
+       a dozen black squares down the side of a list is a wall. */
+    #rlx-dispute .rlx-d-row button { font-size:11px; padding:.2em .45em; opacity:.6;
+      background:transparent; color:var(--rlx-text); box-shadow:none; }
+    #rlx-dispute .rlx-d-row button:hover { opacity:1; background:rgba(0,0,0,.06); }
 
   `);
 
@@ -2573,6 +2622,7 @@
       <span class="rlx-sep rlx-sep-tools"></span>
       <button data-act="fix" title="Write the correction into the editor (f)">&#9998; Fix</button>
       <button data-act="copy" title="Copy the message (c)">Copy</button>
+      <button data-act="rewrite" title="Copy a prompt for rewriting this paragraph (r)">&#9998; Prompt</button>
       <button data-act="propose" title="Add this to the shared list (p)">+ Name</button>
       <button data-act="meaning" title="Say what this acronym stands for (e)">+ Meaning</button>
       <button data-act="dispute" title="The rule is wrong here: write it down (d)">&#9873; Log</button>
@@ -2900,6 +2950,16 @@
       stage.note.appendChild(line);
     }
 
+    /* The five that need the sentence written again say so where the
+       corrected text would otherwise stand. Nothing else on the note tells
+       you that this one is not going to be answered by a keystroke. */
+    if (!settled && !would && REWRITES.has(f.condition)) {
+      const line = document.createElement('div');
+      line.className = 'rlx-hint';
+      line.textContent = 'This one wants the sentence written again. Press r for a prompt.';
+      stage.note.appendChild(line);
+    }
+
     /* A meaning offered and not landed yet. The same sentence the lists get,
        for the same reason: between the click and the merge there is a pull
        request, and "have I already done this one?" should not mean "go and
@@ -3211,6 +3271,12 @@
       add.title = on ? `Add '${offer}' to the shared ${on.of} (p)` : '';
     }
 
+    /* On the five checks that ask for the sentence again, and only while the
+       finding is open: a paragraph you have already dealt with is not one to
+       go and have rewritten. */
+    const ask = stage.bar.querySelector('[data-act="rewrite"]');
+    if (ask) ask.hidden = !(f && f.state === 'open' && REWRITES.has(f.condition));
+
     /* Offered on an acronym the expansions file does not name yet, on its
        first use, once. Not where the file could not be read at all: that is
        "we do not know", and inviting a line for a word that may well be in
@@ -3361,6 +3427,19 @@
        * in hand: with the walk over it opens on the log alone, which is where
        * Copy Markdown and Download CSV live. */
       case 'dispute': return openDispute();
+      /* The question, on the clipboard. Nothing is sent and nothing is
+       * written: where it goes from there is yours, and so is what comes
+       * back — a rewritten paragraph is pasted into the editor by hand, the
+       * same as a corrected citation. */
+      case 'rewrite': {
+        const f = stage.findings[stage.i];
+        if (!f || !REWRITES.has(f.condition)) return;
+        navigator.clipboard?.writeText(rewritePrompt(f));
+        stage.said = 'prompt copied — paste the answer into the editor yourself';
+        updateBar();
+        return;
+      }
+
       /* The counterpart of `propose`, and the other answer to the same
        * finding: `p` says this acronym needs no spelling out, `e` says here is
        * what it spells out to. Same gesture either way — the line goes to the
@@ -3413,7 +3492,7 @@
      * those characters from being typed. */
     if (e.altKey) {
       const m = { KeyJ: 'next', KeyK: 'prev', KeyS: 'done', KeyX: 'ignore',
-                  KeyD: 'dispute', KeyF: 'fix', KeyE: 'meaning',
+                  KeyD: 'dispute', KeyF: 'fix', KeyE: 'meaning', KeyR: 'rewrite',
                   Enter: 'done', NumpadEnter: 'done' }[e.code];
       if (m) { e.preventDefault(); act(m); }
       return;
@@ -3422,7 +3501,7 @@
 
     const m = { j: 'next', k: 'prev', s: 'done', x: 'ignore', u: 'undo',
                 c: 'copy', p: 'propose', d: 'dispute', f: 'fix', e: 'meaning',
-                t: 'flip', Escape: 'close' }[e.key];
+                r: 'rewrite', t: 'flip', Escape: 'close' }[e.key];
     if (m) { e.preventDefault(); act(m); }
   }
 
@@ -3453,6 +3532,101 @@
       draw();
       updateBar();
     }, 700);
+  }
+
+  // ————————————————————————————————————————— the ones that need a sentence
+
+  /* Five checks ask for the sentence to be written again.
+   *
+   *     Semicolons    "Use semicolons judiciously."            48 in the sample
+   *     ThereIs       "Don't start a sentence with 'There are'." 10
+   *     Commas        "More than 5 commas in a single sentence."  8
+   *     Parentheses   "Use parentheses judiciously."              4
+   *     Litotes       "Consider using 'lack(s)' instead of 'not have'."  2
+   *
+   * Seventy-two findings, and not one of them has an answer a rule could
+   * write: every one needs somebody to decide what the sentence is trying to
+   * say and say it again. `f` offers nothing on these and should not.
+   *
+   * What CAN be done is the typing around it. `r` builds the question — the
+   * paragraph, the check, the linter's own words, and what a Radiopaedia
+   * sentence has to hold on to — and puts it on the clipboard. Where it goes
+   * from there is your business: a model in another tab, a colleague, a
+   * notebook. The answer comes back the way the corrected citations do, by
+   * your hand, through the editor.
+   *
+   * Nothing is sent. There is no model at the other end of this script and no
+   * key in it; this is a clipboard and a form of words. That is also why the
+   * prompt is written out in full here rather than assembled from fragments:
+   * what goes on your clipboard is in this file, in order, where it can be
+   * read and argued with. */
+  const REWRITES = new Set([
+    'Radiopaedia.Semicolons',
+    'Radiopaedia.ThereIs',
+    'Radiopaedia.Commas',
+    'Radiopaedia.Parentheses',
+    'Radiopaedia.Litotes',
+  ]);
+
+  /* The house rules a rewrite has to respect, and they are not style advice:
+   * each one is a way these sentences get broken.
+   *
+   * The reference markers come first because they are the dangerous one. In
+   * the editor's text a citation is a bare number — `…in adults 41.` — and a
+   * model reading that sees a typo and tidies it away, which silently strips
+   * the evidence from a sentence in a medical article.
+   *
+   * "Change nothing but the wording" is second for the same reason: a
+   * rewritten sentence that reads better and says something slightly
+   * different is worse than the sentence that tripped the check. */
+  const HOUSE = [
+    'Keep every reference marker exactly where it is. In this text a citation',
+    'is a bare number after a clause, as in "...in adults 41." — it is not a',
+    'typo and must not be moved, merged or removed.',
+    '',
+    'Change nothing but the wording. Every fact, number, hedge and qualifier',
+    'stays as it is: do not add a claim, drop one, or make one more or less',
+    'certain than it was.',
+    '',
+    'British spelling, as in the sentence you are given. Plain prose: no bold,',
+    'no italics, no new abbreviations, no words of praise for the findings.',
+    'Keep it about as long as it was.',
+  ].join('\n');
+
+  /* One finding, as a question. The check's name and the linter's own message
+   * go in unedited — the message is the whole of what was asked for, and
+   * rewording it here would be this script deciding what the rule meant. */
+  /* The words the check pointed at, named only where naming them helps.
+   *
+   * On Semicolons they are ';' and on Commas ',' — a line reading "It is
+   * about: ;" is noise. On ThereIs and Litotes the message already quotes
+   * them, and saying the same thing twice in a prompt is a way of being
+   * misread. What is left is the case the line was for: three sets of
+   * brackets in a paragraph, and this is the set. */
+  function worthNaming(words, message) {
+    if ((words.match(/\p{L}/gu) || []).length < 2) return false;
+    return !fold(message).toLowerCase().includes(fold(words).toLowerCase());
+  }
+
+  function rewritePrompt(f) {
+    const quoted = f.narrowed && f.target ? plain(f.words || '') : '';
+    const words = worthNaming(quoted, f.message || '') ? quoted : '';
+    return [
+      'Rewrite one paragraph from a Radiopaedia radiology article.',
+      '',
+      `Their style checker says: ${f.message}`,
+      `The check is ${f.condition || f.check}.`,
+      words ? `It is about: ${words}` : '',
+      '',
+      'The paragraph:',
+      '',
+      f.snippet,
+      '',
+      HOUSE,
+      '',
+      'Answer with the rewritten paragraph and nothing else — no preamble, no',
+      'explanation, no quotation marks around it.',
+    ].filter((line, i, all) => !(line === '' && all[i - 1] === '')).join('\n');
   }
 
   // ———————————————————————————————————————————————— the disagreement log
