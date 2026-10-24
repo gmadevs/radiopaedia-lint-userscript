@@ -371,9 +371,9 @@ the only thing selected and replaced was one character of punctuation. A change 
 to cross a tag — the hyphen of `post<em>-</em>biopsy`, say — is refused in so many words rather
 than flattened into plain text.
 
-### Which twenty
+### Which twenty-four
 
-Sixteen of them change the words:
+Twenty of them change the words:
 
 | Check | What it writes |
 | :-- | :-- |
@@ -393,14 +393,22 @@ Sixteen of them change the words:
 | Spacing | the missing space after a full stop |
 | En Dash | `–` → `-` |
 | Acronyms | the expansion at the first use — see [below](#spelling-out-an-acronym) |
+| Number Spacing | the spaces out of a range: `50 - 60` → `50-60` |
+| Colons | the first word after a colon down: `: This article` → `: this article` |
+| Heterogeneous Spelling | the form the message names, keeping the article's capital: `Homogenous` → `Homogeneous` |
+| Uncomparables | the word that cannot qualify: `more complete` → `complete` |
 
 And one puts a space in front of a reference marker — `intramural<sup>11</sup>` →
 `intramural <sup>11</sup>` — which is a place rather than a change to any word. Only where the
 marker is a reference: `<sup>-6</sup>` is an exponent, the article says 10⁻⁶, and a space there
-would be wrong. And only where the thing in front of the marker is **text**: a citation sitting
-straight against a tag, `…</a><sup>4</sup>`, is left alone, because every way of putting a space
-into that gap either tucks it inside the link or rewrites the space after the marker into a
-non-breaking one. Four ways were measured; the comment in `spaceBeforeCitation` lists them. That one goes in with `insertHTML` rather than `insertText`, because measured
+would be wrong, and neither is `cm<sup>3</sup>` — that is cubic centimetres, and three of the six
+findings of this kind in the sample were exactly that. A space there would make *cm 3* out of a
+volume, so a plain 2 or 3 sitting on a unit symbol is left alone.
+
+And only where the thing in front of the marker is **text**: a citation sitting straight against a
+tag, `…</a><sup>4</sup>`, is left alone, because every way of putting a space into that gap either
+tucks it inside the link or rewrites the space after the marker into a non-breaking one. Four ways
+were measured; the comment in `spaceBeforeCitation` lists them. That one goes in with `insertHTML` rather than `insertText`, because measured
 rather than assumed: `insertText` with a space at the end of a run of text writes a
 *non-breaking* space, the browser being helpful about a space that would otherwise collapse. The
 value passed is that one character and nothing else.
@@ -610,11 +618,14 @@ paste, and the two are the only hosts `@connect` will allow it to reach. Nothing
 is trusted any more than before: the markers are counted, the comparison is drawn, and nothing
 reaches the article until you press the button.
 
-Number Spacing is missing for a third reason. Its findings are usually about `<sup>-6</sup>` read
-as prose — the article says 10⁻⁶ and the rule sees a space that is not in the text — so there is
-nothing there to correct. That is one for [the log](#when-the-rule-is-the-problem), and so is
-Headings Case, which asks for sentence-style capitalisation on headings like `MR spectroscopy`
-that already have it.
+Headings Case is one for [the log](#when-the-rule-is-the-problem): it asks for sentence-style
+capitalisation on headings like `MR spectroscopy` that already have it.
+
+Number Spacing used to be in this paragraph too, left out because the only examples to hand were
+`<sup>-6</sup>` read as prose — the article says 10⁻⁶ and the rule saw a space that is not in the
+text. Fifty articles later there are real ones, `50 - 60`, and the false ones turn out to refuse
+themselves: in the editor there is nothing between the `10` and the `-6` to take out, so the fix
+gives back what it was given and nothing is offered.
 
 Headings Spacing — the stray space at the end of a heading — was written and then taken out
 again. None of the browser's editing commands will remove it: `delete` eats the character before

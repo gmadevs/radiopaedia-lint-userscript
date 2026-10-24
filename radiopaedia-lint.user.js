@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.15.1
+// @version      3.16.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -101,8 +101,8 @@
  * rule, which is the shape an argument for changing one has to be in. Nothing
  * is sent from there either — see `the disagreement log`, further down.
  *
- * Twenty of the checks have one right answer rather than a judgement to
- * make. Sixteen are about the words — the Oxford comma, the two hyphen rules,
+ * Twenty-four of the checks have one right answer rather than a judgement to
+ * make. Twenty are about the words — the Oxford comma, the two hyphen rules,
  * a list item's capital, an e.g. list ending in 'and', the Latin forms, the
  * isotope notation, a comma inside a quotation mark, two references written as
  * a range, a full stop on a list item, a possessive eponym, a range with
@@ -1530,6 +1530,77 @@
     return true;
   }
 
+  /* '50 - 60' → '50-60'.
+   *
+   * Left out of the first pass because the only examples to hand were the
+   * `10<sup>-6</sup>` ones, where the linter reads the superscript as prose
+   * and asks for a space to be closed that is not in the text. Fifty articles
+   * later there are real ones, and the false ones turn out to refuse
+   * themselves: in the editor `10<sup>-6</sup>` reads as "10-6" with nothing
+   * between, so this gives back what it was given and nothing is offered. */
+  const AROUND_HYPHEN = /^(\d+)\s*[-–]\s*(\d+)$/;
+
+  function closeRange(text) {
+    const m = AROUND_HYPHEN.exec(text);
+    return m ? `${m[1]}-${m[2]}` : null;
+  }
+
+  /* ': This article' → ': this article'.
+   *
+   * The same two refusals as the capital on a list item, for the same two
+   * reasons: an acronym would come back as `mRI`, and a proper noun is not a
+   * mistake. The names file is asked here as well — it is already loaded, and
+   * "American College of Cardiology" after a colon is as much a name as it is
+   * at the start of a list item. */
+  const AFTER_COLON = /^(\s*:\s*)(\S+)([\s\S]*)$/;
+  const TWO_CAPITALS = /^\p{Lu}[\p{L}'\u2019-]*\s+\p{Lu}/u;
+
+  function lowerAfterColon(text) {
+    const m = AFTER_COLON.exec(text);
+    if (!m) return null;
+
+    const word = m[2];
+    if (word.length > 1 && word === word.toUpperCase()) return null;
+
+    /* Optional chaining and not a plain lookup: this runs inside `proposal`,
+       which runs on every redraw, and a throw in there takes the note and the
+       bar with it. */
+    const names = LISTS.names?.entries;
+    if (names && startsWithEntry(word + m[3], names)) return null;
+
+    /* And a second capital right after the first is a name the file has not
+       been told about. ": This article" is a sentence — one capital, then
+       lower case. ": American College of Cardiology" is not, and the names
+       file cannot be relied on to say so: it has "American College of Chest
+       Physicians" in it, which does not cover "of Cardiology" and never
+       could, because the list is of the names somebody has met. Two capitals
+       running is the shape itself. */
+    if (TWO_CAPITALS.test(word + m[3])) return null;
+
+    const low = word[0].toLowerCase();
+    return low === word[0] ? null : m[1] + low + word.slice(1) + m[3];
+  }
+
+  /* 'Homogenous' → 'Homogeneous'. The message names the form Radiopaedia
+   * wants, the same shape the Latin rule reads — and the same reading is used
+   * for it. The capital is the article's and stays the article's: the word is
+   * quoted in the message in lower case because that is how a dictionary
+   * writes it, not because the sentence should start in lower case. */
+  function preferredSpelling(text, f) {
+    const m = LATIN_FORM.exec(f.message || '');
+    if (!m || fold(m[2]) !== fold(text)) return null;
+    const want = m[1];
+    return /^\p{Lu}/u.test(text) ? want.charAt(0).toUpperCase() + want.slice(1) : want;
+  }
+
+  /* 'more complete' → 'complete'. A thing is complete or it is not, and the
+   * word in front of it is the whole of what the check is objecting to. */
+  const NOT_COMPARABLE = /^(?:more|most|less|least|very|quite|rather|somewhat)\s+/i;
+
+  function dropIntensifier(text) {
+    return NOT_COMPARABLE.test(text) ? text.replace(NOT_COMPARABLE, '') : null;
+  }
+
   /* The whole list. A condition that is not in here has no fix, and that is
    * the usual case: of the thirty-odd checks the linter runs, these are the
    * ones where the answer does not depend on knowing what the sentence is
@@ -1551,6 +1622,10 @@
     'Radiopaedia.EnDash': hyphenMinus,
     'Radiopaedia.InlineEG': inlineEG,
     'Radiopaedia.Acronyms': spellOut,
+    'Radiopaedia.NumberSpacing': closeRange,
+    'Radiopaedia.Colons': lowerAfterColon,
+    'Radiopaedia.HeterogeneousSpelling': preferredSpelling,
+    'Radiopaedia.Uncomparables': dropIntensifier,
   };
 
   /* Fixes that need the character standing before the highlight as well.
@@ -1624,11 +1699,37 @@
    * would be wrong in the text. A citation is digits, and commas or hyphens
    * between digits; an exponent that opens with a minus sign is not one. */
   const CITATION_NUMBERS = /^\d+(?:\s*[,–-]\s*\d+)*$/;
+  /* And a superscript on a unit is not a citation either.
+   *
+   * `cm<sup>3</sup>` is cubic centimetres, and the check reports it as a
+   * reference with no space in front of it — three of the six findings of
+   * this kind in the sample were exactly that. Writing the space would make
+   * "cm 3" out of a volume.
+   *
+   * Both halves have to hold before it is taken for a unit: the superscript
+   * is a plain 2 or 3, and the letters it sits on are a unit symbol. A
+   * reference numbered 2 is common; one written directly against the letters
+   * "cm" is not a thing that happens. */
+  const SQUARED_OR_CUBED = /^[23]$/;
+  const UNITS = new Set([
+    'm', 'cm', 'mm', 'km', 'um', 'µm', 'nm',
+    'l', 'ml', 'dl', 'cc', 's', 'ms',
+    'g', 'kg', 'mg', 'ug', 'gy', 'sv', 'msv', 't', 'hz', 'khz', 'mhz',
+  ]);
+
+  function unitExponent(sup) {
+    if (!SQUARED_OR_CUBED.test(tidy(sup.textContent || ''))) return false;
+    const before = sup.previousSibling;
+    if (!before || before.nodeType !== 3) return false;
+    const m = /([\p{L}µ]+)$/u.exec(before.nodeValue || '');
+    return !!m && UNITS.has(m[1].toLowerCase());
+  }
 
   function spaceBeforeCitation(f) {
     const node = f.range.startContainer;
     const sup = (node.nodeType === 1 ? node : node.parentElement)?.closest('sup');
     if (!sup || !CITATION_NUMBERS.test(tidy(sup.textContent || ''))) return null;
+    if (unitExponent(sup)) return null;
 
     /* Only where the thing in front of the marker is TEXT.
      *
