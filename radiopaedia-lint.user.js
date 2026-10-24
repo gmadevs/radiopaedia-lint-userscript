@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.16.0
+// @version      3.17.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -101,8 +101,8 @@
  * rule, which is the shape an argument for changing one has to be in. Nothing
  * is sent from there either — see `the disagreement log`, further down.
  *
- * Twenty-four of the checks have one right answer rather than a judgement to
- * make. Twenty are about the words — the Oxford comma, the two hyphen rules,
+ * Twenty-five of the checks have one right answer rather than a judgement to
+ * make. Twenty-one are about the words — the Oxford comma, the two hyphen rules,
  * a list item's capital, an e.g. list ending in 'and', the Latin forms, the
  * isotope notation, a comma inside a quotation mark, two references written as
  * a range, a full stop on a list item, a possessive eponym, a range with
@@ -1601,6 +1601,38 @@
     return NOT_COMPARABLE.test(text) ? text.replace(NOT_COMPARABLE, '') : null;
   }
 
+  /* '5mm' → '5 mm'.
+   *
+   * The one rule here written from the check's own definition rather than
+   * from findings: it fires rarely enough not to appear in fifty articles of
+   * output, so there was nothing to read it off. Its tokens say what counts
+   * as a unit, and this is that list — ns, ms, min, h, d, y, s, mm, cm, km,
+   * m, mL, L — with the longest taken first, `min` before `m` and `mm`
+   * before `m`.
+   *
+   * The unit has to END where it ends. "30minutes" is a word and not thirty
+   * minutes; "5mmHg" is a unit of its own, and millimetres of mercury with a
+   * space dropped into the middle would be worse than the thing complained
+   * of. Both come back with nothing offered.
+   *
+   * The space goes in at the FIRST join, because the check can quote a run
+   * wider than the number and its unit: its last token takes the word
+   * characters on either side, so "3mm-thick" arrives whole and leaves as
+   * "3 mm-thick".
+   *
+   * The exceptions — Tc-99m, technetium-99m, 99m-methyl, the H3K27m
+   * mutations, and `[2-9]0s` for a decade — are the check's own and never
+   * reach us. Where one did, the letter after it would not be a unit's end
+   * and nothing would be offered anyway. */
+  const NUMBER_AND_UNIT = /(\d)(min|ns|ms|mm|cm|km|mL|L|m|h|d|y|s)(?![A-Za-z])/;
+
+  function spaceBeforeUnit(text) {
+    const m = NUMBER_AND_UNIT.exec(text);
+    if (!m) return null;
+    const at = m.index + 1;
+    return `${text.slice(0, at)} ${text.slice(at)}`;
+  }
+
   /* The whole list. A condition that is not in here has no fix, and that is
    * the usual case: of the thirty-odd checks the linter runs, these are the
    * ones where the answer does not depend on knowing what the sentence is
@@ -1626,6 +1658,7 @@
     'Radiopaedia.Colons': lowerAfterColon,
     'Radiopaedia.HeterogeneousSpelling': preferredSpelling,
     'Radiopaedia.Uncomparables': dropIntensifier,
+    'Radiopaedia.Units': spaceBeforeUnit,
   };
 
   /* Fixes that need the character standing before the highlight as well.

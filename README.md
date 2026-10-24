@@ -371,9 +371,9 @@ the only thing selected and replaced was one character of punctuation. A change 
 to cross a tag — the hyphen of `post<em>-</em>biopsy`, say — is refused in so many words rather
 than flattened into plain text.
 
-### Which twenty-four
+### Which twenty-five
 
-Twenty of them change the words:
+Twenty-one of them change the words:
 
 | Check | What it writes |
 | :-- | :-- |
@@ -397,6 +397,7 @@ Twenty of them change the words:
 | Colons | the first word after a colon down: `: This article` → `: this article` |
 | Heterogeneous Spelling | the form the message names, keeping the article's capital: `Homogenous` → `Homogeneous` |
 | Uncomparables | the word that cannot qualify: `more complete` → `complete` |
+| Units | the space between a number and its unit: `5mm` → `5 mm` |
 
 And one puts a space in front of a reference marker — `intramural<sup>11</sup>` →
 `intramural <sup>11</sup>` — which is a place rather than a change to any word. Only where the
@@ -412,6 +413,13 @@ were measured; the comment in `spaceBeforeCitation` lists them. That one goes in
 rather than assumed: `insertText` with a space at the end of a run of text writes a
 *non-breaking* space, the browser being helpful about a space that would otherwise collapse. The
 value passed is that one character and nothing else.
+
+Units is the one rule here written from the check's own definition rather than from findings: it
+fires rarely enough not to appear in fifty articles of lint output, so there was nothing to read
+it off. Its tokens say what counts as a unit — `ns`, `ms`, `min`, `h`, `d`, `y`, `s`, `mm`, `cm`,
+`km`, `m`, `mL`, `L` — and the unit has to end where it ends: `30minutes` is a word and not thirty
+minutes, `5mmHg` is a unit of its own, and both are left alone. The space goes in at the first
+join, so the wider shape the check can quote comes out right too: `3mm-thick` → `3 mm-thick`.
 
 Citation Syntax leaves a real range alone — `1-5` is a range, `1-2` is two references written
 with a hyphen. Inline EG only acts where the brackets end the paragraph or list item, which all
