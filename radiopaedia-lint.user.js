@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.17.0
+// @version      3.18.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -2579,13 +2579,21 @@
          box that starts at the middle of the window has only the right half to
          be wide in, so the bar was being sized against 50% of the screen and
          its last buttons hung outside its own background. Two edges and auto
-         margins give it the whole width to shrink-to-fit in — and fit-content
-         is what makes it shrink at all, since a box pinned to both edges with
-         width:auto simply fills them, which is a dark pill with a lot of
-         nothing in it once half the buttons are gone. */
+         margins give it the whole width to centre in.
+
+         One width, always. It used to be fit-content, which meant the bar
+         changed size every time a button came or went, and the whole thing
+         slid sideways under the pointer while you worked. Every button is on
+         it at all times now — greyed where it does not apply — so the row has
+         one width anyway; stating it outright is what keeps the two ends still
+         as well. Measured, not guessed: the full row of buttons wants 1034px,
+         and 112em at 13px is 1456, which leaves the status a fifth of the bar
+         to say its piece in, where 100em left it barely a hundred pixels.
+         Narrower than about 1050 and the last buttons wrap onto a second
+         row, which is still the same shape every time. */
       position:fixed; left:0; right:0; margin:0 auto; bottom:18px; z-index:99999;
       display:flex; align-items:center; gap:.45em; flex-wrap:wrap; justify-content:center;
-      width:fit-content; max-width:min(64em, 96vw); padding:.5em .7em; border-radius:2px;
+      width:min(112em, 96vw); padding:.5em .7em; border-radius:2px;
       /* Louder than the rest of the floating layer, and deliberately: this one
          is always there while you work, over somebody's article, and it has to
          be findable at a glance rather than merely separated from the page.
@@ -2603,7 +2611,19 @@
       background:var(--rlx-btn); color:#fff; font:inherit; cursor:pointer;
       box-shadow:var(--rlx-lift); }
     #rlx-bar button:hover:not([disabled]) { background:var(--rlx-btn-lit); }
-    #rlx-bar button[disabled] { opacity:.4; cursor:default; }
+    /* Grey, not faded. A black button at 40% opacity over a white bar is a
+       grey button either way, but it is also a dimmer version of the thing
+       next to it, and at a glance the row reads as half-lit rather than as
+       some-of-these-apply. Their own flat grey says it in the site's own
+       vocabulary, and the lift comes off: nothing is standing up to be
+       pressed. The title still says why, so pointing at a dead button
+       answers the question it raises. */
+    #rlx-bar button[disabled] { background:var(--rlx-flat); color:#aaa;
+      box-shadow:none; cursor:default; }
+    /* The three that have no fill to lose — the arrows, the flip, the close —
+       only go pale. Done is a filled button and greys like the rest. */
+    #rlx-bar .rlx-step[disabled], #rlx-bar .rlx-close[disabled],
+    #rlx-bar .rlx-flip[disabled] { background:transparent; color:#bbb; }
 
     /* Done is the one you press a hundred times an afternoon, and it was the
        same grey as Re-lint, which you press once. Green rather than the
@@ -2629,6 +2649,25 @@
       padding:.28em .5em; font-size:18px; line-height:1; }
     #rlx-bar .rlx-step:hover:not([disabled]) { background:rgba(0,0,0,.06); color:#333; }
 
+    /* The counting and the sentence, in one zone of their own, and that zone
+       is the only part of the bar that is elastic. Everything to the right of
+       it — every button — therefore stands in the same place at all times,
+       whatever the left-hand end has to say for itself. The counting is
+       nowhere near one width — a position and up to four tallies, 152px at
+       full stretch and 28 once a single severity is left. Without this, each
+       of those changes pushed a dozen buttons along; with it they take their
+       room from the sentence instead, which is the one thing here that can
+       afford to be shorter. flex-basis 0 and
+       min-width 0 so the zone is measured as though it were empty: the row's
+       width is the buttons' width, and no amount of counting can wrap it. */
+    #rlx-bar .rlx-left { display:flex; align-items:center; gap:.45em;
+      flex:1 1 0; min-width:0; overflow:hidden; }
+    /* Its natural width, and it never gives any of it up: whatever it has to
+       say, it says, and the sentence next door pays for it. A fixed 12em
+       reserve was tried here and taken out again — on a narrow window the
+       reserve came to more than the whole zone, and the sentence was left
+       with nothing at all. tabular-nums so that 1/34 and 12/34 are the same
+       width, which is the only steadiness this needs. */
     #rlx-bar .rlx-count { display:flex; align-items:center; gap:.42em; flex:0 0 auto;
       font-variant-numeric:tabular-nums; }
     #rlx-bar .rlx-of { font-weight:600; }
@@ -2646,9 +2685,23 @@
        there: it never pushes itself onto a second row, it takes whatever room
        is left over and ends in an ellipsis. Wrapping is still on for a window
        narrow enough that the buttons alone will not fit — better a second row
-       than a button off the edge — but the sentence cannot cause it. */
+       than a button off the edge — but the sentence cannot cause it.
+
+       It sits in the middle of the bar, sharing a zone with the counting,
+       and that is the whole reason the controls hold still. It is the one
+       part that gives ground: the counting beside it can grow and everything
+       to its right stays where your hand left it, because the bar itself no
+       longer changes size. Put the sentence at the far end instead and the
+       arithmetic runs the other way — the count gains a digit and twelve
+       buttons move. */
     #rlx-bar .rlx-status { flex:1 1 0; min-width:0; overflow:hidden;
-      text-overflow:ellipsis; white-space:nowrap; color:#777; font-weight:400; }
+      text-overflow:ellipsis; white-space:nowrap; color:#777; font-weight:400;
+      padding:0 .4em; }
+    /* Two labels that change while you walk: '+ Name' becomes '+ Acronym',
+       and the log counts up. Held at the wider of each, so neither nudges the
+       row along when it changes under the pointer. */
+    #rlx-bar [data-act="propose"] { min-width:7.4em; }
+    #rlx-bar [data-act="dispute"] { min-width:5.6em; }
     #rlx-bar .rlx-sep { width:1px; align-self:stretch; background:var(--rlx-edge);
       flex:0 0 auto; }
     #rlx-bar .rlx-close, #rlx-bar .rlx-flip { background:transparent;
@@ -2946,7 +2999,10 @@
     stage.bar.id = 'rlx-bar';
     stage.bar.innerHTML = `
       <span class="rlx-title">Lint</span>
-      <span class="rlx-count"></span>
+      <span class="rlx-left">
+        <span class="rlx-count"></span>
+        <span class="rlx-status"></span>
+      </span>
       <span class="rlx-sep rlx-sep-nav"></span>
       <button data-act="prev" class="rlx-step" title="Previous (k, or Alt+K while typing)">&lsaquo;</button>
       <button data-act="next" class="rlx-step" title="Next (j, or Alt+J while typing)">&rsaquo;</button>
@@ -2962,8 +3018,7 @@
       <button data-act="dispute" title="The rule is wrong here: write it down (d)">&#9873; Log</button>
       <button data-act="reload" title="Ask the linter again">Re-lint</button>
       <button data-act="flip" class="rlx-flip" title="Move the bar to the other edge (t)">&#8645;</button>
-      <button data-act="close" class="rlx-close" title="Close (Esc)">&times;</button>
-      <span class="rlx-status"></span>`;
+      <button data-act="close" class="rlx-close" title="Close (Esc)">&times;</button>`;
     document.body.appendChild(stage.bar);
     placeBar(true);
     stage.bar.addEventListener('click', (e) => {
@@ -3591,12 +3646,23 @@
       }
     } else {
       word('All reviewed', 'rlx-of');
+    }
+
+    /* What you did, and what the lists answered for you, said in words rather
+     * than counted in the counter. They are a different kind of number: the
+     * counter is where you are, and it has to be one width, because the thing
+     * beside it is read while you work and the row has to hold still. These
+     * are a remark about the session, they can run to three or four words
+     * each, and the place for a remark is the sentence slot — the one part of
+     * the bar built to give ground and end in an ellipsis. */
+    const aside = [];
+    if (!open.length) {
       const done = stage.findings.filter((x) => x.state === 'done').length;
       const ignored = stage.findings.filter((x) => x.state === 'ignored').length;
-      if (done) word(`${done} fixed`);
-      if (ignored) word(`${ignored} ignored`);
+      if (done) aside.push(`${done} fixed`);
+      if (ignored) aside.push(`${ignored} ignored`);
     }
-    for (const said of knownSaid(stage.hidden || {})) word(said, 'rlx-known');
+    aside.push(...knownSaid(stage.hidden || {}));
 
     /* Anything the last action had to say about itself, until you move: a
        fix the editor would not take is a thing to read, and a thing that must
@@ -3608,67 +3674,82 @@
     // "cannot be found" about the one you have just fixed reads as a fault.
     else if (f && f.state !== 'open' && open.length) status = 'Alt + j for the next one';
     else if (f && f.state === 'open' && !f.range) status = 'snippet not found in the editor text';
-    stage.bar.querySelector('.rlx-status').textContent = status;
+    // The remark is the quietest thing on the bar and gives way to all of it.
+    // Nothing is lost by that: the one message that outlasts a keystroke is
+    // the one `goTo` clears, so stepping on puts the remark back.
+    else status = aside.join(' · ');
+    const says = stage.bar.querySelector('.rlx-status');
+    says.textContent = status;
+    says.title = status;
     placeBar();
 
-    const disable = (name, v) => {
+    /* Every button, every time — greyed where it does not apply.
+     *
+     * They used to come and go, each one appearing exactly when it worked.
+     * That is tidy and it is unusable: the row changed width a dozen times a
+     * minute, the bar is centred, so half of it slid sideways under the
+     * pointer, and the button you were reaching for was somewhere else by the
+     * time you got there. Now the row is fixed furniture and the state is in
+     * the colour. What a dead button costs is the question "why can't I press
+     * that?", so each one answers it in its own title: the reason is the
+     * thing you wanted to know, and it is never further away than the
+     * pointer you already have on it. */
+    const settle = (name, why, label) => {
       const b = stage.bar.querySelector(`[data-act="${name}"]`);
-      if (b) b.disabled = v;
+      if (!b) return;
+      b.disabled = !!why;
+      b.title = why || label;
     };
-    disable('prev', open.length < 2); disable('next', open.length < 2);
-    disable('done', !f); disable('ignore', !f); disable('copy', !f);
-    disable('undo', !stage.history.length);
+    const none = !f ? 'Nothing selected' : null;
+    const alone = open.length < 2 ? 'Nothing else is open' : null;
 
-    /* What is on the bar is what there is to do. A button that can never be
-     * pressed from here is not an option, it is furniture: with nothing left
-     * open there is no finding to mark, to skip or to copy, and Undo, Re-lint
-     * and the close button are the whole of what is left. Nothing moves while
-     * you are working — this is the end of the walk, not a state you pass
-     * through. */
-    const show = (name, on) => {
-      const b = stage.bar.querySelector(`[data-act="${name}"]`);
-      if (b) b.hidden = !on;
-    };
-    const walking = open.length > 0;
-    for (const b of ['prev', 'next', 'done', 'ignore', 'copy']) show(b, walking);
+    settle('prev', alone, 'Previous (k, or Alt+K while typing)');
+    settle('next', alone, 'Next (j, or Alt+J while typing)');
+    settle('done', none, 'Done (s, or Alt+S while typing)');
+    settle('ignore', none, 'Ignore (x, or Alt+X while typing)');
+    settle('copy', none, 'Copy the message (c)');
+    settle('undo', stage.history.length ? null : 'Nothing to undo',
+           'Undo the last one (u)');
 
-    /* Offered only where there is one right answer and the words to apply it
-       to have been found. Hidden the rest of the time rather than greyed out:
-       most findings have no fix, and a permanently dead button beside them
-       reads as a feature that is broken. */
-    show('fix', !!proposal(f));
-    stage.bar.querySelector('.rlx-sep-nav').hidden = !walking;
+    /* Offered where there is one right answer and the words to apply it to
+       have been found — which, on most findings, there is not. */
+    settle('fix', proposal(f) ? null : 'No automatic fix for this one',
+           'Write the correction into the editor (f)');
 
-    // Offered only where there is a word to offer: a finding one of the lists
+    // Live only where there is a word to offer: a finding one of the lists
     // could have answered, whose word is in neither that file nor your own
-    // list of things already proposed. Hidden otherwise — it appears exactly
-    // when it works, and it says which list it would go to.
+    // list of things already proposed. It says which list it would go to,
+    // and keeps the wider of its two labels' widths either way.
     const offer = f && f.state === 'open' && !proposed()[fold(f.propose || '')] ? f.propose : null;
     const on = offer ? LISTS[f.list] : null;
     const add = stage.bar.querySelector('[data-act="propose"]');
     if (add) {
-      add.hidden = !on;
+      add.disabled = !on;
       add.textContent = on ? on.button : '+ Name';
-      add.title = on ? `Add '${offer}' to the shared ${on.of} (p)` : '';
+      add.title = on ? `Add '${offer}' to the shared ${on.of} (p)`
+                     : 'No word here to put on a shared list';
     }
 
     /* On the five checks that ask for the sentence again, and only while the
        finding is open: a paragraph you have already dealt with is not one to
        go and have rewritten. */
-    const ask = stage.bar.querySelector('[data-act="rewrite"]');
-    if (ask) ask.hidden = !(f && f.state === 'open' && REWRITES.has(f.condition));
+    settle('rewrite',
+           f && f.state === 'open' && REWRITES.has(f.condition)
+             ? null : 'This rule does not want the sentence rewritten',
+           'Copy a prompt for rewriting this paragraph (r)');
 
-    /* Offered on an acronym the expansions file does not name yet, on its
-       first use, once. Not where the file could not be read at all: that is
-       "we do not know", and inviting a line for a word that may well be in
-       there already is the same mistake `propose` avoids next door. */
+    /* Live on an acronym the expansions file does not name yet, on its first
+       use, once. Not where the file could not be read at all: that is "we do
+       not know", and inviting a line for a word that may well be in there
+       already is the same mistake `propose` avoids next door. */
     const meant = stage.bar.querySelector('[data-act="meaning"]');
     if (meant) {
       const ask = !!f && f.state === 'open' && f.condition === 'Radiopaedia.Acronyms'
         && !!f.words && EXPANSIONS.entries != null && !meanings(f.words).length
         && firstUse(f) && !proposedMeanings()[flat(f.words)];
-      meant.hidden = !ask;
-      meant.title = ask ? `Say what '${f.words}' stands for (e)` : '';
+      meant.disabled = !ask;
+      meant.title = ask ? `Say what '${f.words}' stands for (e)`
+                        : 'No acronym here that wants a meaning';
     }
 
     /* How many findings you have written off as the rule's fault, on the

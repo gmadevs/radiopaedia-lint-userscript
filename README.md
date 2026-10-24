@@ -314,8 +314,16 @@ put it.
 
 The count reads in the colours the highlights already use — `3/12 · 🔴 1 · 🟠 3 · 🔵 8` — and a
 severity with nothing left in it simply disappears. When the last finding is reviewed the numbers
-give way to what you did, `All reviewed · 9 fixed · 3 ignored`, and the buttons that no longer do
-anything go with them.
+give way to `All reviewed`, and what you did is said beside them: `9 fixed · 3 ignored`.
+
+**Every button is on the bar at all times**, greyed where it does not apply, and the bar is one
+width whatever is going on. It used to be the other way round — each button appeared exactly when
+it would work — and that is unusable in practice: the row changed size a dozen times a minute, the
+bar is centred, so half of it slid sideways under the pointer, and the button you were reaching for
+was somewhere else by the time you got there. Done is always in the same place now. A greyed button
+says why in its tooltip: *No automatic fix for this one*, *Nothing else is open*. The counting and
+the message share the one elastic part of the bar, on the left; everything to their right holds
+still.
 
 ### Severity
 
