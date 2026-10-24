@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.18.0
+// @version      3.19.0
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -1385,7 +1385,26 @@
    * it out of there rather than keeping a table of its own that could disagree
    * with the linter's. The form it says to replace has to be the text under
    * the highlight, or this is not the finding we think it is. */
-  const LATIN_FORM = /'([^']+)'\s+rather than\s+'([^']+)'/i;
+  /* The three wordings the linter uses for "this, not that" — "'X' rather
+   * than 'Y'", "'X' in place of 'Y'", "'X' instead of 'Y'" — and nine checks
+   * between them.
+   *
+   * The quoted word may itself hold an apostrophe, because one of those
+   * checks is the contractions one and `don't` is what it is about. An
+   * apostrophe is read as part of the word only with a word character on
+   * BOTH sides of it. With only the one — "a quote counts as the closing one
+   * unless a letter follows" was the first attempt — the spelling check's own
+   * message swallows its first pair whole: "advises the '-eous' form:
+   * 'homogeneous' rather than 'Homogenous'" has a quote followed by a letter
+   * in the middle of it, and the answer came back as " form: 'homogeneous".
+   *
+   * Which of the two is the answer is not taken on trust. Every caller
+   * checks that the SECOND is the text under the highlight before writing
+   * the first, so a message built the other way round offers no fix at all
+   * rather than writing the mistake back in. */
+  const QUOTED = "'((?:[^']|(?<=\\w)'(?=\\w))+)'";
+  const LATIN_FORM = new RegExp(
+    `${QUOTED}\\s+(?:rather than|in place of|instead of)\\s+${QUOTED}`, 'i');
 
   function latinForm(text, f) {
     const m = LATIN_FORM.exec(f.message || '');
@@ -1633,6 +1652,312 @@
     return `${text.slice(0, at)} ${text.slice(at)}`;
   }
 
+
+  /* ——— the ones read off the check listing rather than off its findings
+   *
+   * Everything above was written from output: fifty articles' worth of
+   * findings, with the shape of `matched` read off what actually arrived.
+   * These came the other way, from the linter's own listing of its checks —
+   * every rule's tokens, exceptions and message, which is the thing that says
+   * what a check means rather than what it happened to catch. Where the two
+   * disagree the findings win, and three of these are narrower than their
+   * definition for exactly that reason.
+   *
+   * The listing is also what says which of these can be answered at all. A
+   * check whose message is "check this against the style guide" is not a
+   * fix, whatever its tokens say. */
+
+  /* The character standing in front of the highlight, read out of the
+   * editor rather than out of the quoted line: the quoted line may hold the
+   * same few characters several times over, and this is the one occurrence
+   * being talked about. Empty at the start of a run, which the two callers
+   * read as "nothing in the way". */
+  function charBefore(range) {
+    const node = range.startContainer;
+    if (!node || node.nodeType !== 3 || range.startOffset < 1) return '';
+    return (node.nodeValue || '')[range.startOffset - 1] || '';
+  }
+
+  /* The substitution checks: nine of them, one fix.
+   *
+   * 'sulphate' → 'sulfate', 'foetus' → 'fetus', 'disk' → 'disc', 'don't' →
+   * 'do not'. Each of these carries a table of swaps in the linter, and the
+   * swap it chose is in the message it sends — "use 'X' rather than 'Y'",
+   * "use 'X' in place of 'Y'", "use 'X' instead of 'Y'". Reading it out of
+   * there rather than keeping nine tables of our own is the whole point:
+   * a copy here could disagree with the linter's, and the one on the server
+   * is the one that is right by definition.
+   *
+   * `preferredSpelling` already did this for one of them. It is unchanged;
+   * it is simply pointed at the rest, and the phrase it reads now covers all
+   * three wordings. The capital stays the article's: the words are quoted in
+   * the message the way a dictionary writes them, not the way the sentence
+   * starts. */
+  const SAYS_THE_ANSWER = [
+    'Radiopaedia.Contractions',
+    'Radiopaedia.FetusSpelling',
+    'Radiopaedia.MedicalMisspellings',
+    'Radiopaedia.SulfurSpelling',
+    'Radiopaedia.WordsWeNeverUse',
+    'Radiopaedia.DiscSpelling',
+    'Radiopaedia.GreySpelling',
+    'Radiopaedia.GreaterLessThanEqualTo',
+    'Radiopaedia.HeterogeneousSpelling',
+  ];
+
+  /* Litotes is the one substitution check left out, and on purpose. It is a
+   * swap in the same shape — "Consider using 'lack(s)' instead of 'not
+   * have'" — but it is a swap of meaning rather than of spelling, and the
+   * sentence it lands in decides whether it is right. The three in the
+   * sample make the case on their own: writing in `lack(s)` would trip
+   * OptionalPlurals, which forbids exactly that, on the next run. */
+
+  // '~ 15' → '~15'. The symbol and the number it belongs to, and the check
+  // objects to what is between them.
+  const AFTER_SYMBOL = /^([~≈])\s+(\d)/;
+
+  function closeApproximation(text) {
+    return AFTER_SYMBOL.test(text) ? text.replace(AFTER_SYMBOL, '$1$2') : null;
+  }
+
+  // '< 5' → '<5'. The same thing one symbol along.
+  const AFTER_COMPARISON = /^([<>])\s+(\d)/;
+
+  function closeComparison(text) {
+    return AFTER_COMPARISON.test(text) ? text.replace(AFTER_COMPARISON, '$1$2') : null;
+  }
+
+  /* 'ratio :' → 'ratio:'. The check's token is `\w +:` — a word, one or more
+   * spaces, the colon — so the space is all of what is wrong. Its own
+   * description says the matching rule for the space AFTER a colon is
+   * deliberately not enforced, because `albumin:globulin` and `grey:white`
+   * are ratios and are written closed up; nothing here touches that side. */
+  const SPACE_BEFORE_COLON = /(\S)\s+:$/;
+
+  function closeColon(text) {
+    return SPACE_BEFORE_COLON.test(text) ? text.replace(SPACE_BEFORE_COLON, '$1:') : null;
+  }
+
+  // 'T4 - 5' → 'T4-5'. A spinal level, where the hyphen is a joiner and not
+  // a range: 'T12 - L1' and 'L5 - conus' come through the same way.
+  const SPACED_LEVEL = /^([CTLS]\d+)\s*-\s*([CTLS]?\d+|conus)$/i;
+
+  function closeLevel(text) {
+    const m = SPACED_LEVEL.exec(text);
+    return m ? `${m[1]}-${m[2]}` : null;
+  }
+
+  /* 'T2-T3' → 'T2-3'. The second reference repeats the letter the first one
+   * already gave, and the check asks for it to go — but only where it is the
+   * SAME letter. 'T12-L1' crosses from the thoracic spine to the lumbar and
+   * every character of it is carrying weight; the check's own tokens say as
+   * much, pairing each letter with itself. */
+  const DOUBLED_LEVEL = /^([CTLS])(\d+)-\1(\d+)$/i;
+
+  function dropRepeatedLevel(text) {
+    const m = DOUBLED_LEVEL.exec(text);
+    return m ? `${m[1]}${m[2]}-${m[3]}` : null;
+  }
+
+  // 'lesion(s)' → 'lesions'. The brackets go and the plural stays, which is
+  // the reading the check's description gives: the s is not optional.
+  const BRACKETED_S = /^(\w+)\((s)\)$/i;
+
+  function plainPlural(text) {
+    const m = BRACKETED_S.exec(text);
+    return m ? m[1] + m[2] : null;
+  }
+
+  /* 'C.T.' → 'CT'. The check takes three or more of letter-and-stop in a
+   * row, so what it quotes is the whole initialism and the stops are the
+   * whole of what is wrong with it. Nothing else in the run is touched: the
+   * letters keep their case, because an initialism's case is not this
+   * check's business. */
+  const LETTER_STOPS = /^(?:[A-Z]\.){3,}$/;
+
+  function dropStops(text) {
+    return LETTER_STOPS.test(text) ? text.replace(/\./g, '') : null;
+  }
+
+  /* 'Dr.' → 'Dr', and 'R.F. Player' → 'R F Player'. Two tokens, two
+   * readings: a title that has taken a full stop, and initials that have
+   * taken stops instead of the space between them. The check's description
+   * gives the finished form — "Dr R F Player" — and both of these are one
+   * step towards it. */
+  const TITLE_STOP = /^(Dr|Prof|Mr|Mrs|Ms|Sir|St)\.$/;
+  const STOPPED_INITIALS = /^([A-Z])\.\s?([A-Z])\.(\s?)$/;
+
+  function dropNameStops(text) {
+    if (TITLE_STOP.test(text)) return text.slice(0, -1);
+    const m = STOPPED_INITIALS.exec(text);
+    return m ? `${m[1]} ${m[2]}${m[3] || ''}` : null;
+  }
+
+  /* 'PET/CT' → 'PET-CT'. The slash reads as a choice between the two and
+   * they are not a choice: the description says a hyphen is what shows they
+   * are a true combination. */
+  const MODALITY_SLASH = /^(PET|SPECT)\/(CT|MRI?)$/;
+
+  function hyphenateHybrid(text) {
+    const m = MODALITY_SLASH.exec(text);
+    return m ? `${m[1]}-${m[2]}` : null;
+  }
+
+  // 'meningocoele' → 'meningocele'. The suffix sits inside the word, which
+  // is why the check is an existence rule rather than one of the swaps.
+  function celeSuffix(text) {
+    return /coele/i.test(text) ? text.replace(/coele/gi, (s) => s[0] + 'ele') : null;
+  }
+
+  // 'between 3 to 5' → 'between 3 and 5'.
+  const BETWEEN_TO = /^(between\s+\S+\s+)to(\s+\S+)$/i;
+
+  function betweenAnd(text) {
+    const m = BETWEEN_TO.exec(text);
+    return m ? `${m[1]}and${m[2]}` : null;
+  }
+
+  /* 'cases — including' → 'cases - including'. The check's token takes the
+   * spaces on either side of the dash along with it, and its message says
+   * what to put back: a hyphen-minus with a space on either side. Written
+   * out in full rather than swapping the one character, because the dash
+   * sometimes arrives with no space beside it at all. */
+  const EM_DASH = /^(\s*)—(\s*)$/;
+
+  function spacedHyphen(text) {
+    return EM_DASH.test(text) ? ' - ' : null;
+  }
+
+  // 'head & neck' → 'head and neck'. The exceptions the style guide names —
+  // H&E, initials either side, head & neck itself — are the check's own and
+  // never reach here.
+  const LONE_AMPERSAND = /^(\s)&(\s)$/;
+
+  function spellAnd(text) {
+    const m = LONE_AMPERSAND.exec(text);
+    return m ? `${m[1]}and${m[2]}` : null;
+  }
+
+  /* 'redundant!' → 'redundant.' The check quotes the character in front of
+   * the mark along with it — `t!` — and its token only fires where a space
+   * or the end of the line follows, so the mark is ending a sentence and a
+   * full stop is what ends one instead. Taking it out altogether was the
+   * other reading and is worse: it leaves the sentence with no end at all. */
+  const EXCLAMATION = /!$/;
+
+  function fullStopInstead(text) {
+    return EXCLAMATION.test(text) ? text.slice(0, -1) + '.' : null;
+  }
+
+  /* 'Imaging features:' → 'Imaging features'. The check's token is a letter
+   * or digit, then a stop or a colon, at the end of a heading — so the last
+   * character is the whole of it. */
+  const HEADING_TAIL = /^([A-Za-z0-9])[.:](\s*)$/;
+
+  function dropHeadingPunctuation(text) {
+    const m = HEADING_TAIL.exec(text);
+    return m ? m[1] + (m[2] || '') : null;
+  }
+
+  /* '12000' → '12,000'. Five digits or more, which is where the check starts
+   * asking — ten thousand and up — and the separators go in from the right.
+   * The check quotes the number with its word boundaries, so there is
+   * nothing else in the run to preserve. */
+  const BARE_THOUSANDS = /^\d{5,}$/;
+
+  function thousandsSeparators(text) {
+    if (!BARE_THOUSANDS.test(text)) return null;
+    return text.replace(/\B(?=(\d{3})+$)/g, ',');
+  }
+
+  /* '4PM' → '4 PM'; '4pm' → '4 PM'; '4 p.m.' → '4 PM'. All three of the
+   * check's tokens, and its message gives the finished form: the two letters
+   * in capitals with a space in front of them. */
+  const CLOCK = /^(\d{1,2})\s*([aApP])\.?\s?[mM]\.?$/;
+
+  function spaceBeforeMeridiem(text) {
+    const m = CLOCK.exec(text);
+    return m ? `${m[1]} ${m[2].toUpperCase()}M` : null;
+  }
+
+  /* '3 Tesla' → '3 tesla', and '5 ml' → '5 mL'. Two tokens with one idea
+   * between them, which the check's description states: a unit named after
+   * somebody is still a unit and is written in lower case, and the litre is
+   * the one that takes a capital because a lower-case l is a figure one.
+   *
+   * It is anchored to the number in front of it for a reason the check gives
+   * itself — every eponymous unit is also a surname, correctly capitalised
+   * when it is the person. Only the quoted run is touched, and the quoted run
+   * starts at the number. */
+  const EPONYMOUS_UNIT =
+    /^(\d+(?:\.\d+)?\s?)(Tesla|Sievert|Gray|Becquerel|Curie|Hertz|Kelvin|Newton|Pascal|Watt|Volt|Ampere)$/;
+  const SMALL_LITRE = /^(\d+\s?)ml$/;
+
+  function unitCase(text) {
+    const m = EPONYMOUS_UNIT.exec(text);
+    if (m) return m[1] + m[2].toLowerCase();
+    const l = SMALL_LITRE.exec(text);
+    return l ? `${l[1]}mL` : null;
+  }
+
+  /* '½' → '1/2', and '.5' → '0.5'.
+   *
+   * Two tokens again, and the second one needs watching. The check's rule is
+   * a dot with digits after it and no digit or dot in front — which catches
+   * a decimal that has lost its zero, and also catches `c.2023`, an
+   * abbreviation with a year after it. The sample has one finding of this
+   * check and it is that one: writing `0.2023` into "in common usage
+   * (c.2023)" would be worse than anything the linter is complaining about.
+   *
+   * So the zero goes in only where a LETTER is not standing in front of the
+   * dot. A decimal in prose follows a space, a bracket or the start of a
+   * run; `c.`, `fig.` and `approx.` are what the letter means, and those are
+   * left alone. The character is read out of the editor rather than out of
+   * the quoted line, because the line may hold several of them. */
+  const GLYPH_FRACTIONS = { '¼': '1/4', '½': '1/2', '¾': '3/4', '⅓': '1/3', '⅔': '2/3', '⅛': '1/8' };
+  const LEADING_DOT = /^\.(\d+)$/;
+
+  function numberFormat(text, f) {
+    if (GLYPH_FRACTIONS[text]) return GLYPH_FRACTIONS[text];
+    const m = LEADING_DOT.exec(text);
+    if (!m) return null;
+    if (/[A-Za-z]/.test(charBefore(f.range))) return null;
+    return `0.${m[1]}`;
+  }
+
+  /* 'X-ray' → 'x-ray'; 'xray' → 'x-ray'; 'et.c.' → 'etc.'
+   *
+   * The abbreviations check covers several forms under one message — "check
+   * the abbreviation form against the style guide" — which is not an answer,
+   * so most of what it catches gets none here. Three of its tokens do say
+   * what is wrong on their own:
+   *
+   *   X-ray   its token carries a lookbehind, a lower-case letter or a comma
+   *           and then a space, which is the check saying in its own tokens
+   *           that the capital is wrong where the word is not starting a
+   *           sentence
+   *   xray    the hyphen is missing and there is one spelling to miss it
+   *   et.c.   three ways of writing etc. wrong, and `etc..` which is the
+   *   &c.     abbreviation with the sentence's own full stop left on it
+   *
+   * `XRAY` is a token too and is left alone: it is caught wherever it
+   * appears, and whether it should come back as `x-ray` or `X-ray` depends
+   * on whether it begins the sentence, which the finding does not say.
+   * `c.2023` is the other form in the sample and the guide's answer for it
+   * is not in the listing, so it goes the way the number check sends it. */
+  const ABBREVIATIONS = {
+    'X-ray': 'x-ray',
+    xray: 'x-ray',
+    'etc..': 'etc.',
+    'et.c.': 'etc.',
+    '&.t.c.': 'etc.',
+    '&c.': 'etc.',
+  };
+
+  function abbreviationForm(text) {
+    return ABBREVIATIONS[text] || null;
+  }
+
   /* The whole list. A condition that is not in here has no fix, and that is
    * the usual case: of the thirty-odd checks the linter runs, these are the
    * ones where the answer does not depend on knowing what the sentence is
@@ -1656,10 +1981,36 @@
     'Radiopaedia.Acronyms': spellOut,
     'Radiopaedia.NumberSpacing': closeRange,
     'Radiopaedia.Colons': lowerAfterColon,
-    'Radiopaedia.HeterogeneousSpelling': preferredSpelling,
     'Radiopaedia.Uncomparables': dropIntensifier,
     'Radiopaedia.Units': spaceBeforeUnit,
+
+    // read off the check listing — see the block above
+    'Radiopaedia.ApproximationSpacing': closeApproximation,
+    'Radiopaedia.NumberComparisons': closeComparison,
+    'Radiopaedia.ColonSpacing': closeColon,
+    'Radiopaedia.SpinalLevelSpacing': closeLevel,
+    'Radiopaedia.SpinalLevelFormat': dropRepeatedLevel,
+    'Radiopaedia.OptionalPlurals': plainPlural,
+    'Radiopaedia.Periods': dropStops,
+    'Radiopaedia.PersonalNames': dropNameStops,
+    'Radiopaedia.HybridImagingSlash': hyphenateHybrid,
+    'Radiopaedia.CeleSuffix': celeSuffix,
+    'Radiopaedia.BetweenAnd': betweenAnd,
+    'Radiopaedia.EmDash': spacedHyphen,
+    'Radiopaedia.Ampersand': spellAnd,
+    'Radiopaedia.Exclamation': fullStopInstead,
+    'Radiopaedia.HeadingPunctuation': dropHeadingPunctuation,
+    'Radiopaedia.NumbersOver10000': thousandsSeparators,
+    'Radiopaedia.AMPM': spaceBeforeMeridiem,
+    'Radiopaedia.UnitCapitalisation': unitCase,
+    'Radiopaedia.NumberFormatting': numberFormat,
+    'Radiopaedia.AcceptedAbbreviations': abbreviationForm,
   };
+
+  // The nine that say the answer in their own message, all answered by the
+  // one reading of it. Registered here rather than written out above so that
+  // the list and the fix cannot drift apart.
+  for (const condition of SAYS_THE_ANSWER) TEXT_FIXES[condition] = preferredSpelling;
 
   /* Fixes that need the character standing before the highlight as well.
    *

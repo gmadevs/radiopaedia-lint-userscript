@@ -379,9 +379,22 @@ the only thing selected and replaced was one character of punctuation. A change 
 to cross a tag — the hyphen of `post<em>-</em>biopsy`, say — is refused in so many words rather
 than flattened into plain text.
 
-### Which twenty-five
+### Which fifty-three
 
-Twenty-one of them change the words:
+Of the eighty-odd checks the linter runs, fifty-three have an answer here. They came from two
+places, and the difference matters enough to say.
+
+**Twenty-five were read off output** — fifty articles' worth of findings, with the shape of each
+rule's `matched` taken from what actually arrived rather than from what a rule looked like it
+would send. **Twenty-eight were read off the linter's own listing of its checks**, which gives
+every rule's tokens, exceptions and message. The listing is the better source for *what a check
+means*; the findings are the better source for *what it sends*, and where the two disagree the
+findings win. Three of these are narrower than their definition for exactly that reason.
+
+The listing is also what says which checks cannot be answered at all. A rule whose message is
+"check this against the style guide" has not said what to write, whatever its tokens catch.
+
+#### The twenty-one read off findings
 
 | Check | What it writes |
 | :-- | :-- |
@@ -407,6 +420,80 @@ Twenty-one of them change the words:
 | Uncomparables | the word that cannot qualify: `more complete` → `complete` |
 | Units | the space between a number and its unit: `5mm` → `5 mm` |
 
+#### The twenty-eight read off the check listing
+
+Nine of them are **substitution** checks, which carry a table of swaps in the linter and name the
+swap they chose in the message they send — `'sulfate' rather than 'sulphate'`, `'do not' in place
+of 'don't'`. All nine are answered by reading that phrase, rather than by keeping nine copies of
+the linter's tables here where they could drift out of step with it:
+
+| Check | What it writes |
+| :-- | :-- |
+| Sulfur Spelling | `sulphate` → `sulfate`, and the fourteen others in its table |
+| Fetus Spelling | `foetus` → `fetus`, `foetal` → `fetal` |
+| Disc Spelling | `diskitis` → `discitis`, `diskogenic` → `discogenic` |
+| Grey Spelling | `gray` → `grey`, leaving the unit of absorbed dose alone |
+| Medical Misspellings | `azygous` → `azygos`, `septae` → `septa` |
+| Words We Never Use | `artefact` → `artifact`, `gall bladder` → `gallbladder` |
+| Heterogeneous Spelling | `Homogenous` → `Homogeneous` |
+| Contractions | `don't` → `do not` |
+| Greater Less Than Equal To | `>=` → `≥`, `<=` → `≤` |
+
+The capital stays the article's: the words are quoted in the message the way a dictionary writes
+them, not the way a sentence starts. And which of the two quoted words is the answer is not taken
+on trust — the second has to be the text under the highlight before the first is written, so a
+message built the other way round offers no fix at all rather than writing the mistake back in.
+
+The other nineteen are their own:
+
+| Check | What it writes |
+| :-- | :-- |
+| Approximation Spacing | the space out: `~ 15` → `~15` |
+| Number Comparisons | the same after `<` and `>`: `< 5` → `<5` |
+| Colon Spacing | the space before a colon out: `ratio :` → `ratio:` |
+| Spinal Level Spacing | the spaces out of a level: `T4 - 5` → `T4-5` |
+| Spinal Level Format | the repeated letter out: `T2-T3` → `T2-3` |
+| Optional Plurals | the brackets off the plural: `tear(s)` → `tears` |
+| Periods | the stops out of an initialism: `M.R.I.` → `MRI` |
+| Personal Names | the stops off a title or initials: `Dr.` → `Dr`, `R.F.` → `R F` |
+| Hybrid Imaging Slash | the hyphen that says *combination*: `PET/CT` → `PET-CT` |
+| Cele Suffix | `meningocoele` → `meningocele` |
+| Between And | `between 3 to 5` → `between 3 and 5` |
+| Em Dash | `—` → a hyphen-minus with a space on either side |
+| Ampersand | ` & ` → ` and ` |
+| Exclamation | the mark that ends the sentence: `redundant!` → `redundant.` |
+| Heading Punctuation | the stop or colon off the end of a heading |
+| Numbers Over 10000 | the separators in: `12000` → `12,000` |
+| AM PM | the space and the capitals: `4pm` → `4 PM` |
+| Unit Capitalisation | `3 Tesla` → `3 tesla`, and `50 ml` → `50 mL` |
+| Number Formatting | `½` → `1/2`, and the leading zero: `.5` → `0.5` |
+| Accepted Abbreviations | `X-ray` → `x-ray` mid-sentence, `et.c.` → `etc.` |
+
+Three of those are deliberately narrower than the check that feeds them, and each one is a case
+the sample settled:
+
+**Number Formatting** catches a dot with digits after it and nothing numeric in front. That is a
+decimal missing its zero — and it is also `c.2023`. The one finding of this check in fifty
+articles was exactly that, in "in common usage (c.2023)", where `0.2023` would be worse than
+anything the linter was complaining about. So the zero goes in only where a *letter* is not
+standing in front of the dot, which is read out of the editor rather than out of the quoted line,
+because a line may hold several of them.
+
+**Accepted Abbreviations** covers several forms under one message that says only to check the
+style guide. Three of its tokens say what is wrong on their own and are answered; `XRAY` is not,
+because whether it should come back as `x-ray` or `X-ray` depends on whether it begins the
+sentence, and the finding does not say. `c.2023` is not either, for the reason above.
+
+**Spinal Level Format** drops the repeated letter only where it *is* the same letter. `T12-L1`
+crosses from the thoracic spine to the lumbar and every character of it is carrying weight.
+
+**Litotes** is the substitution check left out altogether. It is a swap in the same shape —
+"Consider using 'lack(s)' instead of 'not have'" — but a swap of meaning rather than of spelling,
+and the sentence it lands in decides whether it is right. The three findings in the sample make
+the case on their own: writing in `lack(s)` would trip Optional Plurals, which forbids exactly
+that, on the next run. It already has a home — it is one of the five checks that go out as a
+rewrite prompt instead, where something reads the sentence first.
+
 And one puts a space in front of a reference marker — `intramural<sup>11</sup>` →
 `intramural <sup>11</sup>` — which is a place rather than a change to any word. Only where the
 marker is a reference: `<sup>-6</sup>` is an exponent, the article says 10⁻⁶, and a space there
@@ -422,9 +509,9 @@ rather than assumed: `insertText` with a space at the end of a run of text write
 *non-breaking* space, the browser being helpful about a space that would otherwise collapse. The
 value passed is that one character and nothing else.
 
-Units is the one rule here written from the check's own definition rather than from findings: it
-fires rarely enough not to appear in fifty articles of lint output, so there was nothing to read
-it off. Its tokens say what counts as a unit — `ns`, `ms`, `min`, `h`, `d`, `y`, `s`, `mm`, `cm`,
+Units was the first rule here written from the check's own definition rather than from findings —
+it fires rarely enough not to appear in fifty articles of lint output, so there was nothing to
+read it off — and the twenty-eight above followed it. Its tokens say what counts as a unit — `ns`, `ms`, `min`, `h`, `d`, `y`, `s`, `mm`, `cm`,
 `km`, `m`, `mL`, `L` — and the unit has to end where it ends: `30minutes` is a word and not thirty
 minutes, `5mmHg` is a unit of its own, and both are left alone. The space goes in at the first
 join, so the wider shape the check can quote comes out right too: `3mm-thick` → `3 mm-thick`.
