@@ -26,6 +26,7 @@
 
 # ——— Trials, scores, rules and criteria: names, not abbreviations ———
 
+FNA         # Fine needle aspiration
 NMOSD       # Neuromyelitis optica spectruc disorder
 FDA         # Food and Drug Administration
 SIH-RADS    # Spontaneous Intracranial Hypotension Reporting and Data System
