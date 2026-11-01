@@ -64,7 +64,7 @@ article_type                                            └─  the ones missing
 - [The ones with one right answer](#the-ones-with-one-right-answer)
   - [Which twenty](#which-twenty)
   - [Spelling out an acronym](#spelling-out-an-acronym)
-  - [The three about the markup](#the-three-about-the-markup)
+  - [The four about the markup](#the-four-about-the-markup)
   - [What it will not do](#what-it-will-not-do)
 - [Proper nouns and acronyms](#proper-nouns-and-acronyms)
   - [Adding one](#adding-one)
@@ -79,6 +79,7 @@ article_type                                            └─  the ones missing
   - [Above it, or inside it](#above-it-or-inside-it)
   - [When the sections are out of order](#when-the-sections-are-out-of-order)
   - [A chip is beside a heading or it is nowhere](#a-chip-is-beside-a-heading-or-it-is-nowhere)
+  - [Sections with only old citations](#sections-with-only-old-citations)
   - [The canon itself](docs/canon.md)
 - [How it works](#how-it-works)
 - [Troubleshooting](#troubleshooting)
@@ -233,7 +234,12 @@ This is not an extra request. It is the same one, made a moment earlier: the ans
   <img src="docs/findings-in-editor.png" alt="A warning highlighted in the editor, its message in a note beside it, and the Lint bar along the bottom" width="900">
 </div>
 
-Findings are highlighted in place, one is always current, and the bottom bar keeps the count.
+Findings are underlined in place, in the colour of their severity: a thicker line on the current
+one, a fainter one on the rest. An underline rather than a wash over the words, so that red on the
+text itself only ever means what **Fix** would take out. One finding is always current, and the
+bar keeps the count.
+The walk takes the errors first, then the warnings, then the suggestions; within each severity it
+goes through the article from top to bottom.
 
 ### Keyboard
 
@@ -306,6 +312,21 @@ been told to prefer.
 
 ### The bar keeps out of the way
 
+When the grey margin to the left of the page is wide enough (the same 200px the note needs), the
+bar stands at the top of that margin as a column of blocks: the title, the count and × on the
+first row; `‹ Done ›` on the second, with Done filling the space between the arrows; Ignore and
+Undo side by side; then the tools two to a row (Fix, Copy, Prompt, Log, Name, Meaning); and Re-lint,
+↻, ❝ and ⊘ small at the foot. Done and, when it has something to write, Fix are the only filled
+buttons; the rest are drawn in outline. The note moves up and down the same column below it. In a
+narrower window the bar goes back to the bottom edge, as described next.
+
+In the editor the box with the **Lint** button stands in the same place before you press it: at
+the top of that margin, as wide as the bar, with **Lint** across most of it and ↻, ❝ and ⊘ small
+at the end. It has no `auto` and no `⚑` there, because the automatic preview and the rail work on
+the article page only. Pressing **Lint** turns the box into the bar in the same spot, with ↻, ❝ and
+⊘ moved to the foot of the bar, and closing the bar turns it back. In a window too narrow for the
+margin, the box goes back to the top right corner.
+
 It measures what is under it before it settles: a sticky promo strip, the Tags field, anything the
 page has pinned to the bottom edge — the bar sits **above** it rather than on top of it, and
 re-measures as you scroll and resize. When the automatic answer is wrong, <kbd>t</kbd> moves it to
@@ -333,13 +354,17 @@ still.
 | 🟠 | `warning` | amber |
 | 🔵 | `suggestion` | blue |
 
-One table, two places: these are the colours of the highlights, of the note beside them, and of
+One table, two places: these are the colours of the lines under the words, of the note beside them, and of
 the button before you ever click it.
 
 ### The note stays out of the way
 
-It goes below the highlighted words, or above, or to the side — whichever lands clear — and it
-never repeats the snippet, because you are already looking at it.
+When the grey margin to the left of the page is at least 200px wide, the note goes there, level
+with the highlighted words, and covers no text. When you scroll the words out of sight, the note
+stays at the edge they went past with an arrow on it, `▲ The words are further up` or `▼ … further
+down`, and a click on the arrow scrolls back to them. In a narrower window it goes below the words, or
+above, or to the side, whichever lands clear. It never repeats the snippet, because you are
+already looking at it.
 
 When a finding is so tall that nothing fits beside it, reach the note with the pointer: it fades
 **and stops catching the mouse**, so you can select the text underneath as if it were not there.
@@ -354,12 +379,18 @@ Most findings need you. A few do not: `post-biopsy` loses its hyphen, `68Ga` bec
 should not have them. There is nothing to decide in those, only typing to do, and **✎ Fix** on
 the bar — <kbd>f</kbd> — does the typing.
 
-The note shows what it would write before you press it. **Point at Fix** and the one line becomes
+The text shows what it would write before you press it, the way radioUpdater shows citations
+about to be renumbered: the characters the fix takes out are struck through in red where they
+stand, and what it puts in is on a green tag just after them, raised half a line. A pure insertion,
+such as the Oxford comma, also gets a thin green rule at the point where it goes in. All of this is
+drawn above the editor, not in it, so the article does not change until you press **Fix**.
+
+The note shows it too. **Point at Fix** and the one line becomes
 two: the words as they stand with what goes lit red, and the words as they would stand with what
 arrives lit green — *tissue,* ~~citrate~~ *and polyamine* against *tissue,* **citrate,** *and
 polyamine*. It is the same comparison the citation chips draw, off the same word diff, for the
 same reason: printing both forms and leaving you to find the difference is printing the problem
-twice. The three markup rules have no comparison to draw, because taking the italics off a word
+twice. The other three markup rules have no comparison to draw, because taking the italics off a word
 changes no words at all. Nothing happens until you do, nothing is
 saved, and <kbd>Ctrl</kbd> + <kbd>Z</kbd> in the editor takes it back: the change goes in through
 the editor's own insert command, so it lands on the editor's undo stack exactly as though you had
@@ -379,12 +410,12 @@ the only thing selected and replaced was one character of punctuation. A change 
 to cross a tag — the hyphen of `post<em>-</em>biopsy`, say — is refused in so many words rather
 than flattened into plain text.
 
-### Which fifty-three
+### Which fifty-five
 
-Of the eighty-odd checks the linter runs, fifty-three have an answer here. They came from two
+Of the eighty-odd checks the linter runs, fifty-five have an answer here. They came from two
 places, and the difference matters enough to say.
 
-**Twenty-five were read off output** — fifty articles' worth of findings, with the shape of each
+**Twenty-seven were read off output** — fifty articles' worth of findings, with the shape of each
 rule's `matched` taken from what actually arrived rather than from what a rule looked like it
 would send. **Twenty-eight were read off the linter's own listing of its checks**, which gives
 every rule's tokens, exceptions and message. The listing is the better source for *what a check
@@ -394,7 +425,7 @@ findings win. Three of these are narrower than their definition for exactly that
 The listing is also what says which checks cannot be answered at all. A rule whose message is
 "check this against the style guide" has not said what to write, whatever its tokens catch.
 
-#### The twenty-one read off findings
+#### The twenty-two read off findings
 
 | Check | What it writes |
 | :-- | :-- |
@@ -407,7 +438,7 @@ The listing is also what says which checks cannot be answered at all. A rule who
 | Latin | the form the message names: `aka` → `a.k.a.`, `vs.` → `vs` |
 | Isotope Notation | `68Ga` → `Ga-68` |
 | Quotes | the comma or full stop outside: `"washout."` → `"washout".` |
-| Citation Syntax | two references in a row are a list: `1-2` → `1,2` |
+| Citation Syntax | two references in a row are a list: `1-2` → `1,2`, `1-2,4,5` → `1,2,4,5` |
 | List Punctuation | the full stop off the end of a list item |
 | Eponym Apostrophe | the possessive off: `Crohn's disease` → `Crohn disease` |
 | Ranges | the word off: `between 10-17` → `10-17` |
@@ -419,6 +450,7 @@ The listing is also what says which checks cannot be answered at all. A rule who
 | Heterogeneous Spelling | the form the message names, keeping the article's capital: `Homogenous` → `Homogeneous` |
 | Uncomparables | the word that cannot qualify: `more complete` → `complete` |
 | Units | the space between a number and its unit: `5mm` → `5 mm` |
+| Headings Spacing | the space off either end of a heading: `Practical points ` → `Practical points` |
 
 #### The twenty-eight read off the check listing
 
@@ -517,7 +549,7 @@ minutes, `5mmHg` is a unit of its own, and both are left alone. The space goes i
 join, so the wider shape the check can quote comes out right too: `3mm-thick` → `3 mm-thick`.
 
 Citation Syntax leaves a real range alone — `1-5` is a range, `1-2` is two references written
-with a hyphen. Inline EG only acts where the brackets end the paragraph or list item, which all
+with a hyphen, whether alone or as one piece of a longer list (`1-2,4-8` → `1,2,4-8`). Inline EG only acts where the brackets end the paragraph or list item, which all
 twenty-five in the sample did: `X (e.g. Y) is common` would come out as `X, e.g. Y is common`,
 where the comma that should close the aside has nowhere to go. Brackets inside the brackets are
 left alone.
@@ -612,18 +644,21 @@ This is not `acronyms.txt`, and the two are opposite sets: that file holds the a
 no spelling out at all, and a word in there never reaches the walk. This one is for the ones that
 do.
 
-### The three about the markup
+### The four about the markup
 
-The other three change the tags rather than the words:
+The other four change the tags rather than the words:
 
 | Check | What it does |
 | :-- | :-- |
 | Emphasis | takes the italics off: `<em>TERT</em>` → `TERT` |
 | Strong | takes the bold off: `<strong>ovarian torsion</strong>` → `ovarian torsion` |
 | Strong List Colon Position | moves the colon out: `<strong>T2:</strong> variable` → `<strong>T2</strong>: variable` |
+| Citation Punctuation Sup | moves the punctuation out of the citation: `<sup>1.</sup>` → `<sup>1</sup>.` |
 
 There is no corrected text to show for these — `TERT` reads the same with the italics as without
-— so the note describes what would happen instead of quoting a phrase back at you.
+— so the note describes what would happen instead of quoting a phrase back at you. The citation
+one is the exception in the text: the punctuation is struck through in red inside the superscript,
+and the same punctuation sits on a green tag just after it.
 
 They go in through the editor's own **bold** and **italic** commands, which *toggle*. That is the
 whole difficulty: run italic over a selection that is half italicised and all of it comes out
@@ -647,6 +682,15 @@ The colon rule takes the colon **and the space after it** where there is one, so
 `<strong>DWI: </strong>intratumoural` becomes `<strong>DWI</strong>: intratumoural` and not a
 bold space. A colon in the middle of a bold run is somebody's prose rather than an intro, and is
 left alone.
+
+The citation rule turns the superscript off over the punctuation alone, the same way the bold
+comes off a colon. Measured on TinyMCE in Chrome, that gives `<sup>1</sup>.` at the end of a
+paragraph, before a space, after a link and after `12,13` alike; writing the citation out again
+with `insertHTML` instead turned the space after it into a non-breaking one, or wrapped both
+halves in a span carrying the editor's font. The finding is narrowed onto the citation rather than
+onto the same characters in the prose (a `type 1.` in the same paragraph), and where the
+highlight did not land in a citation, the fix looks for the one citation in the paragraph that
+ends in punctuation and reads what the finding quoted. If there are two, it offers nothing.
 
 ### What it will not do
 
@@ -730,11 +774,14 @@ text. Fifty articles later there are real ones, `50 - 60`, and the false ones tu
 themselves: in the editor there is nothing between the `10` and the `-6` to take out, so the fix
 gives back what it was given and nothing is offered.
 
-Headings Spacing — the stray space at the end of a heading — was written and then taken out
-again. None of the browser's editing commands will remove it: `delete` eats the character before
-it, and `insertText` and `insertHTML` both report success and leave the space exactly where it
-was. What is left is setting the text directly, which the editor would not notice, so this one
-stays a thing to fix by hand.
+Headings Spacing — the stray space at either end of a heading — was left out at first, because no
+command aimed at the space itself removes it: measured on TinyMCE in Chrome, `delete` eats the
+letter before it, `insertText` over the last word and the space writes a non-breaking space back,
+and `forwardDelete` pulls the next paragraph up into the heading. What does work is selecting the
+whole text of the heading and writing it again without the space. So that is what **Fix** does,
+and only where the heading's text is one plain run: a heading with a link or a bold word in it
+stays a thing to fix by hand, because writing a tag's whole text again is how a link goes missing.
+The space takes no room on screen, so the text shows it as a red `␣` tag at the end of the heading.
 
 Optional Plurals (`tear(s)`), Accepted Abbreviations and Number Formatting are left out because
 the message does not say what the answer is — `tear` or `tears` depends on what the sentence
@@ -1215,6 +1262,35 @@ bottom of the window and kept going.
 The header says how many are off screen in each direction — `↕ 3 above, 2 below` — and the count
 badge's tooltip lists all of them, so nothing disappears without being counted.
 
+### Sections with only old citations
+
+The rail also marks each heading whose newest citation is more than five years old. A blue chip
+beside the heading reads `Newest citation 2014`, and the header counts them: `1 with old citations`.
+The tooltip gives the age and lists the section's references, newest first. The `×` on a chip means
+this section can keep its older citations; it is remembered for that article, and the `↺` in the
+header brings it back.
+
+The check works in whole years, because most references give nothing finer. In 2026, a section whose
+newest citation is from 2021 passes and one from 2020 gets a chip. It reads the numbers in the
+superscripts and the years in the reference list at the foot of the page, so it makes no request of
+its own, and the chips appear when the rest of the rail does.
+
+Each heading answers for the text between it and the next heading of any level. `Radiographic
+features` and `MRI` under it are judged separately, so a fresh `MRI` does not excuse an old sentence
+above it.
+
+No chip appears in these cases:
+
+- The section cites nothing, so there is no date to report. The same goes for the text above the
+  first heading.
+- One of its citations has no readable year, or points at a number the list does not have, because
+  that one could be the newest.
+- The heading is `History and etymology`, which is meant to cite old sources.
+
+A year is read from the reference text with its links removed. It looks for `2018;38(7)` first, then
+`(2012)`, then any other year, and takes the last match of the first form it finds, so a year in a
+title does not count.
+
 ---
 
 ## How it works
@@ -1310,9 +1386,10 @@ prefer.
 
 **Where the fix is a character that is not there yet**, a highlight cannot say it. *"Use the
 Oxford comma in 'patchy, reticulonodular or mixed'"* lights the phrase, and the phrase is not the
-answer — the answer is one point inside it. Those findings get a caret drawn between the two
-characters the comma belongs between, with the comma itself hanging under it, and the note prints
-the phrase the way it should read:
+answer — the answer is one point inside it. Where **Fix** can write it, that point gets the green
+rule and tag described above. Where it cannot, the finding gets a caret drawn between the two
+characters the comma belongs between, with the comma itself hanging under it. Either way the note
+prints the phrase the way it should read:
 
 ```text
 patchy, reticulonodular, or mixed

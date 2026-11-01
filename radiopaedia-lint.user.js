@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.19.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
+// @version      3.20.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. Beside any heading whose newest citation is more than five years old, a chip with the year. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -553,6 +553,7 @@
    * be allowed to narrow onto one. */
   const ABOUT_CITATIONS = new Set([
     'Radiopaedia.CitationPrecedingSpace',
+    'Radiopaedia.CitationPunctuationSup',
     'Radiopaedia.CitationSyntax',
     'Radiopaedia.ListPunctuation',
   ]);
@@ -619,7 +620,8 @@
 
   /* One entry of `lints[]`, one finding — in the order they occur in the
    * article rather than grouped by check, so that walking them with `j` walks
-   * the article from top to bottom.
+   * the article from top to bottom — within each severity, since the walk
+   * takes the errors first (see `byWeight`).
    *
    * The snippet is `trimmed`, the line with the markup taken out of it: that
    * is the shape the editor's text is in, and the one `anchor()` searches for.
@@ -1247,15 +1249,21 @@
    * Copies inside reference markers are set aside while there is one in the
    * prose. The comma of `<sup>2,4,6,11,12</sup>` is a comma in the text of the
    * page and nothing else — highlighting it for a finding about the sentence
-   * puts the reader's eye on the one thing they must not touch. */
-  function within(index, wide, needle, nth) {
+   * puts the reader's eye on the one thing they must not touch.
+   *
+   * The other way round for a check about what is INSIDE a marker: the `1.`
+   * of `<sup>1.</sup>` is what the finding is about, and a `type 1.` in the
+   * prose of the same paragraph is not. */
+  const INSIDE_CITATIONS = new Set(['Radiopaedia.CitationPunctuationSup']);
+
+  function within(index, wide, needle, nth, inside) {
     if (!needle || nth === 0) return -1;
     const hay = index.s.slice(wide.from, wide.to + 1);
     const hits = [];
     for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, at + 1)) hits.push(at);
     if (!hits.length) return -1;
-    const prose = hits.filter((at) => !index.cited[wide.from + at]);
-    const list = prose.length ? prose : hits;
+    const wanted = hits.filter((at) => !!index.cited[wide.from + at] === !!inside);
+    const list = wanted.length ? wanted : hits;
     return list[Math.min(Math.max(nth || 1, 1), list.length) - 1];
   }
 
@@ -1288,7 +1296,8 @@
         if (!wide) continue;
 
         let spot = wide;
-        const rel = within(indices[i], wide, f.target, f.targetNth);
+        const rel = within(indices[i], wide, f.target, f.targetNth,
+          INSIDE_CITATIONS.has(f.condition));
         if (rel >= 0) {
           spot = { from: wide.from + rel, to: wide.from + rel + f.target.length - 1 };
           f.narrowed = true;
@@ -1443,12 +1452,23 @@
   /* '1-2' → '1,2'. Two references in a row are a list and not a range, which
    * is what "except when the range is over 2" means: 1-5 stays as it is. The
    * separator carries no space, because that is how the rest of them are
-   * written — `<sup>26,27</sup>`. */
+   * written — `<sup>26,27</sup>`.
+   *
+   * The pair can be one piece of a longer list, and the check quotes the whole
+   * of it: '1-2,4,5' → '1,2,4,5', '1-2,4-8' → '1,2,4-8'. A list with no such
+   * pair in it is not this fix's business, and is left as it came. */
   const TWO_IN_A_ROW = /^(\d+)\s*[-–]\s*(\d+)$/;
 
   function citationList(text) {
-    const m = TWO_IN_A_ROW.exec(text);
-    return m && Number(m[2]) - Number(m[1]) === 1 ? `${m[1]},${m[2]}` : null;
+    if (!CITATION_NUMBERS.test(text)) return null;
+    let found = false;
+    const pieces = text.split(',').map((piece) => {
+      const m = TWO_IN_A_ROW.exec(piece.trim());
+      if (!m || Number(m[2]) - Number(m[1]) !== 1) return piece.trim();
+      found = true;
+      return `${m[1]},${m[2]}`;
+    });
+    return found ? pieces.join(',') : null;
   }
 
   // 'fluorinated tracers.' → 'fluorinated tracers'. An ellipsis is not a full
@@ -2058,22 +2078,61 @@
     ];
   }
 
-  /* ————— and one that is a character in a place, rather than a change to
+  /* ————— and two that are a character in a place, rather than a change to
      the words under the highlight.
 
-   * It supplies its own range, because the gap in front of a tag is not
-   * inside the words the highlight is drawn on.
-   *
-   * `HeadingsSpacing` — the stray space at the end of a heading — was written
-   * here too and then taken out again: none of `delete`, `insertText` or
-   * `insertHTML` will remove trailing whitespace from a heading. The first
-   * eats the character before it, and the other two report success and leave
-   * the space exactly where it was. What is left is setting `nodeValue`, which
-   * the editor would not see. It stays a thing to fix by hand. */
+   * Each supplies its own range, because the gap in front of a tag, and the
+   * space at either end of a heading, are not inside the words the highlight
+   * is drawn on. */
   const SPOT_FIXES = {
     'Radiopaedia.CitationPrecedingSpace':
       { find: spaceBeforeCitation, say: 'Puts a space before the citation.' },
+    'Radiopaedia.HeadingsSpacing':
+      { find: headingEnds, say: 'Takes the space off the ends of the heading.' },
   };
+
+  /* The space at either end of a heading: `<h4>Practical points </h4>`.
+   *
+   * That space is invisible to the editor, and every command aimed at it
+   * alone misses. Measured, on TinyMCE in Chrome: `delete` on the space eats
+   * the `s` before it, `insertText` over the last word and the space comes
+   * back with a non-breaking space in its place, and `forwardDelete` pulls
+   * the next paragraph up into the heading. What works is the whole text of
+   * the heading selected and written again without the space — once the
+   * selection starts and ends on visible letters, there is nothing for the
+   * browser to move.
+   *
+   * Only where that text is one run, sitting directly in the heading. A
+   * heading with a link or a bold word in it has its ends in two different
+   * runs, or inside a tag, and writing a tag's whole text again is how a link
+   * goes missing — see `wouldEmpty`. Those stay a thing to fix by hand.
+   *
+   * `show` is what the text draws, which is the space and not the heading:
+   * the fix writes the whole run again, but what changes is the space. */
+  function headingEnds(f) {
+    const node = f.range.startContainer;
+    const h = (node.nodeType === 1 ? node : node.parentElement)?.closest('h1,h2,h3,h4,h5,h6');
+    if (!h) return null;
+    const run = h.firstChild;
+    if (!run || run !== h.lastChild || run.nodeType !== 3) return null;
+
+    const text = run.nodeValue || '';
+    const lead = /^\s*/.exec(text)[0].length;
+    const trail = /\s*$/.exec(text)[0].length;
+    if (lead === text.length || (!lead && !trail)) return null;
+
+    const doc = run.ownerDocument;
+    const span = (from, to) => {
+      const r = doc.createRange();
+      r.setStart(run, from);
+      r.setEnd(run, to);
+      return r;
+    };
+    const show = [];
+    if (lead) show.push({ target: span(0, lead), insert: '' });
+    if (trail) show.push({ target: span(text.length - trail, text.length), insert: '' });
+    return { target: span(0, text.length), insert: text.slice(lead, text.length - trail), show };
+  }
 
   /* The gap in front of a reference marker — but only where the marker is a
    * reference.
@@ -2155,7 +2214,7 @@
   }
 
 
-  /* ————— and the three that are about the markup rather than the words.
+  /* ————— and the four that are about the markup rather than the words.
 
    * `<em>TERT</em>` with the italics taken off reads exactly as it did
    * before: the change is to the tags, and there is no corrected string to
@@ -2173,7 +2232,65 @@
     'Radiopaedia.Strong': { tags: 'strong, b', command: 'bold', say: 'Takes the bold off.' },
     'Radiopaedia.StrongListColonPosition':
       { colon: true, command: 'bold', say: 'Moves the colon out of the bold.' },
+    'Radiopaedia.CitationPunctuationSup':
+      { find: supPunctuation, command: 'superscript',
+        say: 'Moves the punctuation out of the superscript.' },
   };
+
+  /* `<sup>1.</sup>` → `<sup>1</sup>.`: the full stop, comma, semicolon or
+   * colon at the end of a citation, out of the superscript and onto the line.
+   *
+   * The superscript is toggled off over the punctuation alone, the way the
+   * bold comes off a colon. Measured on TinyMCE in Chrome against the other
+   * way of doing it — writing the citation out again with `insertHTML` — and
+   * the toggle is the one that leaves nothing behind: `<sup>1</sup>.` at the
+   * end of a paragraph, before a space, after a link, and after `12,13`
+   * alike, where `insertHTML` turned the space after it into a non-breaking
+   * one, or wrapped both halves in a span carrying the editor's font.
+   *
+   * Which citation: the one the highlight is in, when it is in one. The
+   * finding is narrowed onto the quoted `1.`, and that is usually the
+   * citation itself; when the same characters also occur in the prose, the
+   * narrowing can land there instead, and then the paragraph is searched for
+   * a citation that ends in punctuation and reads what the finding quoted —
+   * and only one such citation will do. Two of them and this cannot tell
+   * which was meant.
+   *
+   * `show` is what the text draws: the punctuation struck through inside the
+   * superscript, and the same punctuation on a green tag after it. */
+  const TRAILING_PUNCTUATION = /[.,;:]+\s*$/;
+
+  function supPunctuation(f) {
+    const supOf = (n) => (n.nodeType === 1 ? n : n.parentElement)?.closest('sup');
+    const ends = (sup) => !sup.children.length && TRAILING_PUNCTUATION.test(sup.textContent || '');
+
+    let sup = supOf(f.range.startContainer);
+    if (!sup || !ends(sup)) {
+      const all = f.home?.el ? [...f.home.el.querySelectorAll('sup')].filter(ends) : [];
+      const same = all.filter((s) => flat(s.textContent || '') === flat(f.words || ''));
+      const list = same.length ? same : all;
+      if (list.length !== 1) return null;
+      sup = list[0];
+    }
+
+    const run = sup.lastChild;
+    if (!run || run.nodeType !== 3) return null;
+    const text = run.nodeValue || '';
+    const m = TRAILING_PUNCTUATION.exec(text);
+    // A superscript that is nothing but punctuation is not a citation.
+    if (!m || !text.slice(0, m.index).trim()) return null;
+
+    const doc = run.ownerDocument;
+    const target = doc.createRange();
+    const after = doc.createRange();
+    try {
+      target.setStart(run, m.index);
+      target.setEnd(run, text.length);
+      after.setStart(run, text.length);
+      after.collapse(true);
+    } catch { return null; }
+    return { target, show: [{ target, insert: '' }, { target: after, insert: m[0].trim() }] };
+  }
 
   /* The element whose formatting this finding is about, as a range over its
    * whole contents — or nothing, which is the answer surprisingly often.
@@ -2285,10 +2402,12 @@
          plan is worked out AGAIN on the press, because the paragraph is being
          edited while you look at it and the one made on the last redraw is a
          plan for the text as it was. */
-      if (planText(range, before, after, edits).trouble) return null;
+      const plan = planText(range, before, after, edits);
+      if (plan.trouble) return null;
       return {
         say: after,
         before,          // for the comparison the note draws on hover
+        spots: plan.spots,   // for the same comparison, drawn in the text
         apply: () => {
           const now = planText(range, before, after, edits);
           return now.trouble || writeText(now);
@@ -2300,11 +2419,16 @@
     if (spot) {
       const where = spot.find(f);
       if (!where) return null;
-      return { say: spot.say, apply: () => writeSpot(where) };
+      return { say: spot.say, spots: where.show || [where], apply: () => writeSpot(where) };
     }
 
     const spec = MARKUP_FIXES[f.condition];
     if (!spec) return null;
+    if (spec.find) {
+      const where = spec.find(f);
+      if (!where) return null;
+      return { say: spec.say, spots: where.show, apply: () => unformat(where.target, spec.command) };
+    }
     const target = spec.colon ? boldColon(f.range) : wrapping(f, spec.tags);
     if (!target) return null;
     return { say: spec.say, apply: () => unformat(target, spec.command) };
@@ -2681,6 +2805,13 @@
     .rlx-btn-float { position:fixed; top:14px; right:14px; z-index:99999; margin:0;
       padding:4px 6px; border-radius:2px;
       background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.18); }
+    /* The same box in the editor's margin, dressed as the bar it turns into:
+       its width, its purple edge along the top, Lint as wide as Done is, and
+       the three small ones at the end as they are at the foot of the bar. */
+    .rlx-btn-float.rlx-btn-margin { right:auto; display:flex; gap:4px; box-sizing:border-box;
+      padding:.55em .6em; border:1px solid rgba(0,0,0,.3); border-top:3px solid var(--rlx-head);
+      box-shadow:0 8px 28px rgba(0,0,0,.28); }
+    .rlx-btn-margin .rlx-btn { flex:1 1 auto; justify-content:center; }
 
     /* ————— the structure rail: the sections the article has not got yet.
 
@@ -2814,6 +2945,18 @@
     .rlx-chip-copied { background:var(--rlx-miss, #d97706); border-color:transparent; color:#fff; }
     .rlx-chip-copied .rlx-chip-name::after { content:" — copied"; opacity:.8; font-weight:400; }
 
+    /* A section with only old citations. The blue of a linter suggestion and
+       not the amber, because the section is there and may well be fine: this
+       is something to look at, not something Radiopaedia requires. */
+    .rlx-chip-stale { border-left-color:var(--rlx-stale, #2563eb); font-weight:400; cursor:default; }
+    .rlx-chip-stale:hover { background:#f7faff; }
+    .rlx-chip-stale .rlx-chip-rel, .rlx-chip-stale:hover .rlx-chip-rel { color:var(--rlx-stale, #2563eb); }
+    #rlx-thread.rlx-thread-stale path { stroke:var(--rlx-stale, #2563eb); }
+    .rlx-rail-stale { flex:1 1 100%; }
+    .rlx-rail-stale .rlx-rail-n { background:var(--rlx-stale, #2563eb); margin-right:2px; }
+    .rlx-rail-slim .rlx-rail-stale { font-size:0; }
+    .rlx-rail-slim .rlx-rail-stale .rlx-rail-n { font-size:12px; margin:0; }
+
     /* No room for words. A tab against the edge of the text and the heading in
        the tooltip: less than the chip said, and none of it a lie about where
        the section goes. */
@@ -2860,8 +3003,8 @@
     #rlx-paste .rlx-paste-off:hover { opacity:1; }
 
     #rlx-layer { position:fixed; inset:0; pointer-events:none; z-index:99997; }
-    .rlx-mark { position:fixed; border-radius:2px; }
-    .rlx-mark.rlx-current { outline:2px solid; outline-offset:1px; }
+    .rlx-mark { position:fixed; border-radius:1px; opacity:.5; }
+    .rlx-mark.rlx-current { opacity:1; }
 
     /* The insertion caret: a rule between two letters, with the character it
        stands for above it. A transform rather than a negative left, so the
@@ -2875,8 +3018,24 @@
       font:800 15px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
 
+    /* The change Fix would make, in the text: the red of radioUpdater's
+       renumbering preview over what goes, its green on what arrives. */
+    .rlx-del { position:fixed; border-radius:2px; background:rgba(220,38,38,.2); }
+    .rlx-del::after { content:''; position:absolute; left:0; right:0; top:55%;
+      border-top:2px solid #b91c1c; }
+    .rlx-ins-at { position:fixed; border-radius:1px; background:#15803d; }
+    .rlx-ins, .rlx-gone {
+      position:fixed; padding:0 4px; border-radius:2px; white-space:pre;
+      background:#dcfce7; color:#15803d; text-decoration:none;
+      box-shadow:0 0 0 1px currentColor inset;
+      font:700 14px/18px "Open Sans", system-ui, -apple-system, sans-serif;
+    }
+    .rlx-gone { background:#fde2e2; color:#b91c1c; text-decoration:line-through; }
+
     #rlx-note {
-      position:fixed; z-index:99999; max-width:min(30em, 78vw);
+      /* Border-box, so that a width set from the script (the margin it has to
+         fit in) is the width it takes, padding and border included. */
+      position:fixed; z-index:99999; max-width:min(30em, 78vw); box-sizing:border-box;
       padding:.6em .8em; border-radius:2px; border:1px solid var(--rlx-edge);
       border-left:4px solid;
       background:var(--rlx-face); color:var(--rlx-text); box-shadow:var(--rlx-float);
@@ -2898,6 +3057,12 @@
       font-size:12px; font-weight:600; text-transform:uppercase;
       letter-spacing:1.1px; opacity:.8; }
     #rlx-note .rlx-msg { margin-top:.35em; }
+    /* The arrow back to words scrolled out of sight: a strip across the edge
+       of the note that faces them. */
+    #rlx-note .rlx-away { margin:-.6em -.8em .5em; padding:.4em .8em; cursor:pointer;
+      font-size:13px; font-weight:700; background:rgba(127,127,127,.1); }
+    #rlx-note .rlx-away:last-child { margin:.5em -.8em -.6em; }
+    #rlx-note .rlx-away:hover { background:rgba(127,127,127,.2); }
     #rlx-note .rlx-hint { margin-top:.4em; font-size:13px; opacity:.62; }
     #rlx-note .rlx-fix { margin-top:.4em; padding:.25em .5em; border-radius:6px;
       background:rgba(127,127,127,.14); font-weight:600; }
@@ -3055,6 +3220,85 @@
     #rlx-bar [data-act="dispute"] { min-width:5.6em; }
     #rlx-bar .rlx-sep { width:1px; align-self:stretch; background:var(--rlx-edge);
       flex:0 0 auto; }
+
+    /* The three buttons borrowed from the box by the title while the bar is
+       up. Laid out as if they were the bar's own, and coloured as they were in
+       the box when they are on. */
+    #rlx-bar .rlx-borrowed { display:contents; }
+    #rlx-bar .rlx-auto.rlx-on { background:var(--rlx-ink, #2563eb); color:#fff; }
+    #rlx-bar .rlx-sweep-toggle.rlx-flagged { background:#dc2626; color:#fff; }
+    .rlx-staged .rlx-group { display:none !important; }
+
+    /* Groups of the bar: nothing of their own along the bottom. */
+    #rlx-bar .rlx-g-head, #rlx-bar .rlx-g-walk, #rlx-bar .rlx-g-tools,
+    #rlx-bar .rlx-g-extra { display:contents; }
+    #rlx-bar .rlx-sep-extra { display:none; }
+
+    /* The bar in the margin: a column as wide as the note under it, in
+       blocks rather than in whatever rows the buttons happened to wrap into.
+
+         LINT 3/14 ● ● ●            ×
+         [‹] [    ✓ Done    ] [›]
+         [  Ignore  ] [   Undo   ]
+         ─────────────────────────
+         [  ✎ Fix   ] [   Copy   ]
+         [ ✎ Prompt ] [  ⚑ Log   ]
+         [  + Name  ] [ + Meaning ]
+         ─────────────────────────
+                  Re-lint ↻ ❝ ⊘
+
+       One filled button only, Done, in its green, and Fix in the bar's black
+       when it has something to write: everything else is drawn in outline, so
+       the eye finds the two presses that matter without reading the labels.
+       Done sits between the arrows because walking is the thing done a
+       hundred times. The four at the foot are settings more than actions and
+       are small. The flip has nothing to flip to in the margin. */
+    #rlx-bar.rlx-side { right:auto; margin:0; display:flex; flex-direction:column; flex-wrap:nowrap;
+      align-items:stretch; gap:6px; padding:.55em .6em; }
+    #rlx-bar.rlx-side .rlx-g-head { display:flex; align-items:baseline; gap:.5em;
+      padding-right:1.6em; }
+    #rlx-bar.rlx-side .rlx-left { flex:1 1 auto; flex-wrap:wrap; overflow:visible; }
+    #rlx-bar.rlx-side .rlx-status { flex:1 0 100%; white-space:normal; padding:0; }
+    #rlx-bar.rlx-side .rlx-status:empty { display:none; }
+    #rlx-bar.rlx-side .rlx-close { position:absolute; top:.3em; right:.3em; }
+    #rlx-bar.rlx-side .rlx-flip { display:none; }
+    #rlx-bar.rlx-side .rlx-sep { display:block; width:auto; height:1px; align-self:stretch; }
+    #rlx-bar.rlx-side .rlx-sep-nav { display:none; }
+
+    #rlx-bar.rlx-side .rlx-g-walk { display:grid; gap:4px;
+      grid-template-columns:2.4em 1fr 1fr 2.4em; }
+    #rlx-bar.rlx-side [data-act="prev"] { grid-area:1 / 1; }
+    #rlx-bar.rlx-side [data-act="done"] { grid-area:1 / 2 / 2 / 4; }
+    #rlx-bar.rlx-side [data-act="next"] { grid-area:1 / 4; }
+    #rlx-bar.rlx-side [data-act="ignore"] { grid-area:2 / 1 / 3 / 3; }
+    #rlx-bar.rlx-side [data-act="undo"] { grid-area:2 / 3 / 3 / 5; }
+
+    #rlx-bar.rlx-side .rlx-g-tools { display:grid; gap:4px;
+      grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    #rlx-bar.rlx-side [data-act="propose"], #rlx-bar.rlx-side [data-act="meaning"] {
+      order:1; min-width:0; }
+    #rlx-bar.rlx-side [data-act="dispute"] { min-width:0; }
+
+    #rlx-bar.rlx-side .rlx-g-extra { display:flex; justify-content:flex-end; gap:4px; }
+
+    #rlx-bar.rlx-side button { padding:4px 6px; background:#fff; color:#333;
+      border:1px solid #ccc; box-shadow:none; white-space:nowrap;
+      overflow:hidden; text-overflow:ellipsis; }
+    #rlx-bar.rlx-side button:where(:hover:not([disabled])) { background:#f2f2f2; color:#111; }
+    #rlx-bar.rlx-side button[disabled] { background:#fff; color:#c4c4c4; border-color:#ebebeb; }
+    #rlx-bar.rlx-side .rlx-step { font-size:16px; line-height:1; padding:3px 0; }
+    #rlx-bar.rlx-side .rlx-primary:not([disabled]) { background:#059669; color:#fff;
+      border-color:transparent; }
+    #rlx-bar.rlx-side .rlx-primary:not([disabled]):hover { background:#047857; }
+    #rlx-bar.rlx-side [data-act="fix"]:not([disabled]) { background:var(--rlx-btn); color:#fff;
+      border-color:transparent; }
+    #rlx-bar.rlx-side [data-act="fix"]:not([disabled]):hover { background:var(--rlx-btn-lit); }
+    #rlx-bar.rlx-side .rlx-g-extra button { padding:2px 7px; font-size:12px;
+      color:#555; border-color:#ddd; }
+    #rlx-bar.rlx-side .rlx-g-extra .rlx-on,
+    #rlx-bar.rlx-side .rlx-g-extra .rlx-flagged { color:#fff; border-color:transparent; }
+    #rlx-bar.rlx-side .rlx-close { padding:0 .35em; border:none; color:#666;
+      background:transparent; font-size:16px; }
     #rlx-bar .rlx-close, #rlx-bar .rlx-flip { background:transparent;
       border-color:transparent; box-shadow:none; color:var(--rlx-text);
       font-size:17px; line-height:1; padding:.3em .5em; }
@@ -3348,29 +3592,55 @@
 
     stage.bar = document.createElement('div');
     stage.bar.id = 'rlx-bar';
+    /* The four groups — the heading, the walk, the tools and the extras — are
+       wrappers that take no part in the layout of the bar along the bottom
+       (`display:contents`): there it is one row, as it always was. In the
+       margin each becomes a block of its own; see `.rlx-side` in the styles. */
     stage.bar.innerHTML = `
-      <span class="rlx-title">Lint</span>
-      <span class="rlx-left">
-        <span class="rlx-count"></span>
-        <span class="rlx-status"></span>
+      <span class="rlx-g-head">
+        <span class="rlx-title">Lint</span>
+        <span class="rlx-left">
+          <span class="rlx-count"></span>
+          <span class="rlx-status"></span>
+        </span>
       </span>
       <span class="rlx-sep rlx-sep-nav"></span>
-      <button data-act="prev" class="rlx-step" title="Previous (k, or Alt+K while typing)">&lsaquo;</button>
-      <button data-act="next" class="rlx-step" title="Next (j, or Alt+J while typing)">&rsaquo;</button>
-      <button data-act="done" class="rlx-primary" title="Done (s, or Alt+S while typing)">&#10003; Done</button>
-      <button data-act="ignore" title="Ignore (x, or Alt+X while typing)">Ignore</button>
-      <button data-act="undo" title="Undo the last one (u)">Undo</button>
+      <span class="rlx-g-walk">
+        <button data-act="prev" class="rlx-step" title="Previous (k, or Alt+K while typing)">&lsaquo;</button>
+        <button data-act="next" class="rlx-step" title="Next (j, or Alt+J while typing)">&rsaquo;</button>
+        <button data-act="done" class="rlx-primary" title="Done (s, or Alt+S while typing)">&#10003; Done</button>
+        <button data-act="ignore" title="Ignore (x, or Alt+X while typing)">Ignore</button>
+        <button data-act="undo" title="Undo the last one (u)">Undo</button>
+      </span>
       <span class="rlx-sep rlx-sep-tools"></span>
-      <button data-act="fix" title="Write the correction into the editor (f)">&#9998; Fix</button>
-      <button data-act="copy" title="Copy the message (c)">Copy</button>
-      <button data-act="rewrite" title="Copy a prompt for rewriting this paragraph (r)">&#9998; Prompt</button>
-      <button data-act="propose" title="Add this to the shared list (p)">+ Name</button>
-      <button data-act="meaning" title="Say what this acronym stands for (e)">+ Meaning</button>
-      <button data-act="dispute" title="The rule is wrong here: write it down (d)">&#9873; Log</button>
-      <button data-act="reload" title="Ask the linter again">Re-lint</button>
+      <span class="rlx-g-tools">
+        <button data-act="fix" title="Write the correction into the editor (f)">&#9998; Fix</button>
+        <button data-act="copy" title="Copy the message (c)">Copy</button>
+        <button data-act="rewrite" title="Copy a prompt for rewriting this paragraph (r)">&#9998; Prompt</button>
+        <button data-act="propose" title="Add this to the shared list (p)">+ Name</button>
+        <button data-act="meaning" title="Say what this acronym stands for (e)">+ Meaning</button>
+        <button data-act="dispute" title="The rule is wrong here: write it down (d)">&#9873; Log</button>
+      </span>
+      <span class="rlx-sep rlx-sep-extra"></span>
+      <span class="rlx-g-extra">
+        <button data-act="reload" title="Ask the linter again">Re-lint</button>
+        <span class="rlx-borrowed"></span>
+      </span>
       <button data-act="flip" class="rlx-flip" title="Move the bar to the other edge (t)">&#8645;</button>
       <button data-act="close" class="rlx-close" title="Close (Esc)">&times;</button>`;
     document.body.appendChild(stage.bar);
+
+    /* The box by the title — in the corner, in the editor — has nothing to
+       say while the bar is up: Lint is Re-lint here, and the rail and the
+       automatic preview belong to the article page. It steps aside, and the
+       three of its buttons that still mean something here come over to the
+       bar: the forced re-read, the citation chips and the retraction check.
+       The same buttons, moved rather than copied, so whatever paints them
+       goes on painting them; they go back when the bar closes. */
+    document.documentElement.classList.add('rlx-staged');
+    const borrowed = stage.bar.querySelector('.rlx-borrowed');
+    for (const el of [forceBtn, citesToggle, sweepToggle]) if (el) borrowed.appendChild(el);
+
     placeBar(true);
     stage.bar.addEventListener('click', (e) => {
       const what = e.target.closest('[data-act]')?.dataset.act;
@@ -3426,6 +3696,11 @@
     closeDispute();
     closePick();
     closeAnswer();
+    document.documentElement.classList.remove('rlx-staged');
+    if (button?.isConnected && forceBtn) button.after(forceBtn);
+    if (group?.isConnected) {
+      for (const el of [citesToggle, sweepToggle]) if (el) group.appendChild(el);
+    }
     stage.layer?.remove(); stage.note?.remove(); stage.bar?.remove();
     removeEventListener('scroll', scheduleDraw, true);
     removeEventListener('resize', scheduleDraw);
@@ -3566,32 +3841,131 @@
       if (k !== stage.i && lines.some((s) => lit.some((l) => overlaps(l, s)))) continue;
 
       for (const s of lines) {
-        /* A few pixels of air around the words.
+        /* A line under the words, in the severity's colour, rather than a
+         * wash over them. The wash put red on the text twice over — once for
+         * an error, once for what Fix would take out — and the two could not
+         * be told apart. Under the words, the text keeps its own colour, and
+         * red ON the text means only one thing: this goes.
          *
-         * A rectangle that ends exactly where the text ends puts its edge —
-         * and the outline just outside it — on the last glyph, and the last
-         * glyph is sometimes the whole finding: "the colon should not be bold"
-         * highlights `iatrogenic:`, and the colon it is talking about ends up
-         * under the border, with the text caret alongside it for company.
-         * Selections in every editor ever written have this air; the highlight
-         * should too. */
-        let x = s.x - PAD_X, y = s.y - PAD_Y;
-        let w = s.w + PAD_X * 2, h = s.h + PAD_Y * 2;
+         * Thicker and at full strength on the finding you are on, thinner
+         * and fainter on the rest. A few pixels longer than the words at
+         * either end, so that a finding of one character — a semicolon —
+         * still has a line you can see. */
+        const thick = k === stage.i ? 3 : 2;
+        let x = s.x - PAD_X, y = s.y + s.h - PAD_Y, w = s.w + PAD_X * 2, h = thick;
         if (box) {
-          // Do not let the padding push the box out of the iframe it belongs to.
+          // Not out of the iframe it belongs to.
           const x1 = Math.max(x, box.left), y1 = Math.max(y, box.top);
           const x2 = Math.min(x + w, box.right), y2 = Math.min(y + h, box.bottom);
+          if (x2 <= x1 || y2 <= y1) continue;
           x = x1; y = y1; w = x2 - x1; h = y2 - y1;
         }
         const mark = document.createElement('div');
         mark.className = 'rlx-mark' + (k === stage.i ? ' rlx-current' : '');
         mark.style.cssText = `left:${x}px; top:${y}px; width:${w}px; height:${h}px;` +
-                             `background:${c.wash}; outline-color:${c.ink};`;
+                             `background:${c.ink};`;
         stage.layer.appendChild(mark);
       }
     }
-    drawCaret(stage.findings[stage.i]);
+    if (!drawChanges(cur)) drawCaret(cur);
     placeNote();
+  }
+
+  /* What Fix would do, drawn in the text, the way radioUpdater shows a
+   * citation about to be renumbered: the characters it takes out struck
+   * through in red where they stand, and what it puts in on a green tag just
+   * after them, raised half a line so the words underneath stay readable. A
+   * pure insertion also gets a green rule at the exact place it goes in.
+   *
+   * Both are on the layer above the editor, not in it: nothing in the article
+   * changes until f is pressed. Drawn for the current finding only, and only
+   * where `proposal` has worked out the edit to the character — the same
+   * spots `f` would write. */
+  const VISIBLE_SPACE = '␣';
+  // A space at either end of a tag would be no mark at all.
+  const visible = (text) => text.replace(/^[  ]+|[  ]+$/g,
+    (s) => VISIBLE_SPACE.repeat(s.length));
+
+  function drawChanges(f) {
+    const would = f?.state === 'open' ? proposal(f) : null;
+    if (!would?.spots?.length) return false;
+    const box = f.frame ? f.frame.getBoundingClientRect() : null;
+    const inFrame = (x, y) => !box ||
+      (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom);
+    const put = (el, x, y, w, h) => {
+      el.style.left = `${x}px`; el.style.top = `${y}px`;
+      if (w != null) { el.style.width = `${w}px`; el.style.height = `${h}px`; }
+      stage.layer.appendChild(el);
+    };
+
+    for (const spot of would.spots) {
+      const range = spot.target;
+      const off = box || { left: 0, top: 0 };
+
+      if (!range.collapsed) {
+        let rects = [];
+        try { rects = [...range.getClientRects()]; } catch { /* stale: drawn next time */ }
+        let struck = 0;
+        for (const r of rects) {
+          if (!r.width || !r.height) continue;
+          const x = r.left + off.left, y = r.top + off.top;
+          if (!inFrame(x, y + r.height / 2)) continue;
+          const del = document.createElement('div');
+          del.className = 'rlx-del';
+          put(del, x - 1, y, r.width + 2, r.height);
+          struck++;
+        }
+        /* Characters that take no room — the space at the end of a heading,
+           which the browser does not draw — have nothing to strike through.
+           They get a red tag of their own where they are, as radioUpdater
+           does for a citation it cannot colour. */
+        const at = struck ? null : pointOf(range);
+        if (at && inFrame(at.x + off.left, at.y + off.top + at.h / 2)) {
+          const gone = document.createElement('del');
+          gone.className = 'rlx-gone';
+          gone.textContent = visible(range.toString());
+          put(gone, at.x + off.left + 1, at.y + off.top);
+          gone.style.top = `${at.y + off.top - gone.offsetHeight / 2}px`;
+        }
+      }
+
+      if (!spot.insert) continue;
+      const at = pointOf(range);
+      if (!at) continue;
+      const x = at.x + off.left, y = at.y + off.top;
+      if (!inFrame(x, y + at.h / 2)) continue;
+
+      if (range.collapsed) {
+        const rule = document.createElement('div');
+        rule.className = 'rlx-ins-at';
+        put(rule, x - 1, y, 2, at.h);
+      }
+      const ins = document.createElement('ins');
+      ins.className = 'rlx-ins';
+      ins.textContent = visible(spot.insert);
+      put(ins, x + 1, y);
+      ins.style.top = `${y - ins.offsetHeight / 2}px`;
+    }
+    return true;
+  }
+
+  /* Where the end of a range is on screen: its x, and the top and height of
+   * the line it is on. A collapsed range answers with a rectangle of no width
+   * in some browsers and with no rectangle at all in others, so the
+   * character on either side of the point is asked as well. */
+  function pointOf(range) {
+    const node = range.endContainer, at = range.endOffset;
+    const ask = (from, to, edge) => {
+      const r = node.ownerDocument.createRange();
+      try { r.setStart(node, from); r.setEnd(node, to); } catch { return null; }
+      const rects = r.getClientRects();
+      const rect = edge === 'right' ? rects[rects.length - 1] : rects[0];
+      return rect && rect.height ? { x: rect[edge], y: rect.top, h: rect.height } : null;
+    };
+    const len = node.nodeType === 3 ? (node.nodeValue || '').length : 0;
+    return ask(at, at, 'left')
+      || (node.nodeType === 3 && at > 0 ? ask(at - 1, at, 'right') : null)
+      || (node.nodeType === 3 && at < len ? ask(at, at + 1, 'left') : null);
   }
 
   /* The place the comma is missing from, on the current finding only: a rule
@@ -3635,9 +4009,11 @@
     if (!stage.live || !note || note.hidden) return;
     const off = frame ? frame.getBoundingClientRect() : { left: 0, top: 0 };
     const x = e.clientX + off.left, y = e.clientY + off.top;
-    const r = note.getBoundingClientRect();
+    const over = (r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    // Except on the arrow back to the words, which is there to be clicked.
+    const back = note.querySelector('.rlx-away');
     note.classList.toggle('rlx-ghost',
-      x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+      over(note.getBoundingClientRect()) && !(back && over(back.getBoundingClientRect())));
   }
 
   const onMove = (e) => ghostNote(e, null);
@@ -3796,15 +4172,95 @@
     }
 
     const spot = highlightBounds(f);
+    stage.note.style.maxWidth = '';
     if (!spot) {
       stage.note.style.left = '14px';
       stage.note.style.top = '14px';
+      return;
+    }
+
+    /* Scrolled out of sight, the words leave the note standing at the edge of
+     * the window with nothing beside it. An arrow on that edge says which way
+     * they went, and a click on it brings them back. */
+    const away = whereAway(f, spot);
+    if (away) {
+      const back = document.createElement('div');
+      back.className = 'rlx-away';
+      back.style.color = c.ink;
+      back.textContent = away === 'up'
+        ? '▲ The words are further up — click to go back to them'
+        : '▼ The words are further down — click to go back to them';
+      back.addEventListener('click', () => { bringIntoView(f); scheduleDraw(); });
+      if (away === 'up') stage.note.prepend(back); else stage.note.append(back);
+    }
+
+    /* In the margin to the left of the article when there is room for it,
+     * level with the highlight: nothing in the text is covered, and your eye
+     * only has to go sideways. Measured after the width is capped, because a
+     * narrower note is a taller one. */
+    const margin = gutterOf(f);
+    if (margin) {
+      stage.note.style.maxWidth = `${margin.width}px`;
+      const n = stage.note.getBoundingClientRect();
+      const { top } = notePlacement(spot, n.width, n.height, true);
+      stage.note.style.left = `${margin.right - n.width}px`;
+      stage.note.style.top = `${top}px`;
       return;
     }
     const n = stage.note.getBoundingClientRect();
     const { left, top } = notePlacement(spot, n.width, n.height);
     stage.note.style.left = `${left}px`;
     stage.note.style.top = `${top}px`;
+  }
+
+  /* Above or below the part of the article you can see, or neither. What you
+   * can see is the window, and inside an iframe only as much of the window as
+   * the iframe covers. */
+  function whereAway(f, spot) {
+    let top = 0, bottom = innerHeight;
+    if (f.frame) {
+      const box = f.frame.getBoundingClientRect();
+      top = Math.max(top, box.top);
+      bottom = Math.min(bottom, box.bottom);
+    }
+    if (spot.bottom <= top) return 'up';
+    if (spot.top >= bottom) return 'down';
+    return null;
+  }
+
+  /* The empty column to the left of the page, if it is wide enough for the
+   * note — and for the bar, which stands at the top of the same column.
+   *
+   * The page is a box centred in the window, and the article is somewhere
+   * inside it. Going up from the editor, every ancestor holds the article, and
+   * the outermost one that does not fill the window is that box: its left
+   * edge is where the margin ends. An ancestor as wide as the window is the
+   * page itself and says nothing; a page with no box at all leaves no margin,
+   * and the note goes back to sitting beside the words. */
+  const NOTE_MIN = 200;   // narrower than this and the note is a column of single words
+
+  function gutterOf(f) {
+    return marginOf(f.frame
+      || (f.range && (f.range.startContainer.nodeType === 1
+        ? f.range.startContainer : f.range.startContainer.parentElement))
+      || (f.home?.frame || f.home?.el));
+  }
+
+  // The same column, for the editor as a whole rather than one finding in it.
+  const editorMargin = () => marginOf(stage.roots[0]?.frame || stage.roots[0]?.root);
+
+  function marginOf(start) {
+    if (!start?.isConnected || start.ownerDocument !== document) return null;
+
+    let edge = Infinity;
+    for (let n = start; n && n !== document.body && n !== document.documentElement;
+         n = n.parentElement) {
+      const r = n.getBoundingClientRect();
+      if (r.width && r.width < innerWidth - 40) edge = Math.min(edge, r.left);
+    }
+    const gap = 12;
+    const width = Math.min(edge - gap * 2, 440);
+    return Number.isFinite(edge) && width >= NOTE_MIN ? { right: edge - gap, width } : null;
   }
 
   /* The box around the WHOLE highlight, in page coordinates.
@@ -3884,11 +4340,25 @@
   let barMeasured = 0;
   function placeBar(force) {
     if (!stage.live || !stage.bar) return;
+
+    /* In the margin, when there is one: at the top of the column the note
+     * moves up and down in, its buttons on as many rows as that width needs.
+     * Asked on every frame, not four times a second like the rest — it is a
+     * walk up a dozen ancestors, and a window being resized should not leave
+     * the bar standing in a margin that has just gone. Without a margin the
+     * bar is the one along the bottom (or the top) of the window. */
+    const side = editorMargin();
+    // Into the margin or out of it: the edge it stands on changes, so measure now.
+    if (!!side !== stage.bar.classList.contains('rlx-side')) force = true;
+    stage.bar.classList.toggle('rlx-side', !!side);
+    stage.bar.style.left = side ? `${side.right - side.width}px` : '';
+    stage.bar.style.width = side ? `${side.width}px` : '';
+
     const now = performance.now();
     if (!force && now - barMeasured < 250) return;
     barMeasured = now;
 
-    const top = barIsTop();
+    const top = side ? true : barIsTop();
     const r = stage.bar.getBoundingClientRect();
     const y = top ? 2 : innerHeight - 2;
     const xs = [r.left + 2, (r.left + r.right) / 2, r.right - 2];
@@ -3912,7 +4382,7 @@
     stage.bar.style.bottom = top ? 'auto' : `${Math.round(clear)}px`;
   }
 
-  function notePlacement(spot, w, h) {
+  function notePlacement(spot, w, h, aside) {
     const gap = 10, edge = 12;
 
     /* The room the bar takes, on the edge the bar is actually on — measured
@@ -3930,6 +4400,8 @@
     });
     const clear = (p) => p.left + w <= spot.left || p.left >= spot.right ||
                          p.top + h <= spot.top || p.top >= spot.bottom;
+    // In the margin it is beside the text whatever its height: only the top is asked for.
+    if (aside) return clamp({ left: edge, top: spot.top });
 
     const tries = [
       { left: spot.left, top: spot.bottom + gap },
@@ -5406,7 +5878,12 @@
     r.title = 'Show the sections this kind of article is missing, in the margin';
     r.addEventListener('click', () => setRailOn(!railOn()));
 
-    g.append(b, f, t, r);
+    /* The automatic preview and the rail act on the article page and nothing
+       else, so the box in the editor carries neither: two switches for
+       something that is not there. */
+    const page = !inEditor();
+    g.append(b, f);
+    if (page) g.append(t, r);
 
     /* The fourth, and only where it has anything to switch: the citation chips
        live in the editor and nowhere else, so on an article page this control
@@ -5447,7 +5924,8 @@
     const box = b.getBoundingClientRect();
     if (!box.width || !box.height) pinToCorner(g);
 
-    group = g; button = b; toggle = t; railToggle = r; citesToggle = c;
+    group = g; button = b; toggle = page ? t : null; railToggle = page ? r : null;
+    citesToggle = c;
     sweepToggle = w;
     forceBtn = f;
     paintButton();
@@ -5456,6 +5934,7 @@
     paintRailToggle();
     paintCitesToggle();
     paintSweepToggle();
+    placeGroup();
   }
 
   /* The fallback spot: fixed at the top right, outside any branch of the site.
@@ -5463,6 +5942,33 @@
   function pinToCorner(b) {
     b.classList.add('rlx-btn-float');
     document.body.appendChild(b);
+  }
+
+  /* In the editor the box stands where the bar will: at the top of the grey
+   * margin to the left of the page, as wide as the bar. Pressing Lint turns
+   * the one into the other in the same place, and closing the bar turns it
+   * back, so everything the linter has to do with this page is in that one
+   * column and nothing is left over in the corner of the window.
+   *
+   * Until the editor has mounted, and in a window too narrow to have a
+   * margin, it stays in the corner. Asked again whenever the page changes or
+   * the window is resized, on the next frame and once per frame at most:
+   * the observer that calls this also fires for every highlight redrawn. */
+  function placeGroup() {
+    if (!group?.isConnected || !inEditor()) return;
+    if (document.documentElement.classList.contains('rlx-staged')) return;   // the bar is up
+    const root = editorRoots()[0];
+    const m = root ? marginOf(root.frame || root.root) : null;
+    group.classList.toggle('rlx-btn-margin', !!m);
+    group.style.left = m ? `${m.right - m.width}px` : '';
+    group.style.width = m ? `${m.width}px` : '';
+    group.style.top = m ? `${BAR_EDGE}px` : '';
+  }
+
+  let groupPending = null;
+  function placeGroupSoon() {
+    if (groupPending || !inEditor()) return;
+    groupPending = requestAnimationFrame(() => { groupPending = null; placeGroup(); });
   }
 
   /* The first title that actually takes up room on screen. */
@@ -5976,6 +6482,127 @@
     railSoon();
   }
 
+  // ———————————————————————————————————————— sections with only old citations
+
+  /* The newest thing a section cites, and how long ago that was. A section
+   * whose newest citation is more than `STALE_AFTER` years old gets a chip of
+   * its own beside its heading, among the chips for what is missing.
+   *
+   * Years only, because a year is all most references say: in 2026 a section
+   * whose newest citation is from 2021 is five years old and passes, and one
+   * from 2020 is six and does not.
+   *
+   * Each heading answers for the text between it and the next heading of ANY
+   * level, so a `Radiographic features` that opens with one old sentence is
+   * told about it even when its `MRI` is up to date, and an `MRI` with nothing
+   * but old papers is not excused by a fresh sentence above it. A section that
+   * cites nothing has no date to report, and is not this check's business.
+   *
+   * It only ever says what it knows. One citation in the section with no
+   * readable year, or a number the list does not have, and the newest might be
+   * the one it cannot read, so the section gets no chip. */
+  const STALE_AFTER = 5;
+  const REFERENCES = '#references li';
+  const REFERENCE_NUMBER = /^(\d+)\.\s/;
+
+  /* What a section about the past is meant to cite. */
+  const TIMELESS_HEADINGS = new Set(['history and etymology'].map(normaliseHeading));
+
+  /* The year a reference was published, from its text with the links gone,
+   * since a DOI can hold anything that looks like a year.
+   *
+   * Three forms, best first. A journal says `Radiographics. 2018;38(7):2102`,
+   * a book says `(2012) ISBN: 9781931884211`, and the rest end on it, as in
+   * `StatPearls Publishing. 2023.`. The last of each kind, because a title can
+   * carry a year of its own: `The 2021 WHO Classification. Neuro Oncol.
+   * 2021;23(8)`. A year past next year is a number that only looks like one. */
+  function referenceYear(text, thisYear = new Date().getFullYear()) {
+    for (const form of [/\b((?:19|20)\d\d)\s*[;:]/g, /\(((?:19|20)\d\d)\)/g, /\b((?:19|20)\d\d)\b/g]) {
+      const years = [...String(text).matchAll(form)].map((m) => Number(m[1]))
+        .filter((y) => y <= thisYear + 1);
+      if (years.length) return years[years.length - 1];
+    }
+    return null;
+  }
+
+  /* {reference number: {year, text}}, off the list at the foot of the page. It
+   * is folded away there, but the text is in the page whether it shows or not. */
+  function referencesOnPage() {
+    const refs = new Map();
+    for (const li of document.querySelectorAll(REFERENCES)) {
+      const copy = li.cloneNode(true);
+      copy.querySelectorAll('a').forEach((a) => a.remove());
+      const text = tidy(copy.textContent || '');
+      const n = REFERENCE_NUMBER.exec(text);
+      if (n) refs.set(Number(n[1]), { year: referenceYear(text), text: text.replace(/\s*-$/, '') });
+    }
+    return refs;
+  }
+
+  /* '1-3,5' → [1, 2, 3, 5]. */
+  function citedNumbers(marker) {
+    const out = [];
+    for (const piece of marker.split(',')) {
+      const [from, to = from] = piece.split(/[-–]/).map(Number);
+      for (let n = from; n <= to; n++) out.push(n);
+    }
+    return out;
+  }
+
+  /* The sections to say something about, as rows the rail can place. */
+  function staleSections(body, refs, thisYear = new Date().getFullYear()) {
+    const sections = [];
+    let section = null;
+    for (const el of body.querySelectorAll(`${SECTION_SEL}, sup`)) {
+      if (el.tagName !== 'SUP') {
+        section = { heading: el, cited: new Set() };
+        sections.push(section);
+        continue;
+      }
+      const marker = tidy(el.textContent || '');
+      if (!section || !CITATION_NUMBERS.test(marker) || unitExponent(el)) continue;
+      citedNumbers(marker).forEach((n) => section.cited.add(n));
+    }
+
+    const hushed = new Set(hushedHere());
+    const rows = [];
+    for (const { heading, cited } of sections) {
+      const name = normaliseHeading(heading.textContent);
+      const entry = `stale:${name}`;
+      if (!cited.size || TIMELESS_HEADINGS.has(name) || hushed.has(entry)) continue;
+
+      const found = [...cited].map((n) => ({ n, ...refs.get(n) }));
+      if (found.some((r) => !r.year)) continue;
+
+      const newest = Math.max(...found.map((r) => r.year));
+      const age = thisYear - newest;
+      if (age <= STALE_AFTER) continue;
+
+      found.sort((a, b) => b.year - a.year || a.n - b.n);
+      rows.push({
+        stale: true, entry, required: true, inside: true, anchor: heading,
+        level: TAG_LEVEL[heading.tagName], title: `Newest citation ${newest}`,
+        why: `The newest citation under "${tidy(heading.textContent)}" is from ${newest}, `
+          + `${age} years ago.\n\n${found.map((r) => r.text).join('\n')}`,
+      });
+    }
+    return rows;
+  }
+
+  /* Each stale row goes after the rows on or above its heading. The stack in
+   * `layOut` only ever moves down, so a row out of order would drag every chip
+   * after it away from its own heading. A missing section with nothing after
+   * it has no anchor, and stays last. */
+  function mergeStale(rows, stale) {
+    const merged = [...rows];
+    for (const row of stale) {
+      const at = merged.findIndex((r) => !r.anchor
+        || (row.anchor.compareDocumentPosition(r.anchor) & Node.DOCUMENT_POSITION_FOLLOWING));
+      merged.splice(at < 0 ? merged.length : at, 0, row);
+    }
+    return merged;
+  }
+
   // ————————————————————————————————————————————————————————————— the rail
 
   const rail = { layer: null, rows: [], seen: null, canonName: null, profile: null,
@@ -6019,6 +6646,8 @@
 
     const aside = hushedHere().length;
     const { optional, shown, need, worth } = railContent(rows, aside, showOptional());
+    const stale = staleSections(body, referencesOnPage());
+    const asideSections = hushedHere().filter((entry) => !entry.startsWith('stale:')).length;
 
     /* The header stays for as long as there is anything to say, and "there are
      * nineteen optional ones you are not looking at" is something to say.
@@ -6034,9 +6663,8 @@
      * missing, nothing offered, nothing set aside. Which is still the whole of
      * what a sign or a device gets, because Radiopaedia asks nothing of them
      * and so nothing is offered either. */
-    if (!worth) return;
+    if (!worth && !stale.length) return;
 
-    rail.rows = shown;
     rail.seen = seen;
     rail.canonName = canonName;
     rail.profile = profile;
@@ -6046,6 +6674,7 @@
     rail.layer = document.createElement('div');
     rail.layer.id = 'rlx-gutter';
     rail.layer.style.setProperty('--rlx-miss', MISS.ink);
+    rail.layer.style.setProperty('--rlx-stale', COLORS.suggestion.ink);
 
     const head = document.createElement('div');
     head.className = 'rlx-rail-head';
@@ -6055,9 +6684,10 @@
       }" class="rlx-rail-n${need ? '' : ' rlx-rail-none'}">${need}</span>
       <span class="rlx-rail-what">${need
         ? `section${need > 1 ? 's' : ''} missing`
-        : (aside ? 'all set aside' : 'nothing required')}</span>
+        : (asideSections ? 'all set aside' : 'nothing required')}</span>
       ${jumbled ? '<span class="rlx-rail-jumbled" title="Some sections are not in the order the canon puts them in, which the linter reports separately. The placements below are approximate on this article.">&#8645;</span>' : ''}
       <button class="rlx-rail-off" title="Hide the structure rail everywhere">&times;</button>
+      ${stale.length ? `<span class="rlx-rail-stale" title="Sections whose newest citation is more than ${STALE_AFTER} years old"><span class="rlx-rail-n">${stale.length}</span> with old citations</span>` : ''}
       <span class="rlx-rail-hidden" hidden title="Chips whose heading is off screen. Scroll to them."></span>
       <select class="rlx-rail-kind" title="What kind of article this is. The canon follows from it."></select>
       ${optional.length || showOptional()
@@ -6115,6 +6745,29 @@
         if (e.target.closest('.rlx-chip-hush')) return hush(row.entry);
         copyHeading(chip, row);
       });
+      chip.addEventListener('mouseenter', () => { rail.lit = row; placeRail(); });
+      chip.addEventListener('mouseleave', () => {
+        if (rail.lit === row) { rail.lit = null; placeRail(); }
+      });
+      row.el = chip;
+      rail.layer.appendChild(chip);
+    }
+
+    rail.rows = mergeStale(shown, stale);
+
+    /* Nothing to copy on these, so the click is the × and nothing else: what
+     * there is to say is the list in the tooltip, newest first. */
+    for (const row of stale) {
+      const chip = document.createElement('div');
+      chip.className = 'rlx-chip rlx-chip-stale';
+      if (row.level > 1) chip.classList.add('rlx-chip-sub');
+      chip.innerHTML = `
+        <span class="rlx-chip-rel">&#8987;&#xFE0E;</span>
+        <span class="rlx-chip-name"></span>
+        <button class="rlx-chip-hush" title="This section can keep its older citations">&times;</button>`;
+      chip.querySelector('.rlx-chip-name').textContent = row.title;
+      chip.title = row.why;
+      chip.querySelector('.rlx-chip-hush').addEventListener('click', () => hush(row.entry));
       chip.addEventListener('mouseenter', () => { rail.lit = row; placeRail(); });
       chip.addEventListener('mouseleave', () => {
         if (rail.lit === row) { rail.lit = null; placeRail(); }
@@ -6331,6 +6984,7 @@
     const mx = tx - 8;
 
     rail.thread.classList.toggle('rlx-thread-offered', !row.required);
+    rail.thread.classList.toggle('rlx-thread-stale', !!row.stale);
     path.setAttribute('d', `M${cx},${cy} H${mx} V${ty} H${tx}`
                          + ` M${tx - 4},${ty - 3} L${tx},${ty} L${tx - 4},${ty + 3}`);
   }
@@ -7905,6 +8559,14 @@
    * reads — these files can, and the answer is "that one is fine". */
   const actionable = (findings) => findings.filter((f) => !f.known);
 
+  /* The walk goes through the errors first, then the warnings, then the
+   * suggestions, and only then whatever else the linter sent. Within one
+   * severity the order is the article's own, top to bottom: the sort is
+   * stable and `fromApi` hands them over by line. */
+  const WEIGHT = { error: 0, warning: 1, suggestion: 2 };
+  const weight = (f) => WEIGHT[f.severity] ?? 3;
+  const byWeight = (findings) => [...findings].sort((a, b) => weight(a) - weight(b));
+
   /* Zero findings is now simply zero findings. Reading the linter's HTML page,
    * an empty result and a parser that had stopped working looked exactly the
    * same, and the doubt had to be written into the code; `askLinter` refuses
@@ -7955,7 +8617,8 @@
     setButtonState('Lint…', true);
     try {
       const all = await findingsFor(slug, { force });
-      const findings = actionable(all).map((f) => ({ ...f, state: 'open', range: null, frame: null }));
+      const findings = byWeight(actionable(all))
+        .map((f) => ({ ...f, state: 'open', range: null, frame: null }));
       const hidden = knownTally(all);
 
       // Also the answer to "Re-lint" on an article you have just finished
@@ -7991,9 +8654,11 @@
 
   mountButton();
   // Radiopaedia remounts parts of the page on its own: the button has to be
-  // put back whenever it disappears.
-  new MutationObserver(() => mountButton())
+  // put back whenever it disappears. And in the editor the margin it stands in
+  // only exists once the editor has mounted, which is after this runs.
+  new MutationObserver(() => { mountButton(); placeGroupSoon(); })
     .observe(document.body, { childList: true, subtree: true });
+  addEventListener('resize', placeGroupSoon);
 
   /* One line in the console at startup. If the button is nowhere to be seen,
    * this is the first thing to look at: no line means the problem is not where
