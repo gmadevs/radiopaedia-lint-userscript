@@ -59,6 +59,7 @@ AJCC        # American Joint Committee on Cancer
 TNM         # tumour, node, metastasis
 BT-RADS     # Brain Tumor Reporting and Data System 
 PE-RADS     # Pulmonary Embolism Reporting and Data System
+NSAID       # Nonsteroidal Anti-Inflammatory Drug
 
 # ——— Statistics ———
 
