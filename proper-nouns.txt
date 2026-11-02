@@ -20,6 +20,7 @@
 
 # ——— Proper nouns: eponyms, people, places, organisations ———
 
+Lund-Mackay
 Haller
 Rasmussen
 Klumpke
