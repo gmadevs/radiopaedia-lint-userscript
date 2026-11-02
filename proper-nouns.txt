@@ -20,6 +20,7 @@
 
 # ——— Proper nouns: eponyms, people, places, organisations ———
 
+Haller
 Rasmussen
 Klumpke
 Delphian
