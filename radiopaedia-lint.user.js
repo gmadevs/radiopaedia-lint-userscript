@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.21.1
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. Beside any heading whose newest citation is more than five years old, a chip with the year. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. A link button lists the words in the text that are the title of another Radiopaedia article and are not linked to it anywhere, and links the first occurrence of one when you press Link. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
+// @version      3.22.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. Beside any heading whose newest citation is more than five years old, a chip with the year. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. A link button in the editor's toolbar lists the words in the text that are the title of another Radiopaedia article and are not linked to it anywhere, and links the first occurrence of one when you press Link. A sections button beside it lists, from the text in the editor, the sections this kind of article should have and has not got, and copies the one you pick as a heading with a line drawn where it goes. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -3605,7 +3605,7 @@
        goes on painting them; they go back when the bar closes. */
     document.documentElement.classList.add('rlx-staged');
     const borrowed = stage.bar.querySelector('.rlx-borrowed');
-    for (const el of [forceBtn, citesToggle, sweepToggle, linksToggle]) if (el) borrowed.appendChild(el);
+    for (const el of [forceBtn, citesToggle, sweepToggle, linksToggle, sectionsToggle]) if (el) borrowed.appendChild(el);
 
     placeBar(true);
     stage.bar.addEventListener('click', (e) => {
@@ -3665,7 +3665,7 @@
     document.documentElement.classList.remove('rlx-staged');
     if (button?.isConnected && forceBtn) button.after(forceBtn);
     if (group?.isConnected) {
-      for (const el of [citesToggle, sweepToggle, linksToggle]) if (el) group.appendChild(el);
+      for (const el of [citesToggle, sweepToggle, linksToggle, sectionsToggle]) if (el) group.appendChild(el);
     }
     stage.layer?.remove(); stage.note?.remove(); stage.bar?.remove();
     removeEventListener('scroll', scheduleDraw, true);
@@ -5966,6 +5966,16 @@
       g.appendChild(k);
     }
 
+    // And its pair, for the same page: the sections the text has not got.
+    let q = null;
+    if (inEditor()) {
+      q = document.createElement('button');
+      q.className = 'rlx-auto rlx-sections-toggle';
+      q.type = 'button';
+      q.addEventListener('click', () => toggleSections());
+      g.appendChild(q);
+    }
+
     const title = inEditor() ? null : visibleTitle();
     if (title) title.appendChild(g);
     else pinToCorner(g);
@@ -5981,6 +5991,7 @@
     citesToggle = c;
     sweepToggle = w;
     linksToggle = k;
+    sectionsToggle = q;
     forceBtn = f;
     paintButton();
     paintForce();
@@ -5989,6 +6000,7 @@
     paintCitesToggle();
     paintSweepToggle();
     paintLinksToggle();
+    paintSectionsToggle();
     placeGroup();
   }
 
@@ -8961,7 +8973,7 @@
    * the look itself. */
   function paintLinksToggle(count = links.count, busy = false) {
     links.count = count;
-    const inToolbar = !!toolbarLinks?.isConnected;
+    const inToolbar = !!toolbarButtons.links?.isConnected;
     if (linksToggle) {
       // One button, not two: the box keeps it only while the toolbar has none.
       linksToggle.style.display = inToolbar ? 'none' : '';
@@ -8970,17 +8982,12 @@
       linksToggle.textContent = busy ? 'link …' : count == null ? 'link' : `link ${count}`;
       linksToggle.title = LINKS_TITLE;
     }
-    if (inToolbar) {
-      const b = toolbarLinks;
-      b.classList.toggle('rlx-open', !!links.panel);
-      b.setAttribute('aria-pressed', String(!!links.panel));
-      b.setAttribute('aria-disabled', String(busy));
-      b.querySelector('.rlx-tb-count').textContent = busy ? '…' : count == null ? '' : String(count);
-    }
+    if (inToolbar) paintToolbarButton(toolbarButtons.links, !!links.panel, busy, count);
   }
 
   async function openLinks() {
     if (!inEditor()) return;
+    closeSections();
     const run = ++links.run;
     paintLinksToggle(links.count, true);
     const scan = await scanLinks();
@@ -9008,7 +9015,10 @@
    * when no heading can be recognised. RadioUpdater mounting later puts its
    * pair straight after H3, which is in front of this one: same order.
    *
-   * The button is a clone of the control it stands beside, emptied: same tag
+   * The sections button comes straight after it: the two questions this
+   * script asks of the text, side by side.
+   *
+   * Each button is a clone of the control it stands beside, emptied: same tag
    * and classes, so it has the toolbar's size and hover, and none of the
    * attributes by which an editor knows which command a press belongs to. The
    * press is caught before the editor sees it, and the mousedown is swallowed
@@ -9019,7 +9029,7 @@
    * change, so it comes back on the next one. Looking costs a walk over the
    * form, so while there is no toolbar to be found it is done twice a second
    * at most. A page with no toolbar keeps `link` in the box by the title. */
-  let toolbarLinks = null;
+  const toolbarButtons = { links: null, sections: null };
   let toolbarTried = 0;
   const TOOLBAR_CONTROL = 'button, a, [role="button"], input[type="button"], input[type="submit"]';
   const TOOLBAR_HEADINGS = ['h3', 'h2', 'h1'];
@@ -9037,7 +9047,7 @@
       scope = scope.parentElement;
       const rows = new Map();
       for (const el of scope.querySelectorAll(TOOLBAR_CONTROL)) {
-        if (el.closest('#rlx-links, .rcx-panel') || host.contains(el) || el.contains(host)) continue;
+        if (el.closest('.rlx-panel, .rcx-panel') || host.contains(el) || el.contains(host)) continue;
         if (!(host.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) continue;
         const bar = el.parentElement;
         if (!bar) continue;
@@ -9057,7 +9067,8 @@
   }
 
   function toolbarAnchor(members) {
-    const ours = members.filter((el) => el.matches('.rcx-btn-cite, .rcx-btn-chars'));
+    const ours = members.filter((el) => el.matches('.rcx-btn-cite, .rcx-btn-chars') &&
+      !el.matches('.rlx-tb-tool'));
     if (ours.length) return ours[ours.length - 1];
     for (const want of TOOLBAR_HEADINGS) {
       const hit = [...members].reverse().find((el) => controlNamed(el, want));
@@ -9074,8 +9085,58 @@
       <path stroke="currentColor" d="M18.7 18.7l2.6 2.6"/>
     </svg><span class="rlx-tb-count"></span>`;
 
-  function mountToolbarLinks() {
-    if (toolbarLinks?.isConnected || !inEditor()) return;
+  /* A list of lines with an empty one in the middle and a plus beside it: a
+   * section that is not there yet. */
+  const SECTIONS_ICON = `<svg class="rlx-tb-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke="currentColor" d="M3.5 6.5h10"/>
+      <path stroke="currentColor" stroke-dasharray="2 2.2" d="M3.5 12h10"/>
+      <path stroke="currentColor" d="M3.5 17.5h10"/>
+      <path stroke="currentColor" d="M18.5 9v6"/>
+      <path stroke="currentColor" d="M15.5 12h6"/>
+    </svg><span class="rlx-tb-count"></span>`;
+
+  const TOOLBAR_TOOLS = [
+    { key: 'links', label: 'Links to other articles', title: () => LINKS_TITLE,
+      icon: LINKS_ICON, press: () => toggleLinks() },
+    { key: 'sections', label: 'Missing sections', title: () => SECTIONS_TITLE,
+      icon: SECTIONS_ICON, press: () => toggleSections() },
+  ];
+
+  function toolbarClone(anchor, tool) {
+    const b = anchor.cloneNode(true);
+    for (const el of [b, ...b.querySelectorAll('*')]) {
+      for (const name of el.getAttributeNames()) {
+        if (name !== 'class' && name !== 'style') el.removeAttribute(name);
+      }
+    }
+    b.classList.remove('rcx-btn', 'rcx-btn-cite', 'rcx-btn-chars', 'rcx-open',
+                       'rlx-tb-links', 'rlx-tb-sections');
+    b.classList.add('rlx-tb-tool', `rlx-tb-${tool.key}`);
+    b.innerHTML = tool.icon;
+    if (b.tagName === 'BUTTON') b.type = 'button';
+    b.setAttribute('role', 'button');
+    b.setAttribute('tabindex', '0');
+    b.setAttribute('title', tool.title());
+    b.setAttribute('aria-label', tool.label);
+    b.addEventListener('mousedown', (e) => e.preventDefault(), true);
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      tool.press();
+    }, true);
+    return b;
+  }
+
+  function paintToolbarButton(b, open, busy, count) {
+    b.classList.toggle('rlx-open', open);
+    b.setAttribute('aria-pressed', String(open));
+    b.setAttribute('aria-disabled', String(busy));
+    b.querySelector('.rlx-tb-count').textContent = busy ? '…' : count == null ? '' : String(count);
+  }
+
+  function mountToolbarTools() {
+    if (!inEditor()) return;
+    if (TOOLBAR_TOOLS.every((t) => toolbarButtons[t.key]?.isConnected)) return;
     const now = Date.now();
     if (now - toolbarTried < 500) return;
     toolbarTried = now;
@@ -9086,33 +9147,20 @@
     if (!members) return;
     const anchor = toolbarAnchor(members);
 
-    const b = anchor.cloneNode(true);
-    for (const el of [b, ...b.querySelectorAll('*')]) {
-      for (const name of el.getAttributeNames()) {
-        if (name !== 'class' && name !== 'style') el.removeAttribute(name);
-      }
+    let after = anchor;
+    for (const tool of TOOLBAR_TOOLS) {
+      const there = toolbarButtons[tool.key];
+      if (there?.isConnected) { after = there; continue; }
+      const b = toolbarClone(anchor, tool);
+      after.insertAdjacentElement('afterend', b);
+      // A clone of a control nobody can see is a button nobody can press.
+      const box = b.getBoundingClientRect();
+      if (!box.width || !box.height) { b.remove(); continue; }
+      toolbarButtons[tool.key] = b;
+      after = b;
     }
-    b.classList.remove('rcx-btn', 'rcx-btn-cite', 'rcx-btn-chars', 'rcx-open');
-    b.classList.add('rlx-tb-links');
-    b.innerHTML = LINKS_ICON;
-    if (b.tagName === 'BUTTON') b.type = 'button';
-    b.setAttribute('role', 'button');
-    b.setAttribute('tabindex', '0');
-    b.setAttribute('title', LINKS_TITLE);
-    b.setAttribute('aria-label', 'Links to other articles');
-    b.addEventListener('mousedown', (e) => e.preventDefault(), true);
-    b.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      toggleLinks();
-    }, true);
-    anchor.insertAdjacentElement('afterend', b);
-
-    // A clone of a control nobody can see is a button nobody can press.
-    const box = b.getBoundingClientRect();
-    if (!box.width || !box.height) { b.remove(); return; }
-    toolbarLinks = b;
     paintLinksToggle();
+    paintSectionsToggle();
   }
 
   /* Everything the panel does goes through here: scan again, find the
@@ -9218,6 +9266,7 @@
   function renderLinks(scan) {
     const panel = links.panel || document.createElement('div');
     panel.id = 'rlx-links';
+    panel.classList.add('rlx-panel');
     panel.replaceChildren();
 
     const head = document.createElement('div');
@@ -9308,8 +9357,9 @@
   /* Down the right-hand side, clear of the two things of ours that may
    * already be there: the box by the title, when it has had to go to the
    * corner, and the bar, when it runs along the top or the bottom. */
-  function placeLinks() {
-    const p = links.panel;
+  function placeLinks() { placePanel(links.panel); }
+
+  function placePanel(p) {
     if (!p) return;
     const span = p.getBoundingClientRect();
     let top = 18, bottom = innerHeight - 18;
@@ -9333,7 +9383,7 @@
        ::before, a text-indent — so all of that is taken back here, the way
        RadioUpdater does for its own two. Stroked paths hollow, whatever the
        toolbar's icon CSS says about fill. */
-    .rlx-tb-links {
+    .rlx-tb-tool {
       color:#333 !important; background-image:none !important; text-indent:0 !important;
       font-size:14px !important; line-height:1 !important; letter-spacing:normal !important;
       overflow:visible !important; visibility:visible !important; opacity:1 !important;
@@ -9341,60 +9391,427 @@
       min-width:0 !important; min-height:0 !important;
       padding-left:6px !important; padding-right:6px !important; cursor:pointer;
     }
-    .rlx-tb-links::before, .rlx-tb-links::after,
-    .rlx-tb-links *::before, .rlx-tb-links *::after { content:none !important; display:none !important; }
-    .rlx-tb-links * { background-image:none !important; text-indent:0 !important; color:inherit !important; }
-    .rlx-tb-links .rlx-tb-icon { width:1.35em !important; height:1.35em !important;
+    .rlx-tb-tool::before, .rlx-tb-tool::after,
+    .rlx-tb-tool *::before, .rlx-tb-tool *::after { content:none !important; display:none !important; }
+    .rlx-tb-tool * { background-image:none !important; text-indent:0 !important; color:inherit !important; }
+    .rlx-tb-tool .rlx-tb-icon { width:1.35em !important; height:1.35em !important;
       display:block !important; flex:0 0 auto; }
-    .rlx-tb-links .rlx-tb-icon path { fill:none !important; stroke-width:1.8; stroke-linecap:round; }
-    .rlx-tb-links .rlx-tb-count { font:600 11px/1 system-ui,-apple-system,sans-serif !important; }
-    .rlx-tb-links .rlx-tb-count:empty { display:none !important; }
-    .rlx-tb-links.rlx-open { background:#ddd !important; }
-    #rlx-links {
+    .rlx-tb-tool .rlx-tb-icon path { fill:none !important; stroke-width:1.8; stroke-linecap:round; }
+    .rlx-tb-tool .rlx-tb-count { font:600 11px/1 system-ui,-apple-system,sans-serif !important; }
+    .rlx-tb-tool .rlx-tb-count:empty { display:none !important; }
+    .rlx-tb-tool.rlx-open { background:#ddd !important; }
+    .rlx-panel {
       position:fixed; z-index:99998; top:18px; right:18px; width:min(26em, 92vw);
       max-height:calc(100vh - 36px); display:flex; flex-direction:column;
       border-radius:2px; border:1px solid var(--rlx-edge); border-left:4px solid #41699b;
       background:var(--rlx-face); color:var(--rlx-text); box-shadow:var(--rlx-float);
       font:var(--rlx-size)/var(--rlx-line) var(--rlx-type);
     }
-    #rlx-links button { font:inherit; cursor:pointer; }
-    #rlx-links .rlx-l-head { display:flex; align-items:baseline; gap:.5em;
+    .rlx-panel button { font:inherit; cursor:pointer; }
+    .rlx-panel .rlx-l-head { display:flex; align-items:baseline; gap:.5em;
       padding:.55em .5em .45em .8em; border-bottom:1px solid rgba(0,0,0,.08); }
-    #rlx-links .rlx-l-head strong { color:var(--rlx-head); }
-    #rlx-links .rlx-l-head span { flex:1 1 auto; font-size:12px; opacity:.75; }
-    #rlx-links .rlx-l-close, #rlx-links .rlx-l-again { border:none; background:transparent;
+    .rlx-panel .rlx-l-head strong { color:var(--rlx-head); }
+    .rlx-panel .rlx-l-head span { flex:1 1 auto; font-size:12px; opacity:.75; }
+    .rlx-panel .rlx-l-close, .rlx-panel .rlx-l-again { border:none; background:transparent;
       color:#666; font-size:16px; line-height:1; padding:0 .3em; }
-    #rlx-links .rlx-l-close:hover, #rlx-links .rlx-l-again:hover { color:#111; }
-    #rlx-links .rlx-l-said { padding:.4em .8em; background:rgba(5,150,105,.10); color:#047857;
+    .rlx-panel .rlx-l-close:hover, .rlx-panel .rlx-l-again:hover { color:#111; }
+    .rlx-panel .rlx-l-said { padding:.4em .8em; background:rgba(5,150,105,.10); color:#047857;
       font-size:12px; }
-    #rlx-links .rlx-l-list { overflow:auto; padding:.2em 0; }
-    #rlx-links .rlx-l-row { padding:.5em .8em; border-bottom:1px solid rgba(0,0,0,.06); }
-    #rlx-links .rlx-l-what { display:flex; flex-wrap:wrap; align-items:baseline; gap:.35em; }
-    #rlx-links .rlx-l-words { border:none; background:transparent; padding:0;
+    .rlx-panel .rlx-l-list { overflow:auto; padding:.2em 0; }
+    .rlx-panel .rlx-l-row { padding:.5em .8em; border-bottom:1px solid rgba(0,0,0,.06); }
+    .rlx-panel .rlx-l-what { display:flex; flex-wrap:wrap; align-items:baseline; gap:.35em; }
+    .rlx-panel .rlx-l-words { border:none; background:transparent; padding:0;
       color:var(--rlx-text); font-weight:600; text-align:left; }
-    #rlx-links .rlx-l-words:hover { text-decoration:underline; }
-    #rlx-links .rlx-l-arrow { opacity:.5; }
-    #rlx-links .rlx-l-what a { color:#41699b; }
-    #rlx-links .rlx-l-rate { margin-left:auto; font-size:11px; opacity:.55;
+    .rlx-panel .rlx-l-words:hover { text-decoration:underline; }
+    .rlx-panel .rlx-l-arrow { opacity:.5; }
+    .rlx-panel .rlx-l-what a { color:#41699b; }
+    .rlx-panel .rlx-l-rate { margin-left:auto; font-size:11px; opacity:.55;
       font-variant-numeric:tabular-nums; }
-    #rlx-links .rlx-l-ctx { margin-top:.2em; font-size:12px; line-height:17px; opacity:.8; }
-    #rlx-links .rlx-l-ctx mark { background:rgba(65,105,155,.16); color:inherit; padding:0 1px; }
-    #rlx-links .rlx-l-acts { display:flex; flex-wrap:wrap; gap:4px; margin-top:.35em; }
-    #rlx-links .rlx-l-acts button { padding:2px 8px; border-radius:1px; font-size:12px;
+    .rlx-panel .rlx-l-ctx { margin-top:.2em; font-size:12px; line-height:17px; opacity:.8; }
+    .rlx-panel .rlx-l-ctx mark { background:rgba(65,105,155,.16); color:inherit; padding:0 1px; }
+    .rlx-panel .rlx-l-acts { display:flex; flex-wrap:wrap; gap:4px; margin-top:.35em; }
+    .rlx-panel .rlx-l-acts button { padding:2px 8px; border-radius:1px; font-size:12px;
       border:1px solid rgba(0,0,0,.15); background:#fff; color:#444; }
-    #rlx-links .rlx-l-acts button:hover { background:#f2f2f2; color:#111; }
-    #rlx-links .rlx-l-acts .rlx-l-go { background:var(--rlx-btn); color:#fff; border-color:transparent; }
-    #rlx-links .rlx-l-acts .rlx-l-go:hover { background:var(--rlx-btn-lit); color:#fff; }
-    #rlx-links .rlx-l-rare > summary { padding:.5em .8em; cursor:pointer; font-size:12px;
+    .rlx-panel .rlx-l-acts button:hover { background:#f2f2f2; color:#111; }
+    .rlx-panel .rlx-l-acts .rlx-l-go { background:var(--rlx-btn); color:#fff; border-color:transparent; }
+    .rlx-panel .rlx-l-acts .rlx-l-go:hover { background:var(--rlx-btn-lit); color:#fff; }
+    .rlx-panel .rlx-l-rare > summary { padding:.5em .8em; cursor:pointer; font-size:12px;
       opacity:.75; }
-    #rlx-links .rlx-l-rare .rlx-l-row { opacity:.8; }
-    #rlx-links .rlx-l-empty { padding:.8em; opacity:.75; }
-    #rlx-links .rlx-l-foot { padding:.4em .8em; border-top:1px solid rgba(0,0,0,.08);
+    .rlx-panel .rlx-l-rare .rlx-l-row { opacity:.8; }
+    .rlx-panel .rlx-l-empty { padding:.8em; opacity:.75; }
+    .rlx-panel .rlx-l-foot { padding:.4em .8em; border-top:1px solid rgba(0,0,0,.08);
       font-size:11px; opacity:.65; }
-    #rlx-links .rlx-l-foot button { border:none; background:transparent; padding:0;
+    .rlx-panel .rlx-l-ctl { display:flex; flex-wrap:wrap; gap:4px; padding:.45em .8em;
+      border-bottom:1px solid rgba(0,0,0,.06); }
+    .rlx-panel .rlx-l-ctl select, .rlx-panel .rlx-l-ctl button { font-size:12px; padding:2px 6px;
+      border:1px solid rgba(0,0,0,.15); border-radius:1px; background:#fff; color:#444; }
+    .rlx-panel .rlx-l-ctl select { max-width:100%; min-width:0; }
+    .rlx-panel .rlx-s-name { font-weight:600; }
+    .rlx-panel .rlx-s-opt .rlx-s-name { font-weight:400; opacity:.8; }
+    .rlx-panel .rlx-s-warn { background:rgba(217,119,6,.10); color:#b45309; }
+    #rlx-sections { border-left-color:var(--rlx-miss, #d97706); }
+    .rlx-panel .rlx-l-foot button { border:none; background:transparent; padding:0;
       color:#41699b; text-decoration:underline; font-size:11px; }
   `);
 
+
+
+  // ————————————————————————————————————————— the sections, in the editor
+
+  /* The rail's question, asked of the text in the editor rather than of the
+   * published page: which sections this kind of article should have and has
+   * not got, and where each would go.
+   *
+   * Everything that decides the answer is the rail's own — the canon, the
+   * profile, `whatIsMissing`, `anchorFor`, the sections you said an article
+   * does not need — so the two cannot disagree about an article. What changes
+   * is where the headings are read from: the editor holds them as h4, h5 and
+   * h6, which its toolbar calls H1, H2 and H3 (see `LEVEL_TAG`), and a
+   * heading you typed a minute ago counts here before it has been published.
+   *
+   * Copy is the chip's click: the heading on the clipboard at its level, and
+   * the amber line drawn on the text where it goes. Nothing is written into
+   * the editor from here, for the reason the rail gives — a heading is a block,
+   * and where a block lands when it is pasted is the editor's business. */
+  const sections = { panel: null, said: null, run: 0, count: null, scan: null, watching: null };
+  let sectionsToggle = null;
+  const SECTIONS_TITLE = 'Sections: the headings this kind of article should have and this one ' +
+    'has not got yet';
+
+  /* The editor's headings in order, each with the one it sits under — the
+   * same shape `sectionsOnPage` makes out of the published page. h4–h6 are
+   * levels one to three; an editor that writes h1–h3 instead is read the same
+   * way, so that a change of toolbar does not leave every section missing. */
+  function sectionsInEditor(root) {
+    const all = [...root.querySelectorAll('h1, h2, h3, h4, h5, h6')];
+    const deep = all.some((el) => /^H[456]$/.test(el.tagName));
+    const found = [], stack = [];
+    for (const el of all) {
+      const level = +el.tagName[1] - (deep ? 3 : 0);
+      if (level < 1) continue;
+      const title = tidy(el.textContent);
+      if (!title) continue;
+      while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
+      const parent = stack.length ? stack[stack.length - 1].title : null;
+      stack.push({ level, title });
+      found.push({ el, level, title, parent });
+    }
+    return found;
+  }
+
+  /* The article body is the longest of the editor's fields, as the paste
+   * marker already decides. */
+  function editorBody() {
+    const roots = editorRoots().filter((r) => (r.root.textContent || '').trim().length > 40);
+    if (!roots.length) return null;
+    return roots.reduce((a, b) =>
+      (b.root.textContent || '').length > (a.root.textContent || '').length ? b : a);
+  }
+
+  /* The title, for the profile rules that read it ("… sign", "… fracture").
+   * The form's own field when it can be found, the slug otherwise. */
+  function editorTitle() {
+    const field = document.querySelector(
+      'input[name="article[title]"], input#article_title, input[name$="[title]"]');
+    return tidy(field?.value) ||
+      tidy(String(currentSlug() || '').replace(/-\d+$/, '').replace(/-/g, ' '));
+  }
+
+  /* The kind of article travels in the lint answer, as it does for the rail.
+   * That answer is kept for the session, so it is usually here already; when
+   * it is not, this press is what asks for it, and a linter that cannot be
+   * reached leaves the title to decide, which is what `profileFor` does with
+   * no type. */
+  async function scanSections() {
+    if (!await canon()) return { trouble: 'article-structure.json could not be read from GitHub.' };
+    const body = editorBody();
+    if (!body) return { trouble: 'Cannot find the editor text.' };
+    let type = null;
+    try { type = (await lintResult(currentSlug()))?.article_type ?? null; } catch { type = null; }
+    const found = sectionsInEditor(body.root);
+    const profileName = profileFor(editorTitle(), type);
+    const measured = whatIsMissing(profileName, found);
+    const canonName = measured.canonName || CANON.profiles[profileName]?.canon;
+    for (const row of measured.rows) {
+      const where = anchorFor(row, measured.seen, canonName);
+      row.anchor = where.el;
+      row.inside = where.inside;
+    }
+    return { rows: measured.rows, seen: measured.seen, jumbled: !!measured.jumbled,
+             profileName, canonName, body, type, found };
+  }
+
+  function whereItGoes(row) {
+    const beside = row.anchor ? tidy(row.anchor.textContent) : null;
+    if (!beside) return '↓ at the end of the article';
+    return row.inside ? `↳ inside “${beside}”` : `↑ above “${beside}”`;
+  }
+
+  function closeSections() {
+    sections.panel?.remove();
+    sections.panel = null;
+    sections.said = null;
+    sections.scan = null;
+    document.removeEventListener('keydown', onSectionsKey, true);
+    removeEventListener('resize', placeSections);
+    watchSections(null);
+    paintSectionsToggle();
+  }
+
+  function onSectionsKey(e) {
+    if (e.key === 'Escape' && sections.panel) { e.preventDefault(); closeSections(); }
+  }
+
+  function paintSectionsToggle(count = sections.count, busy = false) {
+    sections.count = count;
+    const inToolbar = !!toolbarButtons.sections?.isConnected;
+    if (sectionsToggle) {
+      sectionsToggle.style.display = inToolbar ? 'none' : '';
+      sectionsToggle.classList.toggle('rlx-on', !!sections.panel);
+      sectionsToggle.disabled = busy;
+      sectionsToggle.textContent = busy ? 'sections …'
+        : count == null ? 'sections' : `sections ${count}`;
+      sectionsToggle.title = SECTIONS_TITLE;
+    }
+    if (inToolbar) paintToolbarButton(toolbarButtons.sections, !!sections.panel, busy, count);
+  }
+
+  async function openSections() {
+    if (!inEditor()) return;
+    closeLinks();
+    const run = ++sections.run;
+    paintSectionsToggle(sections.count, true);
+    const scan = await scanSections();
+    paintSectionsToggle(sections.count, false);
+    if (run !== sections.run) return;
+    renderSections(scan);
+  }
+
+  const toggleSections = () => (sections.panel ? closeSections() : openSections());
+
+  /* While the panel is open, a heading typed or pasted into the text changes
+   * the answer, so the list follows the text — half a second after the last
+   * keystroke, and only while the panel is there to be redrawn. */
+  let sectionsPending = null;
+  function sectionsChanged() {
+    clearTimeout(sectionsPending);
+    sectionsPending = setTimeout(async () => {
+      if (!sections.panel) return;
+      const run = ++sections.run;
+      const scan = await scanSections();
+      if (run === sections.run && sections.panel) renderSections(scan);
+    }, 600);
+  }
+
+  function watchSections(body) {
+    const was = sections.watching;
+    if (was && was !== body) {
+      try {
+        (was.frame?.contentWindow?.document || was.root).removeEventListener('input', sectionsChanged, true);
+      } catch { /* the frame went with the page */ }
+    }
+    sections.watching = body;
+    if (body && body !== was) {
+      (body.frame?.contentWindow?.document || body.root).addEventListener('input', sectionsChanged, true);
+    }
+  }
+
+  /* Copy: the chip's click, from here. The memo and the line are the paste
+   * marker's own, so the line goes when you paste and the list, which is
+   * listening, loses the row. The clipboard is written before anything that
+   * waits, because a browser lets a page write to it only straight after a
+   * press. */
+  function copySection(row, scan) {
+    const memo = {
+      slug: currentSlug(), text: row.title, level: row.level, modality: false,
+      anchor: row.anchor ? tidy(row.anchor.textContent) : null,
+      inside: !!row.inside, at: Date.now(),
+    };
+    const copied = copyAsHeading(memo.text, memo.level);
+    rememberPaste(memo);
+    openPasteMark(memo, findPasteSpot(memo, scan.body), scan.body);
+    (row.anchor || scan.body.root.lastElementChild)?.scrollIntoView?.({ block: 'center' });
+    copied.then((ok) => {
+      sections.said = ok
+        ? `“${memo.text}” is on the clipboard as a heading. Click on the amber line and paste.`
+        : `The clipboard refused it: type “${memo.text}” on the amber line.`;
+      renderSections(sections.scan || scan);
+    });
+  }
+
+  function showSection(row, scan) {
+    const el = row.anchor || scan.body.root.lastElementChild;
+    el?.scrollIntoView?.({ block: 'center' });
+  }
+
+  async function redoSections(said) {
+    sections.said = said;
+    const run = ++sections.run;
+    const scan = await scanSections();
+    if (run === sections.run && sections.panel) renderSections(scan);
+  }
+
+  function sectionRow(row, scan) {
+    const el = document.createElement('div');
+    el.className = 'rlx-l-row' + (row.required ? '' : ' rlx-s-opt');
+
+    const what = document.createElement('div');
+    what.className = 'rlx-l-what';
+    const name = document.createElement('span');
+    name.className = 'rlx-s-name';
+    name.textContent = (row.level > 1 ? '› '.repeat(row.level - 1) : '') + row.title;
+    const kind = document.createElement('span');
+    kind.className = 'rlx-l-rate';
+    kind.textContent = row.required ? 'required' : 'offered';
+    kind.title = row.modality ? 'Radiographic features has no modality under it'
+      : `${row.required ? 'Required' : 'Offered'} by the ${scan.canonName} structure: ${row.entry}`;
+    what.append(name, kind);
+
+    const where = document.createElement('div');
+    where.className = 'rlx-l-ctx';
+    where.textContent = row.modality
+      ? `${whereItGoes(row)} — one subheading for a modality the article has images of (CT, MRI, …)`
+      : whereItGoes(row);
+
+    const acts = document.createElement('div');
+    acts.className = 'rlx-l-acts';
+    const btn = (label, title, fn, cls) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.title = title;
+      if (cls) b.className = cls;
+      b.addEventListener('click', fn);
+      acts.appendChild(b);
+    };
+    // The modality row has no name to copy: which one is a question about the images.
+    if (!row.modality) {
+      btn('Copy', `Copy “${row.title}” as a heading and mark where it goes`,
+          () => copySection(row, scan), 'rlx-l-go');
+    }
+    btn('Show', 'Scroll to where it goes', () => showSection(row, scan));
+    btn('Not needed', 'This article does not need it', () => {
+      hush(row.entry);
+      redoSections(`${row.title} will not be asked for in this article again.`);
+    });
+
+    el.append(what, where, acts);
+    return el;
+  }
+
+  function renderSections(scan) {
+    sections.scan = scan;
+    const panel = sections.panel || document.createElement('div');
+    panel.id = 'rlx-sections';
+    panel.classList.add('rlx-panel');
+    panel.replaceChildren();
+
+    const head = document.createElement('div');
+    head.className = 'rlx-l-head';
+    const title = document.createElement('strong');
+    title.textContent = 'Sections';
+    const sum = document.createElement('span');
+    const again = document.createElement('button');
+    again.className = 'rlx-l-again';
+    again.textContent = '↻';
+    again.title = 'Look again';
+    again.addEventListener('click', () => redoSections(null));
+    const shut = document.createElement('button');
+    shut.className = 'rlx-l-close';
+    shut.textContent = '×';
+    shut.title = 'Close (Esc)';
+    shut.addEventListener('click', closeSections);
+    head.append(title, sum, again, shut);
+    panel.appendChild(head);
+
+    if (sections.said) {
+      const said = document.createElement('div');
+      said.className = 'rlx-l-said';
+      said.textContent = sections.said;
+      panel.appendChild(said);
+    }
+
+    let need = null;
+    if (scan.trouble) {
+      const why = document.createElement('div');
+      why.className = 'rlx-l-empty';
+      why.textContent = scan.trouble;
+      panel.appendChild(why);
+    } else {
+      const aside = hushedHere().filter((entry) => !entry.startsWith('stale:')).length;
+      const content = railContent(scan.rows, aside, showOptional());
+      need = content.need;
+      sum.textContent = need ? `${need} required missing` : 'nothing required missing';
+
+      // The rail header's controls: the kind, the optional ones, what you set aside.
+      const ctl = document.createElement('div');
+      ctl.className = 'rlx-l-ctl';
+      const kind = document.createElement('select');
+      kind.title = 'What kind of article this is. The canon follows from it.';
+      for (const [name, p] of Object.entries(CANON.profiles)) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = p.label || name;
+        opt.selected = name === scan.profileName;
+        kind.appendChild(opt);
+      }
+      kind.addEventListener('change', () => { chooseProfile(kind.value); redoSections(null); });
+      ctl.appendChild(kind);
+      if (content.optional.length || showOptional()) {
+        const more = document.createElement('button');
+        more.textContent = `${showOptional() ? '− hide' : '+ show'} ${content.optional.length} optional`;
+        more.addEventListener('click', () => { setShowOptional(!showOptional()); redoSections(null); });
+        ctl.appendChild(more);
+      }
+      if (aside) {
+        const undo = document.createElement('button');
+        undo.textContent = `↺ ${aside} set aside`;
+        undo.title = `Ask for the ${aside} you said this article does not need`;
+        undo.addEventListener('click', () => { unhushAll(); redoSections(null); });
+        ctl.appendChild(undo);
+      }
+      panel.appendChild(ctl);
+
+      if (scan.jumbled) {
+        const note = document.createElement('div');
+        note.className = 'rlx-l-said rlx-s-warn';
+        note.textContent = 'Some sections are not in the order the structure puts them in, ' +
+          'so where these go is approximate on this article.';
+        panel.appendChild(note);
+      }
+
+      const list = document.createElement('div');
+      list.className = 'rlx-l-list';
+      for (const row of content.shown) list.appendChild(sectionRow(row, scan));
+      if (!content.shown.length) {
+        const none = document.createElement('div');
+        none.className = 'rlx-l-empty';
+        const p = CANON.profiles[scan.profileName];
+        none.textContent = !p?.required?.length
+          ? `Radiopaedia asks for no particular sections in a ${p?.label || scan.profileName} article.`
+          : 'Every section Radiopaedia requires is there.';
+        list.appendChild(none);
+      }
+      panel.appendChild(list);
+
+      const foot = document.createElement('div');
+      foot.className = 'rlx-l-foot';
+      foot.textContent = `${scan.found.length} headings in the text · ` +
+        `${scan.canonName} structure · kind from ${scan.type ? `the linter (${scan.type})` : 'the title'}`;
+      panel.appendChild(foot);
+      watchSections(scan.body);
+    }
+
+    if (!sections.panel) {
+      document.body.appendChild(panel);
+      sections.panel = panel;
+      document.addEventListener('keydown', onSectionsKey, true);
+      addEventListener('resize', placeSections);
+    }
+    paintSectionsToggle(need);
+    placeSections();
+  }
+
+  function placeSections() { placePanel(sections.panel); }
 
   // ————————————————————————————————————————————————————————————— wiring
 
@@ -9585,11 +10002,11 @@
   // ——————————————————————————————————————————————————————— bootstrap
 
   mountButton();
-  mountToolbarLinks();
+  mountToolbarTools();
   // Radiopaedia remounts parts of the page on its own: the button has to be
   // put back whenever it disappears. And in the editor the margin it stands in
   // only exists once the editor has mounted, which is after this runs.
-  new MutationObserver(() => { mountButton(); mountToolbarLinks(); placeGroupSoon(); })
+  new MutationObserver(() => { mountButton(); mountToolbarTools(); placeGroupSoon(); })
     .observe(document.body, { childList: true, subtree: true });
   addEventListener('resize', placeGroupSoon);
 

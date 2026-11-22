@@ -76,6 +76,7 @@ article_type                                            └─  the ones missing
 - [Links to other articles](#links-to-other-articles)
   - [The list of names](#the-list-of-names)
 - [The sections that are missing](#the-sections-that-are-missing)
+  - [In the editor](#in-the-editor)
   - [What the clipboard carries](#what-the-clipboard-carries)
   - [Required and offered](#required-and-offered)
   - [Above it, or inside it](#above-it-or-inside-it)
@@ -1082,7 +1083,7 @@ until you press it. Once it has looked, the button carries the number it found. 
 down the right-hand side of the page, one row per article, with the words as the text has them,
 the article they name, the sentence around them and two numbers explained below.
 
-The button stands in the row with the headings. With
+The button stands in the row with the headings, with the [sections button](#in-the-editor) right after it. With
 [RadioUpdater](https://github.com/drjermy/radioUpdater) installed it comes after that
 extension's citation button (the quotation mark) and its Ω, whichever of the two is mounted
 first; without it, after H3. The toolbar is found the way RadioUpdater finds it, by walking up
@@ -1229,6 +1230,38 @@ required is missing: the rail is the one thing that has looked, so it says so.
 Click a chip and the heading is on your clipboard, ready to paste into the editor. The `×` on it
 says *this article does not need that one*, and it is remembered for that article; the `↺` in the
 header brings them all back.
+
+### In the editor
+
+The same question has a button in the editor's toolbar, right after the links button (lines with an
+empty one in the middle and a plus). It reads the headings from the text in the editor rather than
+from the published page, so a section you typed a minute ago already counts. The list opens down the
+right-hand side, one row per missing section, with where it goes — `↑ above "Clinical
+presentation"`, `↳ inside "Epidemiology"`, `↓ at the end of the article` — and the button carries
+the number of required ones missing.
+
+| | |
+| :-- | :-- |
+| **Copy** | the heading on the clipboard at its level, and the amber line drawn where it goes |
+| **Show** | scrolls the editor to that place |
+| **Not needed** | the chip's `×`: not asked for in this article again |
+
+Above the list are the rail header's controls: the kind of article, `+ show N optional`, and `↺`
+for the ones you set aside. All of it is the rail's own state, so a section set aside in the editor
+is set aside on the article page too, and the other way round.
+
+The kind of article comes from the lint answer, as it does for the rail. That answer is kept for the
+session, so it is usually there already; when it is not, pressing the button is what asks the
+linter for it, and if the linter cannot be reached the title decides. The foot of the list says
+which it was.
+
+While the list is open it follows the text: paste the heading and, half a second later, the row is
+gone and the amber line with it. Nothing is written into the editor from here. A heading is a
+block, and where a pasted block lands is the editor's business, so the click puts it on the
+clipboard and the line says where; you paste it.
+
+On a page where no toolbar is found the button appears as `sections` in the box by the title,
+beside `link`.
 
 ### What the clipboard carries
 
