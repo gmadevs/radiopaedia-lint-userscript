@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.20.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. Beside any heading whose newest citation is more than five years old, a chip with the year. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
+// @version      3.21.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. Beside any heading whose newest citation is more than five years old, a chip with the year. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. A link button lists the words in the text that are the title of another Radiopaedia article and are not linked to it anywhere, and links the first occurrence of one when you press Link. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -209,15 +209,20 @@
    *
    * The API answers from what the linter last read. Ask twice for the same
    * article and the second answer arrives in a third of the time, word for
-   * word the same, however much the text moved on in between — and there is
-   * no parameter that clears that copy: `force`, `refresh`, `nocache` are all
-   * taken and ignored. The one control that does clear it is the ⟳ on the
-   * linter's own page, which is not a link but a Livewire action posted back
-   * to the server. So this button presses that one, on the page it lives on,
-   * rather than inventing a query string the API has never had. */
-  const LINT_PAGE_URL = 'https://radiopaedia.work/lint/linter?slug=';
-  const FORCE_TIMEOUT = 60_000;       // a forced run reads the article from Radiopaedia again
-  const FORCE_MAX = 4 * 1024 * 1024;  // the linter's page, findings table and all
+   * word the same, however much the text moved on in between. `cache=refresh`
+   * is what clears that copy: a parameter of the API itself, which has the
+   * linter read the article from Radiopaedia again before it answers. It costs
+   * about a second over the cached reply, and that second is the whole reason
+   * for pressing the button.
+   *
+   * Until 3.21.0 this was done the long way round, because the parameter did
+   * not exist: read the linter's own page, find the CSRF token and the `lint`
+   * component's Livewire snapshot in its HTML, and post back the `forceReload`
+   * that the ⟳ there posts. That page has since gone behind a login —
+   * `/lint/linter?slug=…` answers 302 to `/login` — so the script was reading a
+   * login form, finding no snapshot in it, and refusing the press. One
+   * documented parameter does the same work in one request, and nothing here
+   * reads somebody else's HTML any more. */
 
   /* The citation worker, and what one press of "Lint citation" costs.
    *
@@ -511,6 +516,14 @@
     return fold(s).replace(/\s+/g, '').toLowerCase();
   }
 
+  /* `flat` with the case left alone. Only `pick` asks for it: the search
+   * itself stays blind to case, but where the article holds the same words
+   * twice, once as "frontal lobe" and once as "Frontal lobe", the capital is
+   * what says which one the linter quoted. */
+  function cased(s) {
+    return fold(s).replace(/\s+/g, '');
+  }
+
   // ————————————————————————————————————————————— the findings
 
   /* The check's name, as the linter's own page prints it:
@@ -739,7 +752,7 @@
         timeout: LIST_TIMEOUT,
         onload: (r) => {
           const body = r.responseText || '';
-          if (r.status >= 400 || body.length > LIST_MAX) return resolve(null);
+          if (r.status >= 400 || body.length > (list.max || LIST_MAX)) return resolve(null);
           resolve(body);
         },
         onerror: () => resolve(null),
@@ -916,14 +929,18 @@
    * `@connect radiopaedia.work` is also what states, in the header, the only
    * host this script ever talks to.
    *
+   * `refresh` is the ↻: it appends `cache=refresh`, which is the API's own way
+   * of saying "read the article again rather than answer from the copy".
+   * Omitted everywhere else, so an ordinary press costs the cached reply.
+   *
    * Nothing that is not a lint result gets out of here. That is what lets the
    * rest of the file read an empty `lints[]` as an article with nothing wrong
    * with it, rather than as an answer it failed to understand. */
-  function askLinter(slug) {
+  function askLinter(slug, { refresh } = {}) {
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
         method: 'GET',
-        url: API_URL + encodeURIComponent(slug),
+        url: API_URL + encodeURIComponent(slug) + (refresh ? '&cache=refresh' : ''),
         headers: { Accept: 'application/json' },
         timeout: LINTER_TIMEOUT,
         onload: (r) => {
@@ -948,142 +965,6 @@
         },
         onerror: () => reject(new Error('Request to the linter failed (network, or @connect).')),
         ontimeout: () => reject(new Error('The linter did not answer within a minute.')),
-      });
-    });
-  }
-
-  /* The forced run: two requests, and the only POST in the file.
-   *
-   * `forceReload` is a Livewire method on the linter's own page — the ⟳ there
-   * is `wire:click="forceReload"` and nothing else — so pressing it from here
-   * means sending back what that page would have sent. Three things are
-   * needed and all three exist only in its HTML: the CSRF token, the snapshot
-   * of the `lint` component, and the endpoint, whose path carries a number
-   * that changes with every deploy of the site. Read them, check them, post
-   * once, and let `askLinter` pick the new answer up.
-   *
-   * Worth saying plainly, because it is the fragile part: this is somebody's
-   * page and not an API. The day the linter is rebuilt on something other
-   * than Livewire, or the component is renamed, this stops working — and it
-   * stops loudly. A refresh that quietly did not happen would be worse than
-   * no button at all, since being sure of what comes back is the whole reason
-   * for pressing it. */
-  function forceLinter(slug) {
-    return new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method: 'GET',
-        url: LINT_PAGE_URL + encodeURIComponent(slug),
-        timeout: FORCE_TIMEOUT,
-        onload: (r) => {
-          const page = r.responseText || '';
-          if (CHALLENGE.some((m) => page.includes(m))) {
-            return reject(new Error(
-              'Cloudflare bot check. Open radiopaedia.work in a tab, clear the check, ' +
-              'then try again.'));
-          }
-          if (r.status >= 400) return reject(new Error(`The linter page answered ${r.status}.`));
-          if (page.length > FORCE_MAX) return reject(new Error('That answer was not the linter page.'));
-          const parts = forceParts(page, slug);
-          if (!parts) {
-            return reject(new Error(
-              'The linter page is not built the way this button expects any more. ' +
-              'Press the ⟳ on radiopaedia.work/lint/linter instead.'));
-          }
-          postForce(parts, slug).then(resolve, reject);
-        },
-        onerror: () => reject(new Error('The linter page could not be reached.')),
-        ontimeout: () => reject(new Error('The linter page took too long to arrive.')),
-      });
-    });
-  }
-
-  /* Nothing is posted on a guess: either all three parts are there and the
-   * snapshot really is the `lint` component's, or this answers null and the
-   * press is refused out loud. */
-  function forceParts(page, slug) {
-    const token = /<meta name="csrf-token" content="([^"]+)"/.exec(page)?.[1];
-    const path = /\/(livewire[\w-]*)\/update\b/.exec(page)?.[1];
-    const snapshot = lintSnapshot(page, slug);
-    if (!token || !path || !snapshot) return null;
-    return { token, url: `https://radiopaedia.work/${path}/update`, snapshot };
-  }
-
-  /* The page carries a snapshot per component, and most of them are the
-   * `lint-summary` of some related article. The one wanted is the `lint`
-   * itself — the one with `force` in its state, which is what `forceReload`
-   * sets — and, where the page holds more than one, the one about the
-   * article being asked about.
-   *
-   * Returned as the string it was written as, unescaped and not re-encoded: a
-   * checksum of it travels inside it, and JSON that has been through
-   * `parse` and `stringify` is not the same bytes. */
-  function lintSnapshot(page, slug) {
-    let fallback = null;
-    for (const m of page.matchAll(/wire:snapshot="([^"]*)"/g)) {
-      const raw = unescapeAttribute(m[1]);
-      let snap = null;
-      try { snap = JSON.parse(raw); } catch { continue; }
-      if (snap?.memo?.name !== 'lint' || !snap.data || !('force' in snap.data)) continue;
-      if (typeof snap.data.slug === 'string' &&
-          snap.data.slug.toLowerCase() === String(slug).toLowerCase()) return raw;
-      fallback ??= raw;
-    }
-    return fallback;
-  }
-
-  /* An attribute read out of HTML source, without handing the source to a
-   * parser. The value is JSON that was escaped on the way out, so five
-   * entities cover it — and `&amp;` is undone last, or an `&amp;quot;` that was
-   * written as text would come back as a quotation mark that was never there. */
-  const unescapeAttribute = (s) => s
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&');
-
-  /* The press itself. The session cookie the page was served with is the one
-   * the token belongs to, and `GM_xmlhttpRequest` sends it because it is the
-   * browser's own — nothing of ours is stored, sent or read here beyond the
-   * slug, which was already in the URL of the page you are standing on. */
-  function postForce({ token, url, snapshot }, slug) {
-    return new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method: 'POST',
-        url,
-        timeout: FORCE_TIMEOUT,
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          'X-Livewire': '1',
-          'X-CSRF-TOKEN': token,
-          Referer: LINT_PAGE_URL + encodeURIComponent(slug),
-        },
-        data: JSON.stringify({
-          _token: token,
-          components: [{
-            snapshot,
-            updates: {},
-            calls: [{ path: '', method: 'forceReload', params: [] }],
-          }],
-        }),
-        onload: (r) => {
-          // 419 is Laravel for a token that has gone stale between the two
-          // requests, which one more press fixes.
-          if (r.status === 419) {
-            return reject(new Error('The linter page\'s session had expired. Press it once more.'));
-          }
-          if (r.status >= 400) return reject(new Error(`The forced run answered ${r.status}.`));
-          let data = null;
-          try { data = JSON.parse(r.responseText || ''); } catch { /* said below */ }
-          if (!data || !Array.isArray(data.components)) {
-            return reject(new Error('The forced run answered something that is not a Livewire response.'));
-          }
-          resolve(true);
-        },
-        onerror: () => reject(new Error('The forced run could not be sent (network, or @connect).')),
-        ontimeout: () => reject(new Error('The forced run did not finish within a minute.')),
       });
     });
   }
@@ -1127,6 +1008,38 @@
     return roots;
   }
 
+  /* What stops the text being seen, from the text outwards.
+   *
+   * A highlight is `position:fixed` on a layer over the page, so the only
+   * thing that clips it is the window. The text is clipped by whatever scrolls
+   * it, which is a smaller box than that: an iframe, or any ancestor with an
+   * `overflow` of its own. Those two were treated as one thing for as long as
+   * the editor was a TinyMCE iframe — the iframe's rectangle is both where
+   * its coordinates start and where its content stops — and in a
+   * contenteditable, which has no iframe, there was nothing to clip against at
+   * all. Scroll such an editor and the words went under its top edge while the
+   * line under them stayed on screen, drawn across whatever is above.
+   *
+   * So: every ancestor that clips its children, the iframe among them, and the
+   * highlight is drawn inside all of them at once. Walked from the element
+   * rather than guessed at, because which box scrolls is the editor's business
+   * and it has been three different ones.
+   *
+   * `overflow: clip` and `hidden` and `auto` and `scroll` all clip; only
+   * `visible` does not. An iframe clips whatever its own `overflow` says, so it
+   * is taken without asking. */
+  function clipChain(start) {
+    const chain = [];
+    for (let el = start; el && el !== document.documentElement; el = el.parentElement) {
+      if (el.tagName === 'IFRAME') { chain.push(el); continue; }
+      let style = null;
+      try { style = getComputedStyle(el); } catch { break; }
+      if (!style) break;
+      if (style.overflowX !== 'visible' || style.overflowY !== 'visible') chain.push(el);
+    }
+    return chain;
+  }
+
   /* Wait until the editor actually holds text: freshly mounted it is empty,
    * and searching it then would anchor nothing. */
   function awaitEditor() {
@@ -1164,7 +1077,7 @@
         return NodeFilter.FILTER_ACCEPT;
       },
     });
-    let s = '';
+    let s = '', cs = '';
     const nodes = [], offsets = [], owners = [], cited = [];
     const blocks = new Map();
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -1178,6 +1091,11 @@
         if (!c) continue;              // whitespace: out of the index by construction
         const at = s.length;
         s += c;
+        // The same character with its case kept, for `pick`. A letter whose
+        // lower case is longer than itself would put the two strings out of
+        // step, and there the lowercase one stands in.
+        const k = cased(raw[i]);
+        cs += k.length === c.length ? k : c;
         nodes.push(n);
         offsets.push(i);
         owners.push(owner);
@@ -1186,7 +1104,7 @@
         if (b) b.to = at; else blocks.set(owner, { from: at, to: at });
       }
     }
-    return { root, s, nodes, offsets, owners, cited, blocks };
+    return { root, s, cs, nodes, offsets, owners, cited, blocks };
   }
 
   /* Every place the needle falls, in document order. Capped, because a very
@@ -1222,13 +1140,34 @@
    * block-filling match, or fewer of them than the occurrence asked for, the
    * plain document order is used exactly as before. That is what keeps a
    * one-word snippet the linter really did mean in prose from being dragged
-   * onto a heading that happens to repeat the word. */
-  function pick(index, needle, occurrence) {
+   * onto a heading that happens to repeat the word.
+   *
+   * And before either, the copies written in the same case as the snippet.
+   * The index is lowercase, so "Frontal lobe" also matches "frontal lobe", and
+   * kipps-scale has it three times as a list item: lowercase under Stage 1 and
+   * Stage 3, capitalised under Stage 4. The linter's finding was about the
+   * Stage 4 one. Without this the first copy won, and that was the Stage 1
+   * one, which has no capital to take off, so the finding pointed at a
+   * lowercase item and offered no fix.
+   *
+   * `strict` is for the checks whose subject is the case itself. On those, no
+   * copy in the same case means the capital is gone and the finding is fixed,
+   * and a lowercase copy somewhere else is exactly what it must not land on. */
+  const CASE_IS_THE_FINDING = new Set(['Radiopaedia.ListCaps']);
+
+  function pick(index, needle, occurrence, exactCase, strict) {
     const hits = locateAll(index, needle);
     if (!hits.length) return null;
-    const exact = hits.filter((h) => fillsBlock(index, h));
-    const list = exact.length >= occurrence ? exact : hits;
-    return list[occurrence - 1] || null;
+    const blocksFirst = (list) => {
+      const exact = list.filter((h) => fillsBlock(index, h));
+      return (exact.length >= occurrence ? exact : list)[occurrence - 1] || null;
+    };
+    if (exactCase) {
+      const same = hits.filter((h) => index.cs.slice(h.from, h.to + 1) === exactCase);
+      const hit = same.length ? blocksFirst(same) : null;
+      if (hit || strict) return hit;
+    }
+    return blocksFirst(hits);
   }
 
   function rangeFrom(index, { from, to }) {
@@ -1286,13 +1225,21 @@
    * found in there, the snippet stays lit: too wide beats nothing. */
   function anchor(findings, roots) {
     const indices = roots.map((r) => buildIndex(r.root));
+    /* Once per root rather than once per finding per frame: walking ancestors
+       and asking each for its computed style, sixty times a second during a
+       scroll, is work nobody would ever see. Re-walked whenever the findings
+       are re-anchored, which is after every edit, so an editor that changes
+       shape — going full screen, say — is picked up by the next keystroke. */
+    const chains = roots.map((r) => clipChain(r.frame || r.root));
     for (const f of findings) {
-      f.range = null; f.frame = null; f.narrowed = false; f.caret = null;
+      f.range = null; f.frame = null; f.clips = null; f.narrowed = false; f.caret = null;
       if (f.state === 'ignored' || f.state === 'done') continue;
       const needle = flat(f.snippet);
       if (!needle) continue;
+      const exactCase = cased(f.snippet);
+      const strict = CASE_IS_THE_FINDING.has(f.condition);
       for (let i = 0; i < indices.length; i++) {
-        const wide = pick(indices[i], needle, f.occurrence || 1);
+        const wide = pick(indices[i], needle, f.occurrence || 1, exactCase, strict);
         if (!wide) continue;
 
         let spot = wide;
@@ -1304,6 +1251,7 @@
         }
         f.range = rangeFrom(indices[i], spot);
         f.frame = roots[i].frame;
+        f.clips = chains[i];
 
         /* The caret sits between two characters, so it is anchored on the one
          * before it and drawn against that character's trailing edge. Only
@@ -2132,6 +2080,24 @@
     if (lead) show.push({ target: span(0, lead), insert: '' });
     if (trail) show.push({ target: span(text.length - trail, text.length), insert: '' });
     return { target: span(0, text.length), insert: text.slice(lead, text.length - trail), show };
+  }
+
+  /* A `HeadingsSpacing` finding whose heading has no space left at either
+   * end in the editor.
+   *
+   * The usual case, not a rare one. TinyMCE drops an ordinary space at the
+   * end of a block when it loads the article (tried on TinyMCE 6.8.3 with
+   * kipps-scale: `<h4>Usage </h4>` comes into the editor as `Usage`, and
+   * `getContent()` gives `<h4>Usage</h4>` back). The linter reads the
+   * published article, which still has the space, so the finding is real,
+   * and saving the article is the fix. A non-breaking space survives the
+   * load, and that is the case `headingEnds` takes off. */
+  function headingClean(f) {
+    if (f?.condition !== 'Radiopaedia.HeadingsSpacing' || !f.range) return false;
+    const node = f.range.startContainer;
+    const h = (node.nodeType === 1 ? node : node.parentElement)?.closest('h1,h2,h3,h4,h5,h6');
+    const text = h?.textContent || '';
+    return !!text.trim() && text === text.replace(/^\s+|\s+$/g, '');
   }
 
   /* The gap in front of a reference marker — but only where the marker is a
@@ -3639,7 +3605,7 @@
        goes on painting them; they go back when the bar closes. */
     document.documentElement.classList.add('rlx-staged');
     const borrowed = stage.bar.querySelector('.rlx-borrowed');
-    for (const el of [forceBtn, citesToggle, sweepToggle]) if (el) borrowed.appendChild(el);
+    for (const el of [forceBtn, citesToggle, sweepToggle, linksToggle]) if (el) borrowed.appendChild(el);
 
     placeBar(true);
     stage.bar.addEventListener('click', (e) => {
@@ -3699,7 +3665,7 @@
     document.documentElement.classList.remove('rlx-staged');
     if (button?.isConnected && forceBtn) button.after(forceBtn);
     if (group?.isConnected) {
-      for (const el of [citesToggle, sweepToggle]) if (el) group.appendChild(el);
+      for (const el of [citesToggle, sweepToggle, linksToggle]) if (el) group.appendChild(el);
     }
     stage.layer?.remove(); stage.note?.remove(); stage.bar?.remove();
     removeEventListener('scroll', scheduleDraw, true);
@@ -3787,36 +3753,86 @@
     return lines;
   }
 
-  /* The lines a finding covers, in page coordinates, ready to draw. */
+  /* Where a Range's coordinates start. Inside an iframe they are measured
+   * against the iframe's own window, so its position on the page goes back in;
+   * in a contenteditable they are page coordinates already. */
+  const offsetOf = (f) => (f.frame ? f.frame.getBoundingClientRect() : { left: 0, top: 0 });
+
+  /* How much of the text's box can be seen, right now: the narrowest of
+   * everything that clips it. Null when nothing does — the layer is fixed, so
+   * the window has already done that job.
+   *
+   * Measured on every draw, unlike the chain itself, because the whole point
+   * of these boxes is that they move — but once per draw per root, not once
+   * per finding. Every finding anchored in the same root holds the same chain
+   * array, so that array is the key: thirty findings in one editor measure two
+   * boxes between them instead of sixty, and `draw` runs on every frame of a
+   * scroll. `clipMemo` is open only for the length of one draw; asked outside
+   * one, this measures afresh. */
+  let clipMemo = null;
+
+  function clipOf(f) {
+    if (!f.clips?.length) return null;
+    if (clipMemo?.has(f.clips)) return clipMemo.get(f.clips);
+    let left = -Infinity, top = -Infinity, right = Infinity, bottom = Infinity;
+    for (const el of f.clips) {
+      if (!el.isConnected) continue;
+      const r = el.getBoundingClientRect();
+      left = Math.max(left, r.left); top = Math.max(top, r.top);
+      right = Math.min(right, r.right); bottom = Math.min(bottom, r.bottom);
+    }
+    const box = left === -Infinity ? null : { left, top, right, bottom };
+    clipMemo?.set(f.clips, box);
+    return box;
+  }
+
+  /* A rectangle cut down to what the box lets through, or null if that is
+   * nothing. */
+  function clipped(x, y, w, h, clip) {
+    if (!clip) return { x, y, w, h };
+    const x1 = Math.max(x, clip.left), y1 = Math.max(y, clip.top);
+    const x2 = Math.min(x + w, clip.right), y2 = Math.min(y + h, clip.bottom);
+    if (x2 <= x1 || y2 <= y1) return null;
+    return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+  }
+
+  const inside = (x, y, clip) => !clip ||
+    (x >= clip.left && x <= clip.right && y >= clip.top && y <= clip.bottom);
+
+  /* The lines a finding covers, in page coordinates, ready to draw — and
+   * deliberately NOT cut to the visible box yet. Two reasons. A line only half
+   * on screen would come back half as tall, and the underline, which is drawn
+   * at the bottom of what it is given, would be drawn through the middle of
+   * the words; and `draw` compares these boxes against each other to decide
+   * which of two findings on one phrase keeps it, a decision that has no
+   * business changing as you scroll. The cut happens once, on the mark. */
   function lineBoxes(f) {
-    const box = f.frame ? f.frame.getBoundingClientRect() : null;
+    const off = offsetOf(f);
     let rects;
-    try { rects = f.range.getClientRects(); } catch { return { box, lines: [] }; }
+    try { rects = f.range.getClientRects(); } catch { return { lines: [] }; }
 
     const spans = [];
     for (const r of rects) {
       if (!r.width || !r.height) continue;
-      let x = r.left, y = r.top, w = r.width, h = r.height;
-      if (box) {
-        x += box.left; y += box.top;
-        // Clip against the iframe's area: it scrolls inside, and without the
-        // clip the rectangles would spill past the edges of the editor.
-        const x1 = Math.max(x, box.left), y1 = Math.max(y, box.top);
-        const x2 = Math.min(x + w, box.right), y2 = Math.min(y + h, box.bottom);
-        if (x2 <= x1 || y2 <= y1) continue;
-        x = x1; y = y1; w = x2 - x1; h = y2 - y1;
-      }
-      spans.push({ x, y, w, h });
+      spans.push({ x: r.left + off.left, y: r.top + off.top, w: r.width, h: r.height });
     }
-    return { box, lines: mergeLines(spans) };
+    return { lines: mergeLines(spans) };
   }
 
   const overlaps = (a, b) =>
     Math.min(a.x + a.w, b.x + b.w) > Math.max(a.x, b.x) &&
     Math.min(a.y + a.h, b.y + b.h) > Math.max(a.y, b.y);
 
+  /* The split is only the memo: one draw measures each box once, and the memo
+     is closed again whatever happens inside, so a throw cannot leave the next
+     frame reading boxes from this one. */
   function draw() {
     if (!stage.live) return;
+    clipMemo = new Map();
+    try { drawNow(); } finally { clipMemo = null; }
+  }
+
+  function drawNow() {
     placeBar();
     stage.layer.textContent = '';
 
@@ -3837,7 +3853,8 @@
       const f = stage.findings[k];
       if (!f.range || f.state !== 'open') continue;
       const c = paint(f.severity);
-      const { box, lines } = lineBoxes(f);
+      const { lines } = lineBoxes(f);
+      const clip = clipOf(f);
       if (k !== stage.i && lines.some((s) => lit.some((l) => overlaps(l, s)))) continue;
 
       for (const s of lines) {
@@ -3852,14 +3869,11 @@
          * either end, so that a finding of one character — a semicolon —
          * still has a line you can see. */
         const thick = k === stage.i ? 3 : 2;
-        let x = s.x - PAD_X, y = s.y + s.h - PAD_Y, w = s.w + PAD_X * 2, h = thick;
-        if (box) {
-          // Not out of the iframe it belongs to.
-          const x1 = Math.max(x, box.left), y1 = Math.max(y, box.top);
-          const x2 = Math.min(x + w, box.right), y2 = Math.min(y + h, box.bottom);
-          if (x2 <= x1 || y2 <= y1) continue;
-          x = x1; y = y1; w = x2 - x1; h = y2 - y1;
-        }
+        // Not out of the box the words are in. A line scrolled out of it has
+        // nothing left after the cut and is simply not drawn.
+        const r = clipped(s.x - PAD_X, s.y + s.h - PAD_Y, s.w + PAD_X * 2, thick, clip);
+        if (!r) continue;
+        const { x, y, w, h } = r;
         const mark = document.createElement('div');
         mark.className = 'rlx-mark' + (k === stage.i ? ' rlx-current' : '');
         mark.style.cssText = `left:${x}px; top:${y}px; width:${w}px; height:${h}px;` +
@@ -3889,9 +3903,8 @@
   function drawChanges(f) {
     const would = f?.state === 'open' ? proposal(f) : null;
     if (!would?.spots?.length) return false;
-    const box = f.frame ? f.frame.getBoundingClientRect() : null;
-    const inFrame = (x, y) => !box ||
-      (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom);
+    const off = offsetOf(f);
+    const clip = clipOf(f);
     const put = (el, x, y, w, h) => {
       el.style.left = `${x}px`; el.style.top = `${y}px`;
       if (w != null) { el.style.width = `${w}px`; el.style.height = `${h}px`; }
@@ -3900,7 +3913,6 @@
 
     for (const spot of would.spots) {
       const range = spot.target;
-      const off = box || { left: 0, top: 0 };
 
       if (!range.collapsed) {
         let rects = [];
@@ -3908,19 +3920,25 @@
         let struck = 0;
         for (const r of rects) {
           if (!r.width || !r.height) continue;
-          const x = r.left + off.left, y = r.top + off.top;
-          if (!inFrame(x, y + r.height / 2)) continue;
+          // Cut to the box, like the marks: the words it strikes through are
+          // behind the same edge.
+          const cut = clipped(r.left + off.left - 1, r.top + off.top,
+                              r.width + 2, r.height, clip);
+          if (!cut) continue;
           const del = document.createElement('div');
           del.className = 'rlx-del';
-          put(del, x - 1, y, r.width + 2, r.height);
+          put(del, cut.x, cut.y, cut.w, cut.h);
           struck++;
         }
         /* Characters that take no room — the space at the end of a heading,
            which the browser does not draw — have nothing to strike through.
            They get a red tag of their own where they are, as radioUpdater
            does for a citation it cannot colour. */
+        /* A tag carries words, and half a word is worse than none, so these
+           are dropped whole the moment the place they belong to is out of
+           sight rather than cut like the rules are. */
         const at = struck ? null : pointOf(range);
-        if (at && inFrame(at.x + off.left, at.y + off.top + at.h / 2)) {
+        if (at && inside(at.x + off.left, at.y + off.top + at.h / 2, clip)) {
           const gone = document.createElement('del');
           gone.className = 'rlx-gone';
           gone.textContent = visible(range.toString());
@@ -3933,12 +3951,15 @@
       const at = pointOf(range);
       if (!at) continue;
       const x = at.x + off.left, y = at.y + off.top;
-      if (!inFrame(x, y + at.h / 2)) continue;
+      if (!inside(x, y + at.h / 2, clip)) continue;
 
       if (range.collapsed) {
-        const rule = document.createElement('div');
-        rule.className = 'rlx-ins-at';
-        put(rule, x - 1, y, 2, at.h);
+        const cut = clipped(x - 1, y, 2, at.h, clip);
+        if (cut) {
+          const rule = document.createElement('div');
+          rule.className = 'rlx-ins-at';
+          put(rule, cut.x, cut.y, cut.w, cut.h);
+        }
       }
       const ins = document.createElement('ins');
       ins.className = 'rlx-ins';
@@ -3979,13 +4000,12 @@
     const r = rects[rects.length - 1];
     if (!r || !r.height) return;
 
-    const box = f.frame ? f.frame.getBoundingClientRect() : null;
-    let x = r.right, y = r.top;
-    if (box) {
-      x += box.left; y += box.top;
-      // Inside the iframe's own scroll, like the marks.
-      if (x < box.left || x > box.right || y + r.height < box.top || y > box.bottom) return;
-    }
+    const off = offsetOf(f);
+    const clip = clipOf(f);
+    const x = r.right + off.left, y = r.top + off.top;
+    // The caret carries the character that is missing, in a tag above the
+    // rule, so it goes or stays whole rather than being cut in half.
+    if (!inside(x, y + r.height / 2, clip)) return;
     const c = paint(f.severity);
     const el = document.createElement('div');
     el.className = 'rlx-caret';
@@ -4116,6 +4136,18 @@
     /* The five that need the sentence written again say so where the
        corrected text would otherwise stand. Nothing else on the note tells
        you that this one is not going to be answered by a keystroke. */
+    /* A heading the editor has already trimmed. See `headingClean`: the
+       space is in the published article and not in the form, so there is
+       nothing for `f` to take off, and without this line the note reads as
+       a finding nobody can act on. */
+    if (!settled && !would && headingClean(f)) {
+      const line = document.createElement('div');
+      line.className = 'rlx-hint';
+      line.textContent = 'The editor has already taken the space off. It goes from the article ' +
+        'when you save. Press s to mark it done.';
+      stage.note.appendChild(line);
+    }
+
     if (!settled && !would && REWRITES.has(f.condition)) {
       const line = document.createElement('div');
       line.className = 'rlx-hint';
@@ -4214,14 +4246,16 @@
   }
 
   /* Above or below the part of the article you can see, or neither. What you
-   * can see is the window, and inside an iframe only as much of the window as
-   * the iframe covers. */
+   * can see is the window, and no more of it than the text's own box lets
+   * through — the same box the highlights are cut to, so the note says "scroll
+   * up" exactly when the line it belongs to has gone under the edge, and not
+   * only when it has left the window. */
   function whereAway(f, spot) {
     let top = 0, bottom = innerHeight;
-    if (f.frame) {
-      const box = f.frame.getBoundingClientRect();
-      top = Math.max(top, box.top);
-      bottom = Math.min(bottom, box.bottom);
+    const clip = clipOf(f);
+    if (clip) {
+      top = Math.max(top, clip.top);
+      bottom = Math.min(bottom, clip.bottom);
     }
     if (spot.bottom <= top) return 'up';
     if (spot.top >= bottom) return 'down';
@@ -4536,7 +4570,9 @@
 
     /* Offered where there is one right answer and the words to apply it to
        have been found — which, on most findings, there is not. */
-    settle('fix', proposal(f) ? null : 'No automatic fix for this one',
+    settle('fix', proposal(f) ? null
+      : headingClean(f) ? 'Nothing to fix here: the editor has already taken the space off'
+      : 'No automatic fix for this one',
            'Write the correction into the editor (f)');
 
     // Live only where there is a word to offer: a finding one of the lists
@@ -4744,6 +4780,10 @@
         return;
       }
       case 'flip': return setBarTop(!barIsTop());
+      /* `force` here means what it means on the ↻, and that is the point:
+         before `cache=refresh` existed this button skipped only this tab's
+         copy, so a re-lint after saving your fixes came back from the linter's
+         own copy word for word unchanged. It costs one read of the article. */
       case 'reload': return runLint(stage.slug, { force: true });
       case 'close': return destroyStage();
     }
@@ -5790,7 +5830,7 @@
 
   const FORCE_TITLE =
     'Have the linter read the article again rather than answer from what it ' +
-    'read last time — the ⟳ on radiopaedia.work/lint/linter, from here';
+    'read last time';
 
   function paintForce() {
     if (!forceBtn) return;
@@ -5799,25 +5839,26 @@
     forceBtn.title = forcing ? 'The linter is reading the article again…' : FORCE_TITLE;
   }
 
-  /* Pressing it: the linter first, this tab second, and in that order for a
-   * reason. Forgetting what this tab remembers and asking again would come
-   * straight back with the same words out of the linter's own copy; forcing
-   * the linter and keeping the copy here would leave the fresh answer unread.
-   * So — force, forget, ask — and then show whichever of the two things this
-   * page can show: the findings on the text in the editor, the colour of the
-   * button outside it.
+  /* Pressing it: one request, asked here rather than inside the paint that
+   * follows, and that is the whole shape of it. `lintResult` with `force` sends
+   * `cache=refresh` and keeps what comes back, so the `runLint` or `preview`
+   * after it reads the fresh answer out of `sessionStorage` and asks the
+   * linter for nothing — a forced run costs one request, not two, and the two
+   * cannot disagree about which answer is on screen.
    *
-   * Loud on failure, unlike `preview`. Nobody is surprised by an alert they
-   * pressed a button for, and a ↻ that goes round once and changes nothing
-   * would be a lie about what the linter has read. */
+   * Asked here for a second reason: loud on failure, unlike `preview`. Both of
+   * those swallow what they cannot do — `preview` by design, `runLint` into its
+   * own alert — so a refresh that failed inside them would leave a ↻ that went
+   * round once and changed nothing, which would be a lie about what the linter
+   * has read. Nobody is surprised by an alert they pressed a button for. */
   async function forceRefresh(slug) {
     if (!slug || forcing) return;
     forcing = true;
     paintForce();
     try {
-      await forceLinter(slug);
-      if (inEditor()) await runLint(slug, { force: true });
-      else await preview(slug, { force: true });
+      await lintResult(slug, { force: true });
+      if (inEditor()) await runLint(slug, {});
+      else await preview(slug, {});
     } catch (err) {
       alert(`Could not have the linter read the article again.\n\n${err.message}`);
     } finally {
@@ -5913,6 +5954,18 @@
       g.appendChild(w);
     }
 
+    /* And the sixth: the words in the text that are the title of another
+       article and are not linked to it. A question like the fifth, asked when
+       it is pressed — the answer is a panel down the right-hand side. */
+    let k = null;
+    if (inEditor()) {
+      k = document.createElement('button');
+      k.className = 'rlx-auto rlx-links-toggle';
+      k.type = 'button';
+      k.addEventListener('click', () => toggleLinks());
+      g.appendChild(k);
+    }
+
     const title = inEditor() ? null : visibleTitle();
     if (title) title.appendChild(g);
     else pinToCorner(g);
@@ -5927,6 +5980,7 @@
     group = g; button = b; toggle = page ? t : null; railToggle = page ? r : null;
     citesToggle = c;
     sweepToggle = w;
+    linksToggle = k;
     forceBtn = f;
     paintButton();
     paintForce();
@@ -5934,6 +5988,7 @@
     paintRailToggle();
     paintCitesToggle();
     paintSweepToggle();
+    paintLinksToggle();
     placeGroup();
   }
 
@@ -7031,7 +7086,7 @@
   }
 
   const pasteMark = { layer: null, line: null, tag: null,
-                      spot: null, memo: null, body: null, was: 0 };
+                      spot: null, memo: null, body: null, clips: null, was: 0 };
 
   async function pasteMarkSoon() {
     if (!inEditor() || !pasteMemo()) return;
@@ -7070,6 +7125,7 @@
     pasteMark.memo = memo;
     pasteMark.spot = spot;
     pasteMark.body = body;
+    pasteMark.clips = clipChain(spot.frame || body.root);
     pasteMark.was = countPasted(body, memo.text);
 
     const layer = document.createElement('div');
@@ -7119,7 +7175,7 @@
       } else body?.root?.removeEventListener('input', pastedYet, true);
     } catch { /* the frame went with the page */ }
     pasteMark.layer = pasteMark.line = pasteMark.tag = null;
-    pasteMark.spot = pasteMark.memo = pasteMark.body = null;
+    pasteMark.spot = pasteMark.memo = pasteMark.body = pasteMark.clips = null;
   }
 
   let pastePending = null;
@@ -7132,9 +7188,10 @@
    * editor holds unsaved work and nothing of ours is ever put inside it.
    *
    * Inside an iframe a rectangle is measured against the iframe's own
-   * viewport, so the frame's position goes back in — and the frame's edges
-   * become the second thing to hide behind, since text scrolled out of the
-   * editor is still inside the window. */
+   * viewport, so the frame's position goes back in — and the edges of the box
+   * the text sits in become the second thing to hide behind, since text
+   * scrolled out of the editor is still inside the window. The same box the
+   * highlights are cut to, found the same way. */
   function layOutPasteMark() {
     const { layer, spot } = pasteMark;
     if (!layer) return;
@@ -7146,8 +7203,9 @@
     const y = (spot.at === 'bottom' ? r.bottom : r.top) + off.top;
     const x = r.left + off.left;
 
-    const top = frame ? Math.max(0, frame.top) : 0;
-    const bottom = frame ? Math.min(innerHeight, frame.bottom) : innerHeight;
+    const clip = clipOf(pasteMark);
+    const top = clip ? Math.max(0, clip.top) : 0;
+    const bottom = clip ? Math.min(innerHeight, clip.bottom) : innerHeight;
     layer.hidden = y < top + 4 || y > bottom - 4;
     if (layer.hidden) return;
 
@@ -7379,8 +7437,8 @@
   }
 
   /* One request, one reference, one press. `@connect radiopaedia.work` already
-   * covers it: this is the same host the linter answers from, and this is a
-   * GET — the one POST in the file is the ↻, and it is up in `postForce`. */
+   * covers it: this is the same host the linter answers from, and every request
+   * in this file is a GET. */
   function askCite(search) {
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
@@ -8467,6 +8525,791 @@
     finishPanel(note, acts);
   }
 
+  // ————————————————————————————————————————————————————————————— the links
+
+  /* Words in the article that are the title of another Radiopaedia article and
+   * are not linked to it anywhere in the text.
+   *
+   * The house rule is one link per article, at the first place the name
+   * occurs. So the question is asked once per target article, not once per
+   * word: if the article links to it anywhere, even further down, it is not
+   * offered at all, and if it does not, the first occurrence in running text is
+   * the one offered and the later ones are left alone.
+   *
+   * The names come from `article-links.tsv`, next to this file in the
+   * repository and fetched the way `proper-nouns.txt` is. One line per
+   * article: its slug (and the slugs that redirect to it), its title, how often
+   * other articles that mention it also link it, and the names it is looked for
+   * under. `tools/article-links.js` writes it from a Radiopaedia search export
+   * and, when it has one, from a local copy of the articles, which is where the
+   * other names come from: the words articles already use when they link to it
+   * ("CSF" for cerebrospinal fluid, "skull base" for base of the skull).
+   *
+   * What counts as running text is what `trova.py` in neuropedia settled on:
+   * not a heading, not the text of a link already there, not a reference
+   * marker, and not bold, which on Radiopaedia is the article's own name and
+   * its synonyms in the first sentence.
+   *
+   * The longest name wins. "Abducens nerve palsy" takes all three words, and
+   * the "abducens nerve" inside it is not offered as well. That holds even
+   * when the long one is not offered (already linked, or the article itself):
+   * its words are used up either way.
+   *
+   * Everything down to `the links, in the editor` is plain functions of
+   * strings, so `tools/article-links.js` can run the same matcher over a whole
+   * copy of Radiopaedia without a browser. */
+
+  /* The plurals a trailing `s` does not cover, and the Latin ones whose
+   * singular is not the plural minus a letter. Both sides of the comparison go
+   * through the same table, so it only has to be right about which words are
+   * the same word, not about the grammar. */
+  const LINK_IRREGULAR = {
+    ganglia: 'ganglion', foramina: 'foramen', septa: 'septum', diverticula: 'diverticulum',
+    criteria: 'criterion', phenomena: 'phenomenon', atria: 'atrium', meninges: 'meninx',
+    corpora: 'corpus', lumina: 'lumen', foci: 'focus', gyri: 'gyrus', cortices: 'cortex',
+    vertices: 'vertex', apices: 'apex', indices: 'index', cervices: 'cervix',
+    sulci: 'sulcus', nuclei: 'nucleus', thalami: 'thalamus', hippocampi: 'hippocampus',
+    fasciculi: 'fasciculus', plexuses: 'plexus', sinuses: 'sinus', viruses: 'virus',
+    fungi: 'fungus', emboli: 'embolus', calculi: 'calculus', bronchi: 'bronchus',
+    teeth: 'tooth', feet: 'foot', children: 'child', women: 'woman', men: 'man',
+  };
+
+  /* One word, in the shape two spellings of it compare equal in: no accents,
+   * no case, British and American spelling folded together (oedema, edema;
+   * haemorrhage, hemorrhage; tumour, tumor), and the plural taken off.
+   *
+   * An abbreviation is the exception and keeps its case: "CN" is not "CNS"
+   * and "MS" is not "ms". Two capitals and no small letter makes one, with a
+   * plural `s` allowed on the end ("AVMs"). */
+  function linkKey(word) {
+    const w = String(word ?? '').normalize('NFD').replace(/\p{M}+/gu, '');
+    const bare = w.replace(/(?<=\p{Lu})s$/u, '');
+    if ((bare.match(/\p{Lu}/gu) || []).length >= 2 && !/\p{Ll}/u.test(bare)) return '=' + bare;
+
+    let k = w.toLowerCase();
+    if (LINK_IRREGULAR[k]) return LINK_IRREGULAR[k];
+    if (k.length > 4 && k.endsWith('ae')) k = k.slice(0, -1);       // vertebrae, fossae
+    k = k.replace(/ae|oe/g, 'e').replace(/(?<=[a-z]{2})our/g, 'or');
+    if (k === 'grey') k = 'gray';
+    if (k.length > 4) {
+      if (k.endsWith('omata')) k = k.slice(0, -2);                   // carcinomata
+      else if (k.endsWith('oses')) k = k.slice(0, -2) + 'is';        // stenoses
+      else if (k.endsWith('ies')) k = k.slice(0, -3) + 'y';          // arteries
+      else if (/(?:ss|x|ch|sh)es$/.test(k)) k = k.slice(0, -2);      // abscesses
+      else if (/[^siu]s$/.test(k)) k = k.slice(0, -1);               // tubers; not -ss -is -us
+    }
+    return k;
+  }
+
+  /* The words of a string, with where each one is. A word is a run of letters
+   * and digits, so "IDH-wildtype" is two of them and what stands between them
+   * is checked separately — see `linkGap`. A possessive `'s` belongs to the
+   * word before it: "Wernicke's" and "Wernicke" are one word, and a link put
+   * on the first takes the `'s` in with it. */
+  const LINK_TOKEN = /[\p{L}\p{N}]+/gu;
+
+  function linkTokens(text) {
+    const out = [];
+    for (const m of String(text ?? '').matchAll(LINK_TOKEN)) {
+      const from = m.index, to = from + m[0].length;
+      const prev = out[out.length - 1];
+      if (prev && m[0] === 's' && /^['’ʼ]$/.test(text.slice(prev.to, from))) {
+        prev.to = to;
+        continue;
+      }
+      out.push({ from, to, key: linkKey(m[0]) });
+    }
+    return out;
+  }
+
+  /* What stands between two words, reduced to what has to match: a space and
+   * a hyphen are the same thing ("T2-weighted", "T2 weighted"), and so is
+   * nothing at all between them, while a comma or a slash has to be there in
+   * the article as it is in the name ("Glioblastoma, IDH-wildtype",
+   * "HIV/AIDS"). */
+  function linkGap(gap) {
+    return String(gap ?? '')
+      .replace(/[\s\u00a0\u200b-\u200d\u2060\ufeff\u00ad]+/g, '')
+      .replace(/[-‐‑–—]/g, '');
+  }
+
+  /* A name, compiled: its words' keys and the gaps between them. */
+  function linkPhrase(text) {
+    const toks = linkTokens(text);
+    if (!toks.length) return null;
+    const gaps = [];
+    for (let i = 1; i < toks.length; i++) gaps.push(linkGap(text.slice(toks[i - 1].to, toks[i].from)));
+    return { keys: toks.map((t) => t.key), gaps, text: String(text) };
+  }
+
+  /* `article-links.tsv`:
+   *
+   *     slug[ redirect …] <TAB> title <TAB> linked/mentioned <TAB> name <TAB> name …
+   *
+   * `linked/mentioned` is out of the copy the file was made from: of the
+   * articles that mention this one, how many link to it. A blank there is
+   * "not measured", which is not the same as nought. The names are the
+   * strings looked for; with none, the title is.
+   *
+   * Lines starting with `#` are comments, and a line that does not parse is
+   * skipped rather than trusted. */
+  const LINK_SLUG = /^[a-z0-9][a-z0-9-]*$/;
+
+  function parseLinkIndex(text) {
+    const entries = new Map();     // every slug, redirects included → its entry
+    const byFirst = new Map();     // a name's first key → the names starting with it
+    for (const line of String(text ?? '').split(/\r?\n/)) {
+      if (!line.trim() || line.startsWith('#')) continue;
+      const [slugs, title, rate, ...names] = line.split('\t').map((s) => s.trim());
+      const all = String(slugs || '').split(/\s+/).filter((s) => LINK_SLUG.test(s));
+      if (!all.length || !title) continue;
+      const [linked, mentioned] = String(rate || '').split('/').map((n) => parseInt(n, 10));
+      const entry = {
+        slug: all[0], slugs: all, title,
+        linked: Number.isFinite(linked) ? linked : null,
+        mentioned: Number.isFinite(mentioned) ? mentioned : null,
+        phrases: [],
+      };
+      const own = linkPhrase(title)?.keys.join('\u0001');
+      for (const name of (names.filter(Boolean).length ? names.filter(Boolean) : [title])) {
+        const p = linkPhrase(name);
+        if (!p) continue;
+        p.entry = entry;
+        p.isTitle = p.keys.join('\u0001') === own;
+        entry.phrases.push(p);
+        const k = p.keys[0];
+        if (!byFirst.has(k)) byFirst.set(k, []);
+        byFirst.get(k).push(p);
+      }
+      if (!entry.phrases.length) continue;
+      for (const s of all) if (!entries.has(s)) entries.set(s, entry);
+    }
+    for (const list of byFirst.values()) list.sort((a, b) => b.keys.length - a.keys.length);
+    return { entries, byFirst, size: new Set(entries.values()).size };
+  }
+
+  function linkMatchesAt(toks, i, p, text) {
+    if (i + p.keys.length > toks.length) return false;
+    for (let j = 0; j < p.keys.length; j++) {
+      const t = toks[i + j];
+      if (t.out || t.key !== p.keys[j]) return false;
+      if (j) {
+        const gap = text.slice(toks[i + j - 1].to, t.from);
+        if (gap.length > 3 || linkGap(gap) !== p.gaps[j - 1]) return false;
+      }
+    }
+    return true;
+  }
+
+  /* When two articles answer to the same name, the one whose title IS that
+   * name comes first ("Fornix (brain)" loses "fornix" to a "Fornix" if there
+   * is one), then the one other articles link more often. The rest are kept
+   * as alternatives to offer, not thrown away. */
+  function linkPreference(a, b) {
+    return (b.isTitle - a.isTitle) || ((b.entry.linked ?? 0) - (a.entry.linked ?? 0))
+      || (a.entry.title.length - b.entry.title.length);
+  }
+
+  /* Every name in the text, longest first and left to right, none
+   * overlapping. `blocks` is the text cut where the article cuts it — a
+   * paragraph, a list item, a heading — each with `out`, one flag per
+   * character, true where the character is not running text. A name never
+   * spans two blocks, and never touches a character that is out. */
+  function linkHits(blocks, index) {
+    const hits = [];
+    blocks.forEach((block, b) => {
+      const text = block.text;
+      const toks = linkTokens(text);
+      for (const t of toks) {
+        t.out = false;
+        for (let c = t.from; c < t.to; c++) if (block.out[c]) { t.out = true; break; }
+      }
+      let i = 0;
+      while (i < toks.length) {
+        const options = toks[i].out ? null : index.byFirst.get(toks[i].key);
+        const matched = [];
+        if (options) {
+          for (const p of options) {
+            if (matched.length && p.keys.length < matched[0].keys.length) break;
+            if (linkMatchesAt(toks, i, p, text)) matched.push(p);
+          }
+        }
+        if (!matched.length) { i++; continue; }
+        const n = matched[0].keys.length;
+        const from = toks[i].from, to = toks[i + n - 1].to;
+        i += n;
+        matched.sort(linkPreference);
+        const seen = new Set();
+        const phrases = matched.filter((p) => !seen.has(p.entry) && seen.add(p.entry));
+        hits.push({ block: b, from, to, words: text.slice(from, to), phrases });
+      }
+    });
+    return hits;
+  }
+
+  /* The ones to offer. `linked` is every slug the article already links to;
+   * `self` is the article's own; `skip` is the slugs you said not to offer.
+   * Any of those, for any of the articles a name could mean, and the name is
+   * used up without being offered — so is every later occurrence of a target
+   * already offered once. */
+  function linkCandidates(blocks, index, { linked = new Set(), self = null, skip = new Set() } = {}) {
+    const done = new Set();
+    const out = [];
+    for (const hit of linkHits(blocks, index)) {
+      const entries = hit.phrases.map((p) => p.entry);
+      const settled = entries.some((e) => done.has(e) || e.slugs.some((s) =>
+        s === self || linked.has(s) || skip.has(s)));
+      for (const e of entries) done.add(e);
+      if (settled) continue;
+      out.push({ ...hit, entry: entries[0], others: entries.slice(1) });
+    }
+    return out;
+  }
+
+  // ————————————————————————————————————————————————— the links, in the editor
+
+  /* The file, read once per tab like the lists. It is a quarter of a megabyte
+   * of names, which is more than `LIST_MAX` lets a word list be, so it carries
+   * its own ceiling. An unreadable file is said out loud here, unlike the
+   * lists: this one is read because somebody pressed a button for it, and a
+   * panel that says "nothing to link" when it could not look would be a lie. */
+  const LINKS = {
+    file: 'article-links.tsv',
+    cache: 'rlx-links',
+    url: RAW_URL + 'article-links.tsv',
+    max: 4 * 1024 * 1024,
+    index: null,
+    asked: null,
+  };
+  const LINKS_SKIP_KEY = 'rlx-links-skip';     // {article: [targets you said not to link here]}
+  const LINKS_NEVER_KEY = 'rlx-links-never';   // {target: the day you said never}
+  const LINK_BASE = 'https://radiopaedia.org/articles/';
+
+  function linkIndex() {
+    if (LINKS.index) return Promise.resolve(LINKS.index);
+    if (LINKS.asked) return LINKS.asked;
+    LINKS.asked = (async () => {
+      let text = sessionStorage.getItem(LINKS.cache);
+      if (text == null) {
+        text = await askList(LINKS);
+        if (text != null) {
+          try { sessionStorage.setItem(LINKS.cache, text); } catch { /* quota: never mind */ }
+        }
+      }
+      LINKS.index = text == null ? null : parseLinkIndex(text);
+      LINKS.asked = null;      // a failure is asked again on the next press
+      return LINKS.index;
+    })();
+    return LINKS.asked;
+  }
+
+  /* The editor's text, cut the way `linkHits` wants it: one block per
+   * paragraph, list item or heading, a line break ending one too, and every
+   * character flagged when it is not running text. The text nodes each block
+   * was read from are kept with where they start, which is all a Range needs.
+   *
+   * Nothing here is cached. The panel scans again before every action, because
+   * the text it found the name in five seconds ago may not be the text in the
+   * editor now. */
+  const LINK_OUT = 'a, sup, sub, strong, b, h1, h2, h3, h4, h5, h6, code, pre';
+
+  function linkBlocks(roots) {
+    const blocks = [];
+    for (const { root, frame } of roots) {
+      const walker = root.ownerDocument.createTreeWalker(root,
+        NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+      let cur = null;
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (n.nodeType === 1) {
+          if (n.tagName === 'BR') cur = null;
+          continue;
+        }
+        const p = n.parentElement;
+        if (!p || p.closest('script, style, noscript')) continue;
+        const owner = p.closest(BLOCKS) || root;
+        if (!cur || cur.owner !== owner) {
+          cur = { owner, root, frame, text: '', out: [], pieces: [] };
+          blocks.push(cur);
+        }
+        const raw = n.nodeValue || '';
+        const out = !!p.closest(LINK_OUT);
+        cur.pieces.push({ node: n, at: cur.text.length });
+        cur.text += raw;
+        for (let i = 0; i < raw.length; i++) cur.out.push(out);
+      }
+    }
+    return blocks;
+  }
+
+  /* Every article the text already links to, whatever the href looks like:
+   * `/articles/x`, `https://radiopaedia.org/articles/x?lang=us`. */
+  const ARTICLE_HREF = /^(?:https?:\/\/(?:www\.)?radiopaedia\.org)?\/articles\/([a-z0-9][a-z0-9-]*)/i;
+
+  function linkedHere(roots) {
+    const out = new Set();
+    for (const { root } of roots) {
+      for (const a of root.querySelectorAll('a[href]')) {
+        const m = ARTICLE_HREF.exec(a.getAttribute('href') || '');
+        if (m) out.add(m[1].toLowerCase());
+      }
+    }
+    return out;
+  }
+
+  function skippedHere(self) {
+    return new Set([...(readMap(LINKS_SKIP_KEY)[self] || []),
+                    ...Object.keys(readMap(LINKS_NEVER_KEY))]);
+  }
+
+  async function scanLinks() {
+    const index = await linkIndex();
+    if (!index) return { trouble: `${LINKS.file} could not be read from GitHub.` };
+    const roots = editorRoots().filter((r) => (r.root.textContent || '').trim().length > 40);
+    if (!roots.length) return { trouble: 'Cannot find the editor text.' };
+    const blocks = linkBlocks(roots);
+    const self = currentSlug();
+    const linked = linkedHere(roots);
+    const found = linkCandidates(blocks, index, { linked, self, skip: skippedHere(self) })
+      .map((c) => ({ ...c, at: blocks[c.block] }));
+    return { index, found, linked };
+  }
+
+  /* The words of one candidate, as a Range in the editor. `oneNode` says
+   * whether they sit inside a single text node, which is the only shape the
+   * link is written into: across two, the words straddle a tag — half of them
+   * in italics, say — and wrapping a link round that is a judgement about
+   * markup this script does not make. */
+  function linkRange(c) {
+    const { pieces, root } = c.at;
+    let start = null, end = null;
+    for (const piece of pieces) {
+      const len = (piece.node.nodeValue || '').length;
+      if (!start && c.from < piece.at + len) start = { node: piece.node, offset: c.from - piece.at };
+      if (c.to <= piece.at + len) { end = { node: piece.node, offset: c.to - piece.at }; break; }
+    }
+    if (!start || !end) return null;
+    const range = root.ownerDocument.createRange();
+    try {
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+    } catch { return null; }
+    return { range, oneNode: start.node === end.node };
+  }
+
+  /* Show: the words selected in the editor and scrolled to the middle of it.
+   * The editor's own selection is the highlight — it is what the link will be
+   * put on, and it is gone the moment you click anywhere else. */
+  function showLink(c) {
+    const spot = linkRange(c);
+    if (!spot) return 'the words are not where they were — scan again';
+    c.at.owner.scrollIntoView?.({ block: 'center' });
+    const doc = spot.range.startContainer.ownerDocument;
+    try { doc.defaultView.focus(); } catch { /* never mind */ }
+    const sel = doc.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(spot.range);
+    return null;
+  }
+
+  /* Link: the editor's own `createLink` on exactly those words, so TinyMCE
+   * hears it, marks the form dirty and Ctrl + Z takes it back — the same
+   * bargain every Fix makes, through the same `runCommand`. The href is the
+   * full address, which is how Radiopaedia renders a link to one of its own
+   * articles no matter how the editor would have rewritten a relative one. */
+  function writeLink(c, slug) {
+    const spot = linkRange(c);
+    if (!spot) return 'the words are not where they were — scan again';
+    if (!spot.oneNode) return 'these words straddle other markup — link them by hand';
+    c.at.owner.scrollIntoView?.({ block: 'center' });
+    return runCommand(spot.range, 'createLink', LINK_BASE + slug);
+  }
+
+  // ——————————————————————————————————————————————————— the links panel
+
+  const links = { panel: null, said: null, run: 0, count: null };
+  let linksToggle = null;
+
+  /* Rarely linked: of the articles in the copy the file was measured on that
+   * name it, fewer than one in seven link it. "Brain", "white matter", "lead".
+   * Not hidden — whether an article about the brain should link "brain" is an
+   * editorial call — but kept under a fold, after the ones that usually are. */
+  const rarelyLinked = (e) => e.mentioned >= 5 && e.linked / e.mentioned < 0.15;
+
+  function rateTitle(e) {
+    if (e.mentioned == null) return 'Not measured';
+    return `${e.linked} of the ${e.mentioned} articles that mention it link to it`;
+  }
+
+  function closeLinks() {
+    links.panel?.remove();
+    links.panel = null;
+    links.said = null;
+    document.removeEventListener('keydown', onLinksKey, true);
+    removeEventListener('resize', placeLinks);
+    paintLinksToggle();
+  }
+
+  function onLinksKey(e) {
+    if (e.key === 'Escape' && links.panel) { e.preventDefault(); closeLinks(); }
+  }
+
+  const LINKS_TITLE = 'Links: find words that are the title of another article and are not ' +
+    'linked to it yet';
+
+  /* `count` is how many the last look found, kept so that a toolbar the
+   * editor has drawn again comes back with the same number on it. `busy` is
+   * the look itself. */
+  function paintLinksToggle(count = links.count, busy = false) {
+    links.count = count;
+    const inToolbar = !!toolbarLinks?.isConnected;
+    if (linksToggle) {
+      // One button, not two: the box keeps it only while the toolbar has none.
+      linksToggle.style.display = inToolbar ? 'none' : '';
+      linksToggle.classList.toggle('rlx-on', !!links.panel);
+      linksToggle.disabled = busy;
+      linksToggle.textContent = busy ? 'link …' : count == null ? 'link' : `link ${count}`;
+      linksToggle.title = LINKS_TITLE;
+    }
+    if (inToolbar) {
+      const b = toolbarLinks;
+      b.classList.toggle('tox-tbtn--enabled', !!links.panel);
+      b.setAttribute('aria-pressed', String(!!links.panel));
+      b.classList.toggle('tox-tbtn--disabled', busy);
+      b.setAttribute('aria-disabled', String(busy));
+      b.querySelector('.rlx-tox-count').textContent = busy ? '…' : count == null ? '' : String(count);
+    }
+  }
+
+  async function openLinks() {
+    if (!inEditor()) return;
+    const run = ++links.run;
+    paintLinksToggle(links.count, true);
+    const scan = await scanLinks();
+    paintLinksToggle(links.count, false);
+    if (run !== links.run) return;
+    renderLinks(scan);
+  }
+
+  const toggleLinks = () => (links.panel ? closeLinks() : openLinks());
+
+  /* The same button in the editor's own toolbar, right after the blockquote
+   * one, where somebody editing the text already looks. It is a TinyMCE
+   * toolbar button in looks only — its classes, its size, its pressed state —
+   * and it does nothing through TinyMCE: the click is ours.
+   *
+   * TinyMCE draws its toolbar again when it likes (a window narrow enough to
+   * fold it, for one), and takes this button away when it does. The page's
+   * MutationObserver calls this on every change, so it is put back on the next
+   * one; while it is there, this returns at the first line.
+   *
+   * The blockquote button is found by what it is called, in English or in
+   * Italian. A toolbar with no such button gets this one at the end of its
+   * last group; a page with no TinyMCE toolbar keeps it in the box by the
+   * title, which is where it was before. */
+  let toolbarLinks = null;
+  const QUOTE_BUTTON = /block\s*quote|blockquote|citazione/i;
+
+  function mountToolbarLinks() {
+    if (toolbarLinks?.isConnected || !inEditor()) return;
+    const frame = editorRoots().find((r) => r.frame)?.frame;
+    const box = frame?.closest('.tox-tinymce');
+    if (!box) return;
+    const buttons = [...box.querySelectorAll('.tox-toolbar__group .tox-tbtn')];
+    if (!buttons.length) return;
+    const quote = buttons.find((b) =>
+      QUOTE_BUTTON.test(`${b.getAttribute('aria-label') || ''} ${b.title || ''}`));
+    const after = quote || buttons[buttons.length - 1];
+
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tox-tbtn rlx-tox-links';
+    b.setAttribute('aria-label', 'Links to other articles');
+    b.title = LINKS_TITLE;
+    b.tabIndex = -1;
+    // A link with a magnifying glass on it: the toolbar's own link button is
+    // the link alone, two places to the left.
+    const ink = getComputedStyle(after.querySelector('svg') || after).fill || 'currentColor';
+    b.innerHTML = `
+      <span class="tox-icon tox-tbtn__icon-wrap"><svg width="24" height="24" viewBox="0 0 24 24"
+        fill="none" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+        <path fill="none" d="M7.2 10.8l3.6-3.6"/>
+        <path fill="none" d="M9.4 5.6l1.1-1.1a2.7 2.7 0 0 1 3.8 3.8l-1.1 1.1"/>
+        <path fill="none" d="M8.6 12.4l-1.1 1.1a2.7 2.7 0 0 1-3.8-3.8l1.1-1.1"/>
+        <circle fill="none" cx="16.3" cy="16.3" r="3.3"/>
+        <path fill="none" d="M18.7 18.7l2.6 2.6"/>
+      </svg></span><span class="rlx-tox-count"></span>`;
+    b.querySelector('svg').style.stroke = ink === 'none' ? 'currentColor' : ink;
+    b.addEventListener('click', toggleLinks);
+    after.after(b);
+    toolbarLinks = b;
+    paintLinksToggle();
+  }
+
+  /* Everything the panel does goes through here: scan again, find the
+   * candidate for that target in the text as it is NOW, act on it, draw the
+   * panel again. A candidate is named by its target, not by where it was —
+   * the first unlinked occurrence is the one to link, wherever it has moved. */
+  async function linkAct(what, slug, to) {
+    const scan = await scanLinks();
+    if (scan.trouble) return renderLinks(scan);
+    const c = scan.found.find((x) => x.entry.slug === slug);
+    const self = currentSlug();
+    let said = null;
+    if (what === 'show') {
+      said = c ? showLink(c) : 'already linked, or no longer in the text';
+      if (!said) return;      // the selection says it; no redraw to take the focus away
+    } else if (what === 'link') {
+      if (!c) said = 'already linked, or no longer in the text';
+      else {
+        const target = scan.index.entries.get(to || slug) || c.entry;
+        said = writeLink(c, target.slug) || `Linked “${c.words}” to ${target.title}. Ctrl + Z undoes it.`;
+      }
+    } else if (what === 'skip') {
+      const map = readMap(LINKS_SKIP_KEY);
+      map[self] = [...new Set([...(map[self] || []), slug])];
+      writeMap(LINKS_SKIP_KEY, map);
+      said = `${c?.entry.title || slug} will not be offered in this article again.`;
+    } else if (what === 'never') {
+      const map = readMap(LINKS_NEVER_KEY);
+      map[slug] = new Date().toISOString().slice(0, 10);
+      writeMap(LINKS_NEVER_KEY, map);
+      said = `${c?.entry.title || slug} will not be offered in any article again.`;
+    } else if (what === 'forget') {
+      const map = readMap(LINKS_SKIP_KEY);
+      delete map[self];
+      writeMap(LINKS_SKIP_KEY, map);
+      writeMap(LINKS_NEVER_KEY, {});
+      said = 'Everything you set aside is offered again.';
+    }
+    links.said = said;
+    renderLinks(await scanLinks());
+  }
+
+  function linkRow(c) {
+    const e = c.entry;
+    const row = document.createElement('div');
+    row.className = 'rlx-l-row';
+
+    const what = document.createElement('div');
+    what.className = 'rlx-l-what';
+    const words = document.createElement('button');
+    words.className = 'rlx-l-words';
+    words.textContent = c.words;
+    words.title = 'Select these words in the editor';
+    words.addEventListener('click', () => linkAct('show', e.slug));
+    const arrow = document.createElement('span');
+    arrow.className = 'rlx-l-arrow';
+    arrow.textContent = '→';
+    const title = document.createElement('a');
+    title.href = LINK_BASE + e.slug;
+    title.target = '_blank';
+    title.rel = 'noopener';
+    title.textContent = e.title;
+    title.title = 'Open that article in a new tab';
+    const rate = document.createElement('span');
+    rate.className = 'rlx-l-rate';
+    rate.textContent = e.mentioned == null ? '' : `${e.linked}/${e.mentioned}`;
+    rate.title = rateTitle(e);
+    what.append(words, arrow, title, rate);
+
+    // Where it is: the words with a few on either side, as the editor has them.
+    const ctx = document.createElement('div');
+    ctx.className = 'rlx-l-ctx';
+    const text = c.at.text;
+    const a = Math.max(0, c.from - 60), b = Math.min(text.length, c.to + 60);
+    const lit = document.createElement('mark');
+    lit.textContent = text.slice(c.from, c.to);
+    const spaced = (s) => s.replace(/\s+/g, ' ');
+    ctx.append((a ? '…' : '') + spaced(text.slice(a, c.from)).trimStart(), lit,
+               spaced(text.slice(c.to, b)).trimEnd() + (b < text.length ? '…' : ''));
+
+    const acts = document.createElement('div');
+    acts.className = 'rlx-l-acts';
+    const btn = (label, title, fn) => {
+      const el = document.createElement('button');
+      el.textContent = label;
+      el.title = title;
+      el.addEventListener('click', fn);
+      acts.appendChild(el);
+      return el;
+    };
+    btn('Link', `Link these words to ${e.title}`, () => linkAct('link', e.slug)).className = 'rlx-l-go';
+    // The same name, another article: "Fornix (brain)" or the other fornix.
+    for (const o of c.others.slice(0, 3)) {
+      btn(`Link to ${o.title}`, rateTitle(o), () => linkAct('link', e.slug, o.slug));
+    }
+    btn('Not here', 'Do not offer this one in this article again', () => linkAct('skip', e.slug));
+    btn('Never', 'Do not offer this one in any article again', () => linkAct('never', e.slug));
+
+    row.append(what, ctx, acts);
+    return row;
+  }
+
+  function renderLinks(scan) {
+    const panel = links.panel || document.createElement('div');
+    panel.id = 'rlx-links';
+    panel.replaceChildren();
+
+    const head = document.createElement('div');
+    head.className = 'rlx-l-head';
+    const name = document.createElement('strong');
+    name.textContent = 'Links';
+    const sum = document.createElement('span');
+    const shut = document.createElement('button');
+    shut.className = 'rlx-l-close';
+    shut.textContent = '×';
+    shut.title = 'Close (Esc)';
+    shut.addEventListener('click', closeLinks);
+    const again = document.createElement('button');
+    again.className = 'rlx-l-again';
+    again.textContent = '↻';
+    again.title = 'Look again';
+    again.addEventListener('click', () => { links.said = null; openLinks(); });
+    head.append(name, sum, again, shut);
+    panel.appendChild(head);
+
+    if (links.said) {
+      const said = document.createElement('div');
+      said.className = 'rlx-l-said';
+      said.textContent = links.said;
+      panel.appendChild(said);
+    }
+
+    let usual = [], rare = [];
+    if (scan.trouble) {
+      sum.textContent = '';
+      const why = document.createElement('div');
+      why.className = 'rlx-l-empty';
+      why.textContent = scan.trouble;
+      panel.appendChild(why);
+    } else {
+      usual = scan.found.filter((c) => !rarelyLinked(c.entry));
+      rare = scan.found.filter((c) => rarelyLinked(c.entry));
+      sum.textContent = usual.length || rare.length
+        ? `${usual.length} to add` + (rare.length ? ` · ${rare.length} rarely linked` : '')
+        : 'nothing to add';
+
+      const list = document.createElement('div');
+      list.className = 'rlx-l-list';
+      for (const c of usual) list.appendChild(linkRow(c));
+      if (rare.length) {
+        const fold = document.createElement('details');
+        fold.className = 'rlx-l-rare';
+        const label = document.createElement('summary');
+        label.textContent = `Rarely linked elsewhere (${rare.length})`;
+        label.title = 'Fewer than one in seven of the articles that mention these link to them';
+        fold.appendChild(label);
+        for (const c of rare) fold.appendChild(linkRow(c));
+        list.appendChild(fold);
+      }
+      if (!scan.found.length) {
+        const none = document.createElement('div');
+        none.className = 'rlx-l-empty';
+        none.textContent = 'Every article this text names, of the ' +
+          `${scan.index.size} in ${LINKS.file}, is linked already or set aside.`;
+        list.appendChild(none);
+      }
+      panel.appendChild(list);
+
+      const foot = document.createElement('div');
+      foot.className = 'rlx-l-foot';
+      const skipped = (readMap(LINKS_SKIP_KEY)[currentSlug()] || []).length
+        + Object.keys(readMap(LINKS_NEVER_KEY)).length;
+      foot.textContent = `${scan.linked.size} already linked · ${scan.index.size} articles known`;
+      if (skipped) {
+        const forget = document.createElement('button');
+        forget.textContent = `offer the ${skipped} set aside again`;
+        forget.addEventListener('click', () => linkAct('forget'));
+        foot.append(' · ', forget);
+      }
+      panel.appendChild(foot);
+    }
+
+    if (!links.panel) {
+      document.body.appendChild(panel);
+      links.panel = panel;
+      document.addEventListener('keydown', onLinksKey, true);
+      addEventListener('resize', placeLinks);
+    }
+    paintLinksToggle(scan.trouble ? null : usual.length);
+    placeLinks();
+  }
+
+  /* Down the right-hand side, clear of the two things of ours that may
+   * already be there: the box by the title, when it has had to go to the
+   * corner, and the bar, when it runs along the top or the bottom. */
+  function placeLinks() {
+    const p = links.panel;
+    if (!p) return;
+    const span = p.getBoundingClientRect();
+    let top = 18, bottom = innerHeight - 18;
+    for (const el of [group, stage.bar]) {
+      if (!el?.isConnected) continue;
+      const b = el.getBoundingClientRect();
+      if (!b.width || b.right < span.left || b.left > span.right) continue;
+      if (b.top < innerHeight / 2) top = Math.max(top, b.bottom + 8);
+      else bottom = Math.min(bottom, b.top - 8);
+    }
+    p.style.top = `${top}px`;
+    p.style.maxHeight = `${Math.max(160, bottom - top)}px`;
+  }
+
+  /* The panel: down the right-hand side, out of the way of the bar on the
+   * left, the same face as the citation note. Its own stylesheet, so that
+   * everything about the links is in this one stretch of the file. */
+  GM_addStyle(`
+    /* The button in the editor's toolbar: TinyMCE's own classes give it the
+       size and the hover, this gives it room for the number beside the icon. */
+    .tox .tox-tbtn.rlx-tox-links { width:auto; min-width:34px; padding:0 4px; }
+    .tox .tox-tbtn.rlx-tox-links .rlx-tox-count { font:600 11px/1 system-ui,-apple-system,sans-serif;
+      margin-left:1px; }
+    .tox .tox-tbtn.rlx-tox-links .rlx-tox-count:empty { display:none; }
+    #rlx-links {
+      position:fixed; z-index:99998; top:18px; right:18px; width:min(26em, 92vw);
+      max-height:calc(100vh - 36px); display:flex; flex-direction:column;
+      border-radius:2px; border:1px solid var(--rlx-edge); border-left:4px solid #41699b;
+      background:var(--rlx-face); color:var(--rlx-text); box-shadow:var(--rlx-float);
+      font:var(--rlx-size)/var(--rlx-line) var(--rlx-type);
+    }
+    #rlx-links button { font:inherit; cursor:pointer; }
+    #rlx-links .rlx-l-head { display:flex; align-items:baseline; gap:.5em;
+      padding:.55em .5em .45em .8em; border-bottom:1px solid rgba(0,0,0,.08); }
+    #rlx-links .rlx-l-head strong { color:var(--rlx-head); }
+    #rlx-links .rlx-l-head span { flex:1 1 auto; font-size:12px; opacity:.75; }
+    #rlx-links .rlx-l-close, #rlx-links .rlx-l-again { border:none; background:transparent;
+      color:#666; font-size:16px; line-height:1; padding:0 .3em; }
+    #rlx-links .rlx-l-close:hover, #rlx-links .rlx-l-again:hover { color:#111; }
+    #rlx-links .rlx-l-said { padding:.4em .8em; background:rgba(5,150,105,.10); color:#047857;
+      font-size:12px; }
+    #rlx-links .rlx-l-list { overflow:auto; padding:.2em 0; }
+    #rlx-links .rlx-l-row { padding:.5em .8em; border-bottom:1px solid rgba(0,0,0,.06); }
+    #rlx-links .rlx-l-what { display:flex; flex-wrap:wrap; align-items:baseline; gap:.35em; }
+    #rlx-links .rlx-l-words { border:none; background:transparent; padding:0;
+      color:var(--rlx-text); font-weight:600; text-align:left; }
+    #rlx-links .rlx-l-words:hover { text-decoration:underline; }
+    #rlx-links .rlx-l-arrow { opacity:.5; }
+    #rlx-links .rlx-l-what a { color:#41699b; }
+    #rlx-links .rlx-l-rate { margin-left:auto; font-size:11px; opacity:.55;
+      font-variant-numeric:tabular-nums; }
+    #rlx-links .rlx-l-ctx { margin-top:.2em; font-size:12px; line-height:17px; opacity:.8; }
+    #rlx-links .rlx-l-ctx mark { background:rgba(65,105,155,.16); color:inherit; padding:0 1px; }
+    #rlx-links .rlx-l-acts { display:flex; flex-wrap:wrap; gap:4px; margin-top:.35em; }
+    #rlx-links .rlx-l-acts button { padding:2px 8px; border-radius:1px; font-size:12px;
+      border:1px solid rgba(0,0,0,.15); background:#fff; color:#444; }
+    #rlx-links .rlx-l-acts button:hover { background:#f2f2f2; color:#111; }
+    #rlx-links .rlx-l-acts .rlx-l-go { background:var(--rlx-btn); color:#fff; border-color:transparent; }
+    #rlx-links .rlx-l-acts .rlx-l-go:hover { background:var(--rlx-btn-lit); color:#fff; }
+    #rlx-links .rlx-l-rare > summary { padding:.5em .8em; cursor:pointer; font-size:12px;
+      opacity:.75; }
+    #rlx-links .rlx-l-rare .rlx-l-row { opacity:.8; }
+    #rlx-links .rlx-l-empty { padding:.8em; opacity:.75; }
+    #rlx-links .rlx-l-foot { padding:.4em .8em; border-top:1px solid rgba(0,0,0,.08);
+      font-size:11px; opacity:.65; }
+    #rlx-links .rlx-l-foot button { border:none; background:transparent; padding:0;
+      color:#41699b; text-decoration:underline; font-size:11px; }
+  `);
+
+
   // ————————————————————————————————————————————————————————————— wiring
 
   /* The rail waits for the linter, and asks it for nothing.
@@ -8529,7 +9372,10 @@
     if (cached) {
       try { return JSON.parse(cached); } catch { sessionStorage.removeItem(CACHE_KEY + slug); }
     }
-    const data = await askLinter(slug);
+    // `force` is the ↻, and it forgets two copies with one word: this tab's,
+    // by not reading it, and the linter's, by asking it not to answer from it.
+    // Forgetting only the first would fetch the same words back over the wire.
+    const data = await askLinter(slug, { refresh: !!force });
     remember(slug, JSON.stringify(data));
     return data;
   }
@@ -8618,7 +9464,7 @@
     try {
       const all = await findingsFor(slug, { force });
       const findings = byWeight(actionable(all))
-        .map((f) => ({ ...f, state: 'open', range: null, frame: null }));
+        .map((f) => ({ ...f, state: 'open', range: null, frame: null, clips: null }));
       const hidden = knownTally(all);
 
       // Also the answer to "Re-lint" on an article you have just finished
@@ -8653,10 +9499,11 @@
   // ——————————————————————————————————————————————————————— bootstrap
 
   mountButton();
+  mountToolbarLinks();
   // Radiopaedia remounts parts of the page on its own: the button has to be
   // put back whenever it disappears. And in the editor the margin it stands in
   // only exists once the editor has mounted, which is after this runs.
-  new MutationObserver(() => { mountButton(); placeGroupSoon(); })
+  new MutationObserver(() => { mountButton(); mountToolbarLinks(); placeGroupSoon(); })
     .observe(document.body, { childList: true, subtree: true });
   addEventListener('resize', placeGroupSoon);
 

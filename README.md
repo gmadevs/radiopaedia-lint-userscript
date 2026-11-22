@@ -73,6 +73,8 @@ article_type                                            └─  the ones missing
   - [Getting it out](#getting-it-out)
 - [Linting the references](#linting-the-references)
 - [Has it been retracted?](#has-it-been-retracted)
+- [Links to other articles](#links-to-other-articles)
+  - [The list of names](#the-list-of-names)
 - [The sections that are missing](#the-sections-that-are-missing)
   - [What the clipboard carries](#what-the-clipboard-carries)
   - [Required and offered](#required-and-offered)
@@ -191,22 +193,25 @@ The linter answers from what it last read. Fix an article, save it, press **Lint
 same findings can come straight back — out of the copy the linter is answering from, not out of
 the text you just changed.
 
-The `↻` next to the button is what clears that. It presses the same forced reload as the `⟳` on
-[the linter's own page](https://radiopaedia.work/lint/linter?slug=epilepsy), waits while the
-article is read from Radiopaedia again, then forgets what this tab had cached and asks for the new
-answer. In the editor the findings are redrawn on the text; on the article page the button simply
-takes its new colour. It is the one press in the script that costs two requests, so it is the one
-press the script never makes on its own.
+The `↻` next to the button is what clears that. It asks the API with `cache=refresh`, which has
+the linter read the article from Radiopaedia again before it answers, and keeps what comes back —
+so the findings redrawn on the text in the editor, or the new colour of the button on the article
+page, are the new answer and not the old one. It costs about a second more than an ordinary press,
+and one read of the article, which is why the script never presses it for you.
+
+**Re-lint**, in the bar at the bottom of the editor, does the same thing. Before `cache=refresh` it
+skipped only this tab's copy, so re-linting an article you had just saved could come straight back
+with the findings you had fixed.
 
 > [!NOTE]
-> This is also the only POST in the file. The API has no parameter that clears the linter's copy —
-> `force`, `refresh` and `nocache` are all taken and ignored — and the `⟳` on the linter's page is
-> a Livewire action rather than a link. So the script does what pressing it does: it reads that
-> page, takes the token and the state of its `lint` component out of the HTML, and posts them
-> straight back. Nothing of yours travels with them, and nothing is posted at all unless all three
-> parts are there and the state really is that component's. It is somebody's page and not an API —
-> so when it cannot find what it needs it says so in an alert, rather than let you believe the
-> article was read again.
+> Up to 3.20.1 this took two requests and the file's only POST, because the parameter did not
+> exist. The `⟳` on the linter's own page was a Livewire action rather than a link, so the script
+> did what pressing it does: read that page, take the CSRF token and the state of its `lint`
+> component out of the HTML, and post them straight back. That page is now behind a login —
+> `/lint/linter?slug=…` answers `302` to `/login` — so from some point in 2026 the script was
+> reading a login form, finding no component state in it, and refusing the press with an alert. The
+> alert was right: it never let you believe the article had been read again. Nothing in the file
+> reads somebody else's HTML to make this work any more.
 
 ---
 
@@ -1069,6 +1074,106 @@ not retried: it will be served again.
 
 ---
 
+## Links to other articles
+
+A button in the editor's own toolbar, right after the blockquote button (a link with a magnifying
+glass), lists the words in the text that are the title of another Radiopaedia article and are not
+linked to it. Nothing is looked at until you press it. Once it has looked, the button carries the
+number it found. The list opens down the right-hand side of the page, one row per article, with
+the words as the text has them, the article they name, the sentence around them and two numbers
+explained below.
+
+The button wears TinyMCE's classes so that it looks like the buttons around it, but the click is
+handled by the script, not by TinyMCE. When TinyMCE redraws its toolbar and the button goes with
+it, the script puts it back. On a page where no TinyMCE toolbar is found it appears as `link` in
+the box by the title, beside the `⊘`.
+
+| | |
+| :-- | :-- |
+| the words | selects them in the editor and scrolls to them |
+| **Link** | puts a link to that article on exactly those words |
+| **Link to …** | the same words, a different article with the same name ("trident sign" is three) |
+| **Not here** | not offered again in this article |
+| **Never** | not offered again in any article |
+
+The rules are the house rule: one link per target article, at the first place its name occurs.
+
+- An article the text already links to anywhere, even further down, is not offered. A link to one
+  of the slugs that redirect to it counts.
+- The first occurrence in running text is the one offered. Headings, the text of links already
+  there, reference markers and bold are not running text — on Radiopaedia the bold is the
+  article's own name and its synonyms in the first sentence.
+- The longest name wins. "Abducens nerve palsy" is one candidate, and the "abducens nerve" inside
+  it is not offered as well.
+- The article you are editing is never offered.
+- Plurals are the same word ("meningiomas", "thalami"), so are British and American spellings
+  ("oedema", "edema"), a hyphen and a space ("T2-weighted"), and a name with or without its
+  possessive ("Wernicke's"). An abbreviation keeps its case: "CSF" is offered, "csf" is not.
+
+**Link** writes through the editor's own `createLink` command, so TinyMCE marks the form as
+changed and Ctrl + Z takes the link out again. The address is the full one,
+`https://radiopaedia.org/articles/<slug>`, which Radiopaedia renders as a link to its own article.
+Where the words cross other markup — half of them in italics, say — it refuses and says so rather
+than decide how to wrap a link round the tag. The list is worked out again before every press, so
+a row always acts on the text as it is now.
+
+The two numbers are `linked/mentioned`: of the articles that name this one, how many link to it,
+counted on a copy of Radiopaedia (see below). "Meningioma" is 196/219; "brain" is 72/1020 and
+"white matter" 40/428. Names linked less than one time in seven, out of at least five, go under
+a fold called **Rarely linked elsewhere**. They are not hidden, because whether an article should
+link "brain" is an editorial decision and not a threshold.
+
+**Not here** and **Never** are kept in this browser's `localStorage`. The foot of the list says how
+many you have set aside and offers them all again.
+
+> [!NOTE]
+> It knows the articles in its list and no others. The list today is the Central Nervous System
+> export, 2,970 articles, so a word naming a chest or abdominal article is not found.
+
+### The list of names
+
+[`article-links.tsv`](article-links.tsv) is read from `main`, like the word lists, once per tab.
+One line per article:
+
+```
+slug[ redirect …] <TAB> title <TAB> linked/mentioned <TAB> name <TAB> name …
+```
+
+[`tools/article-links.js`](tools/article-links.js) writes it from Radiopaedia's search export (the
+CSV with Title, URL, Systems, Sections). Several exports can be given and are merged, so the list
+can grow one system at a time:
+
+```bash
+node tools/article-links.js ~/Downloads/search.csv
+node tools/article-links.js cns.csv chest.csv --book ../neuropedia/.cache/book.db
+```
+
+From the title alone it takes the qualifier in brackets off ("Salt and pepper sign (skull)" is
+looked for as "salt and pepper sign"), takes an abbreviation in brackets as a name of its own
+("Endovascular clot retrieval (ECR)" is also "ECR"), and leaves out mnemonics, disambiguation
+pages, summaries, approaches and radiograph views. A qualifier is kept when what would be left is
+another article's title: "Tuberous sclerosis complex (diagnostic criteria)" is not looked for as
+"tuberous sclerosis complex".
+
+`--book` is a local copy of the articles (neuropedia's `book.db`, opened read only). With it the
+file also gets the slugs that redirect to each article, the `linked/mentioned` numbers, and the
+other names articles already link with — "CSF" for cerebrospinal fluid, "skull base" for base of
+the skull. One of those is kept when at least three articles use it, at least three quarters of
+the links made with those words go to this article, and the words are linked at least a fifth of
+the times they appear; that last test is what keeps "internal" (nineteen links to the internal
+carotid artery, in a thousand articles that use the word) out of the list.
+
+Measured on that copy, with every link to a listed article taken out of each of its 5,704
+articles: the button finds 86% of them again, and 93% of those at the place the link was. Most of
+the rest are names that mean different articles in different places ("epidermoid cyst" for the
+intracranial one, the spinal one, the skin one), which no list of names can settle.
+
+The matcher is the same code in both places: the tool reads it out of the userscript, as
+`check-structure.js` does, and `node tools/check-links.js` runs it on seventeen sentences written
+to catch what it must get right.
+
+---
+
 ## The sections that are missing
 
 The linter checks the headings that **are** there. `Radiopaedia.HeadingsValid` says when one is
@@ -1307,6 +1412,11 @@ Radiopaedia URL:
 GET https://radiopaedia.work/api/v1/lint?article=pneumothorax
 ```
 
+Two other parameters exist. `cache=refresh` has the linter read the article from Radiopaedia again
+instead of answering from its copy, and is what the `↻` sends. `type` names the article type to
+check the headings against, instead of letting the linter work it out from the headings themselves
+— the script does not send it, and [why not](#the-type-parameter-and-why-it-is-not-sent) is below.
+
 ```jsonc
 {
   "slug": "pneumothorax",
@@ -1332,9 +1442,32 @@ linter's [rendered page](https://radiopaedia.work/lint/linter?slug=pneumothorax)
 but read through Tailwind classes that were never meant as an interface, at 400 kB and ~1.9 s a
 click instead of 14 kB and ~0.6 s.
 
-The page is still the better thing to *read*: it groups findings by check and explains them. The
-script wants them one at a time, in article order, with the offending words marked — which is
-what the API gives.
+That page now wants a login, so the API is not merely the better interface, it is the only one
+left. The script wants the findings one at a time anyway, in article order, with the offending
+words marked — which is what the API gives.
+
+<h4 id="the-type-parameter-and-why-it-is-not-sent">The <code>type</code> parameter, and why it is not sent</h4>
+
+`type` overrides the type the linter detects, and only the heading checks read it — the prose rules
+run the same either way. Sending it can only help if you know the type better than the linter does,
+and the linter works it out from the article's own headings, which is better evidence than anything
+this script has. Measured on `brachial-plexus`:
+
+| sent | `article_type` back | findings |
+|---|---|---|
+| nothing | `anatomy_general` | 16 |
+| `type=general` | `general` | 18 — two heading warnings that are wrong |
+| `type=anatomy_general` | `anatomy_general` | 16, identical to sending nothing |
+| `type=bogus_xyz` | `bogus_xyz` | 16, identical again |
+
+So a wrong type invents findings, a right one changes nothing, and a type the linter does not know
+is ignored for the checks but echoed back in `article_type` as though it had been accepted. There
+is one case where the script does know better — the kind of article *you* picked in the rail, which
+`profileFor()` already prefers over `article_type`. Carrying that choice back to the linter would
+make its heading findings agree with the sections listed in the margin, which today they need not.
+That wants a profile → type map in `article-structure.json`, which has the reverse of it for two
+types out of twenty, and nine of the script's profiles (`sign`, `device`, `comparison`, `mnemonic`,
+`summary`, `anatomy-muscle`, `anatomy-joint`, `anatomy-space`, `other`) have no type to map to.
 
 </details>
 
