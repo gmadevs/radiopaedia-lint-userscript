@@ -6,8 +6,8 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.22.0
-// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. Beside any heading whose newest citation is more than five years old, a chip with the year. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. A link button in the editor's toolbar lists the words in the text that are the title of another Radiopaedia article and are not linked to it anywhere, and links the first occurrence of one when you press Link. A sections button beside it lists, from the text in the editor, the sections this kind of article should have and has not got, and copies the one you pick as a heading with a line drawn where it goes. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
+// @version      3.23.0
+// @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. Beside any heading whose newest citation is more than five years old, a chip with the year. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. Three buttons in the editor's toolbar mark things on the text, the way RadioUpdater marks the linter's findings: the words that are the title of another Radiopaedia article and are not linked to it (Link links the first one), the place where each section this kind of article should have and has not got would go (Add heading writes it in), and the sections whose newest citation is more than five years old (Search PubMed looks for newer). And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
 // @connect      raw.githubusercontent.com
@@ -3605,7 +3605,7 @@
        goes on painting them; they go back when the bar closes. */
     document.documentElement.classList.add('rlx-staged');
     const borrowed = stage.bar.querySelector('.rlx-borrowed');
-    for (const el of [forceBtn, citesToggle, sweepToggle, linksToggle, sectionsToggle]) if (el) borrowed.appendChild(el);
+    for (const el of [forceBtn, citesToggle, sweepToggle, ...Object.values(boxTools)]) if (el) borrowed.appendChild(el);
 
     placeBar(true);
     stage.bar.addEventListener('click', (e) => {
@@ -3665,7 +3665,7 @@
     document.documentElement.classList.remove('rlx-staged');
     if (button?.isConnected && forceBtn) button.after(forceBtn);
     if (group?.isConnected) {
-      for (const el of [citesToggle, sweepToggle, linksToggle, sectionsToggle]) if (el) group.appendChild(el);
+      for (const el of [citesToggle, sweepToggle, ...Object.values(boxTools)]) if (el) group.appendChild(el);
     }
     stage.layer?.remove(); stage.note?.remove(); stage.bar?.remove();
     removeEventListener('scroll', scheduleDraw, true);
@@ -5954,26 +5954,18 @@
       g.appendChild(w);
     }
 
-    /* And the sixth: the words in the text that are the title of another
-       article and are not linked to it. A question like the fifth, asked when
-       it is pressed — the answer is a panel down the right-hand side. */
-    let k = null;
+    /* And three more, only where there is no toolbar to put them in: the
+       links, the missing sections and the old citations, as words. With a
+       toolbar they are buttons in it, and these hide — see `paintTools`. */
     if (inEditor()) {
-      k = document.createElement('button');
-      k.className = 'rlx-auto rlx-links-toggle';
-      k.type = 'button';
-      k.addEventListener('click', () => toggleLinks());
-      g.appendChild(k);
-    }
-
-    // And its pair, for the same page: the sections the text has not got.
-    let q = null;
-    if (inEditor()) {
-      q = document.createElement('button');
-      q.className = 'rlx-auto rlx-sections-toggle';
-      q.type = 'button';
-      q.addEventListener('click', () => toggleSections());
-      g.appendChild(q);
+      for (const key of Object.keys(boxTools)) {
+        const t = document.createElement('button');
+        t.className = `rlx-auto rlx-box-${key}`;
+        t.type = 'button';
+        t.addEventListener('click', () => toggleTool(key));
+        g.appendChild(t);
+        boxTools[key] = t;
+      }
     }
 
     const title = inEditor() ? null : visibleTitle();
@@ -5990,8 +5982,6 @@
     group = g; button = b; toggle = page ? t : null; railToggle = page ? r : null;
     citesToggle = c;
     sweepToggle = w;
-    linksToggle = k;
-    sectionsToggle = q;
     forceBtn = f;
     paintButton();
     paintForce();
@@ -5999,8 +5989,7 @@
     paintRailToggle();
     paintCitesToggle();
     paintSweepToggle();
-    paintLinksToggle();
-    paintSectionsToggle();
+    paintTools();
     placeGroup();
   }
 
@@ -8908,21 +8897,6 @@
     return { range, oneNode: start.node === end.node };
   }
 
-  /* Show: the words selected in the editor and scrolled to the middle of it.
-   * The editor's own selection is the highlight — it is what the link will be
-   * put on, and it is gone the moment you click anywhere else. */
-  function showLink(c) {
-    const spot = linkRange(c);
-    if (!spot) return 'the words are not where they were — scan again';
-    c.at.owner.scrollIntoView?.({ block: 'center' });
-    const doc = spot.range.startContainer.ownerDocument;
-    try { doc.defaultView.focus(); } catch { /* never mind */ }
-    const sel = doc.getSelection();
-    sel?.removeAllRanges();
-    sel?.addRange(spot.range);
-    return null;
-  }
-
   /* Link: the editor's own `createLink` on exactly those words, so TinyMCE
    * hears it, marks the form dirty and Ctrl + Z takes it back — the same
    * bargain every Fix makes, through the same `runCommand`. The href is the
@@ -8936,15 +8910,51 @@
     return runCommand(spot.range, 'createLink', LINK_BASE + slug);
   }
 
-  // ——————————————————————————————————————————————————— the links panel
+  // ——————————————————————————————————————————————— three tools, on the text
 
-  const links = { panel: null, said: null, run: 0, count: null };
-  let linksToggle = null;
+  /* Links, missing sections and old citations, shown the way RadioUpdater
+   * shows the linter's findings in the same editor, so the editor has one way
+   * of showing things: a button in the toolbar with a red count on it, marks
+   * drawn over the text, and pointing at a mark opens a box under it with a
+   * green button that does it and a grey one that leaves it.
+   *
+   * One tool at a time. Pressing another closes the first; pressing the same
+   * one again closes it. The marks are a layer over the page, like every other
+   * highlight in this script, and never a tag inside the editor.
+   *
+   * Nothing found is kept: while a tool is open, every change to the text
+   * asks it again (after the typing stops), so a mark follows its words, a
+   * link you just made takes its mark away, and a heading you just added
+   * takes its line away. The box stays on the same item if it is still there.
+   *
+   * The ids and classes are `rlx-in-*`, not RadioUpdater's port of the old
+   * `rlx-layer` and `rlx-note`, so the two can be open together. */
+
+  const IN_INK = {
+    links:    { ink: '#0284c7', wash: 'rgba(56, 189, 248, .30)', faint: 'rgba(56, 189, 248, .13)' },
+    sections: { ink: '#d97706', wash: 'rgba(217, 119, 6, .16)' },
+    stale:    { ink: '#2563eb', wash: 'rgba(37, 99, 235, .16)' },
+  };
+
+  const review = {
+    tool: null,          // 'links' | 'sections' | 'stale', or null when none is open
+    items: [],
+    i: -1,               // the item the box is about
+    hits: [],            // where each item was drawn, for the pointer to find
+    scan: null,          // what the tool's last look returned
+    said: null,          // a sentence for the box, after an action
+    layer: null, tip: null,
+    run: 0, busy: null,
+    counts: { links: null, sections: null, stale: null },
+    observer: null,
+  };
+
+  // ———————————————————————————————————— the links
 
   /* Rarely linked: of the articles in the copy the file was measured on that
    * name it, fewer than one in seven link it. "Brain", "white matter", "lead".
    * Not hidden — whether an article about the brain should link "brain" is an
-   * editorial call — but kept under a fold, after the ones that usually are. */
+   * editorial call — but marked fainter, and left out of the count. */
   const rarelyLinked = (e) => e.mentioned >= 5 && e.linked / e.mentioned < 0.15;
 
   function rateTitle(e) {
@@ -8952,53 +8962,881 @@
     return `${e.linked} of the ${e.mentioned} articles that mention it link to it`;
   }
 
-  function closeLinks() {
-    links.panel?.remove();
-    links.panel = null;
-    links.said = null;
-    document.removeEventListener('keydown', onLinksKey, true);
-    removeEventListener('resize', placeLinks);
-    paintLinksToggle();
-  }
+  const LINKS_TITLE = 'Links: mark the words that are the title of another article and are ' +
+    'not linked to it yet. Press again to close.';
 
-  function onLinksKey(e) {
-    if (e.key === 'Escape' && links.panel) { e.preventDefault(); closeLinks(); }
-  }
-
-  const LINKS_TITLE = 'Links: find words that are the title of another article and are not ' +
-    'linked to it yet';
-
-  /* `count` is how many the last look found, kept so that a toolbar the
-   * editor has drawn again comes back with the same number on it. `busy` is
-   * the look itself. */
-  function paintLinksToggle(count = links.count, busy = false) {
-    links.count = count;
-    const inToolbar = !!toolbarButtons.links?.isConnected;
-    if (linksToggle) {
-      // One button, not two: the box keeps it only while the toolbar has none.
-      linksToggle.style.display = inToolbar ? 'none' : '';
-      linksToggle.classList.toggle('rlx-on', !!links.panel);
-      linksToggle.disabled = busy;
-      linksToggle.textContent = busy ? 'link …' : count == null ? 'link' : `link ${count}`;
-      linksToggle.title = LINKS_TITLE;
-    }
-    if (inToolbar) paintToolbarButton(toolbarButtons.links, !!links.panel, busy, count);
-  }
-
-  async function openLinks() {
-    if (!inEditor()) return;
-    closeSections();
-    const run = ++links.run;
-    paintLinksToggle(links.count, true);
+  async function linkItems() {
     const scan = await scanLinks();
-    paintLinksToggle(links.count, false);
-    if (run !== links.run) return;
-    renderLinks(scan);
+    if (scan.trouble) return scan;
+    const items = [];
+    for (const c of scan.found) {
+      const spot = linkRange(c);
+      if (!spot) continue;
+      items.push({ key: `link:${c.entry.slug}`, kind: 'words', range: spot.range,
+                   frame: c.at.frame, root: c.at.root, c, faint: rarelyLinked(c.entry) });
+    }
+    return { ...scan, items, count: items.filter((it) => !it.faint).length };
   }
 
-  const toggleLinks = () => (links.panel ? closeLinks() : openLinks());
+  function linkTip(it, box) {
+    const { c } = it, e = c.entry;
+    head(box, 'link', e.mentioned == null ? '' : `${e.linked}/${e.mentioned}`, rateTitle(e));
+    const msg = line(box, 'rlx-in-msg');
+    msg.append(`“${c.words}” → `);
+    const a = document.createElement('a');
+    a.href = LINK_BASE + e.slug;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = e.title;
+    a.title = 'Open that article in a new tab';
+    msg.appendChild(a);
+    if (it.faint) {
+      line(box, 'rlx-in-hint').textContent =
+        `Rarely linked elsewhere: ${e.linked} of the ${e.mentioned} articles that mention it.`;
+    }
+    const acts = actions(box);
+    acts.appendChild(tipButton('Link', `Link these words to ${e.title}`, () => {
+      say(writeLink(c, e.slug) || `Linked to ${e.title}. Ctrl + Z undoes it.`);
+    }, true));
+    for (const o of c.others.slice(0, 3)) {
+      acts.appendChild(tipButton(`Link to ${o.title}`, rateTitle(o), () => {
+        say(writeLink(c, o.slug) || `Linked to ${o.title}. Ctrl + Z undoes it.`);
+      }));
+    }
+    acts.appendChild(tipButton('Leave', 'Leave these words as they are: not offered in this article again', () => {
+      const self = currentSlug();
+      const map = readMap(LINKS_SKIP_KEY);
+      map[self] = [...new Set([...(map[self] || []), e.slug])];
+      writeMap(LINKS_SKIP_KEY, map);
+      say(`${e.title} will not be offered in this article again.`);
+    }));
+    acts.appendChild(tipButton('Never', 'Not offered in any article again', () => {
+      const map = readMap(LINKS_NEVER_KEY);
+      map[e.slug] = new Date().toISOString().slice(0, 10);
+      writeMap(LINKS_NEVER_KEY, map);
+      say(`${e.title} will not be offered in any article again.`);
+    }));
+    const skipped = (readMap(LINKS_SKIP_KEY)[currentSlug()] || []).length +
+      Object.keys(readMap(LINKS_NEVER_KEY)).length;
+    if (skipped) {
+      foot(box).appendChild(tipLink(`offer the ${skipped} left alone again`, () => {
+        const map = readMap(LINKS_SKIP_KEY);
+        delete map[currentSlug()];
+        writeMap(LINKS_SKIP_KEY, map);
+        writeMap(LINKS_NEVER_KEY, {});
+        say('Everything left alone is offered again.');
+      }));
+    }
+  }
 
-  /* The same button in the editor's own toolbar, beside the controls for the
+  // ———————————————————————————————————— the sections
+
+  const SECTIONS_TITLE = 'Sections: mark where the sections this kind of article should have, ' +
+    'and has not got, would go. Press again to close.';
+
+  /* The editor's headings in order, each with the one it sits under — the
+   * same shape `sectionsOnPage` makes out of the published page. h4–h6 are
+   * levels one to three (see `LEVEL_TAG`); an editor that writes h1–h3 instead
+   * is read the same way, so that a change of editor does not leave every
+   * section missing. */
+  function sectionsInEditor(root) {
+    const all = [...root.querySelectorAll('h1, h2, h3, h4, h5, h6')];
+    const deep = all.some((el) => /^H[456]$/.test(el.tagName));
+    const found = [], stack = [];
+    for (const el of all) {
+      const level = +el.tagName[1] - (deep ? 3 : 0);
+      if (level < 1) continue;
+      const title = tidy(el.textContent);
+      if (!title) continue;
+      while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
+      const parent = stack.length ? stack[stack.length - 1].title : null;
+      stack.push({ level, title });
+      found.push({ el, level, title, parent });
+    }
+    return { found, deep };
+  }
+
+  /* The article body is the longest of the editor's fields, as the paste
+   * marker already decides. */
+  function editorBody() {
+    const roots = editorRoots().filter((r) => (r.root.textContent || '').trim().length > 40);
+    if (!roots.length) return null;
+    return roots.reduce((a, b) =>
+      (b.root.textContent || '').length > (a.root.textContent || '').length ? b : a);
+  }
+
+  /* The title, for the profile rules that read it ("… sign", "… fracture").
+   * The form's own field when it can be found, the slug otherwise. */
+  function editorTitle() {
+    const field = document.querySelector(
+      'input[name="article[title]"], input#article_title, input[name$="[title]"]');
+    return tidy(field?.value) ||
+      tidy(String(currentSlug() || '').replace(/-\d+$/, '').replace(/-/g, ' '));
+  }
+
+  /* The rail's question, of the text in the editor. The canon, the profile,
+   * `whatIsMissing` and `anchorFor` are the rail's own, so the two cannot
+   * disagree about an article. The kind of article travels in the lint
+   * answer, which is kept for the session; when it is not there, this press is
+   * what asks for it, and a linter that cannot be reached leaves the title to
+   * decide. */
+  async function scanSections() {
+    if (!await canon()) return { trouble: 'article-structure.json could not be read from GitHub.' };
+    const body = editorBody();
+    if (!body) return { trouble: 'Cannot find the editor text.' };
+    let type = null;
+    try { type = (await lintResult(currentSlug()))?.article_type ?? null; } catch { type = null; }
+    const { found, deep } = sectionsInEditor(body.root);
+    const profileName = profileFor(editorTitle(), type);
+    const measured = whatIsMissing(profileName, found);
+    const canonName = measured.canonName || CANON.profiles[profileName]?.canon;
+    for (const row of measured.rows) {
+      const where = anchorFor(row, measured.seen, canonName);
+      row.anchor = where.el;
+      row.inside = where.inside;
+    }
+    return { rows: measured.rows, seen: measured.seen, jumbled: !!measured.jumbled,
+             profileName, canonName, body, type, found, deep };
+  }
+
+  /* Where a missing section goes, as a block of the text and an edge of it:
+   * above the heading it comes before; for a subsection, at the end of the
+   * section it belongs under, just before the next heading of that level or
+   * higher; and at the end of the text when there is nothing to come before. */
+  function sectionPlace(row, scan) {
+    const root = scan.body.root;
+    if (row.anchor && !row.inside) return { before: row.anchor };
+    if (row.anchor && row.inside) {
+      const own = scan.found.find((s) => s.el === row.anchor);
+      const next = own && scan.found.find((s) =>
+        s.level <= own.level &&
+        (own.el.compareDocumentPosition(s.el) & Node.DOCUMENT_POSITION_FOLLOWING));
+      if (next) return { before: next.el };
+    }
+    return { before: null, last: root.lastElementChild };
+  }
+
+  function whereItGoes(row) {
+    const beside = row.anchor ? tidy(row.anchor.textContent) : null;
+    if (!beside) return 'at the end of the article';
+    return row.inside ? `at the end of “${beside}”` : `above “${beside}”`;
+  }
+
+  async function sectionItems() {
+    const scan = await scanSections();
+    if (scan.trouble) return scan;
+    const aside = hushedHere().filter((entry) => !entry.startsWith('stale:')).length;
+    const content = railContent(scan.rows, aside, showOptional());
+    const items = [];
+    for (const row of content.shown) {
+      const place = sectionPlace(row, scan);
+      const el = place.before || place.last;
+      if (!el) continue;
+      items.push({ key: `section:${row.entry}`, kind: 'line', el, edge: place.before ? 'top' : 'bottom',
+                   frame: scan.body.frame, root: scan.body.root, row, label: row.title,
+                   faint: !row.required });
+    }
+    return { ...scan, items, count: content.need, aside, optional: content.optional.length };
+  }
+
+  function sectionTip(it, box) {
+    const { row } = it, scan = review.scan;
+    head(box, 'missing section', row.required ? 'required' : 'offered',
+         row.modality ? 'Radiographic features has no modality under it'
+           : `${row.required ? 'Required' : 'Offered'} by the ${scan.canonName} structure: ${row.entry}`);
+    line(box, 'rlx-in-msg').textContent = row.modality
+      ? `An imaging subheading (CT, MRI, …) goes ${whereItGoes(row)}: one for a modality the article has images of.`
+      : `“${row.title}” goes ${whereItGoes(row)}.`;
+    if (scan.jumbled) {
+      line(box, 'rlx-in-hint').textContent = 'Some sections are not in the order the structure ' +
+        'puts them in, so this place is approximate.';
+    }
+    const acts = actions(box);
+    if (!row.modality) {
+      acts.appendChild(tipButton('Add heading', `Write “${row.title}” into the text here, as a heading`,
+        () => addSection(it), true));
+    }
+    acts.appendChild(tipButton('Not needed', 'This article does not need it', () => {
+      hush(row.entry);
+      say(`${row.title} will not be asked for in this article again.`);
+    }));
+
+    sectionControls(box, scan);
+  }
+
+  /* The rail header's controls: the kind of article, the optional ones, what
+   * was set aside. Under every section's box, and in the box that says
+   * nothing required is missing, since that is when the optional ones are
+   * the only thing left to ask for. */
+  function sectionControls(box, scan) {
+    const f = foot(box);
+    const kind = document.createElement('select');
+    kind.title = 'What kind of article this is. The structure follows from it.';
+    for (const [name, p] of Object.entries(CANON.profiles)) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = p.label || name;
+      opt.selected = name === scan.profileName;
+      kind.appendChild(opt);
+    }
+    kind.addEventListener('change', () => { chooseProfile(kind.value); say(null); });
+    f.appendChild(kind);
+    if (scan.optional || showOptional()) {
+      f.appendChild(tipLink(`${showOptional() ? 'hide' : 'show'} ${scan.optional} optional`, () => {
+        setShowOptional(!showOptional());
+        say(null);
+      }));
+    }
+    if (scan.aside) {
+      f.appendChild(tipLink(`ask again for the ${scan.aside} set aside`, () => { unhushAll(); say(null); }));
+    }
+  }
+
+  /* Add heading: the heading written into the text with the editor's own
+   * means, so that it is the editor's change, it marks the form as changed,
+   * and Ctrl + Z takes it out — a new line, the toolbar's own H1, H2 or H3
+   * on it, and the words typed in.
+   *
+   * Above a heading, the new line is made by pressing Enter at the start of
+   * that heading, which leaves an empty block above it; at the end of the
+   * text, by pressing Enter at the end of the last block, twice when that
+   * block is a list item, since the first Enter only makes another item.
+   * Each step waits a moment, so the editor has caught up with the caret
+   * before the next one.
+   *
+   * Then it checks. If the heading is not there at the end of it, the words
+   * go on the clipboard as a heading and the amber line marks where to paste
+   * them, which is what the rail's chips have always done. */
+  // A timer rather than an animation frame: a tab in the background gets no frames.
+  const nextFrame = () => new Promise((r) => setTimeout(r, 40));
+
+  function caretAt(doc, node, offset) {
+    const sel = doc.getSelection();
+    const r = doc.createRange();
+    r.setStart(node, offset);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+
+  function edgeOf(el, end) {
+    if (!end) {
+      const w = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const t = w.nextNode();
+      return t ? { node: t, offset: 0 } : { node: el, offset: 0 };
+    }
+    const w = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let t = null;
+    for (let n = w.nextNode(); n; n = w.nextNode()) t = n;
+    return t ? { node: t, offset: t.nodeValue.length } : { node: el, offset: el.childNodes.length };
+  }
+
+  const blockOf = (node, root) => {
+    let el = node.nodeType === 1 ? node : node.parentElement;
+    el = el?.closest(BLOCKS);
+    return el && root.contains(el) && el !== root ? el : null;
+  };
+
+  async function addSection(it) {
+    const { row } = it, scan = review.scan, body = scan.body, root = body.root;
+    const doc = root.ownerDocument, win = doc.defaultView;
+    const tag = scan.deep ? `H${row.level + 3}` : `H${row.level}`;
+    const place = sectionPlace(row, scan);
+    const fail = (why) => {
+      fallbackCopy(row, scan);
+      say(`${why} “${row.title}” is on the clipboard as a heading: paste it on the amber line.`);
+    };
+    try {
+      try { win.focus(); } catch { /* never mind */ }
+      root.focus?.({ preventScroll: true });
+
+      let block;
+      if (place.before) {
+        const at = edgeOf(place.before, false);
+        caretAt(doc, at.node, at.offset);
+        await nextFrame();
+        if (!doc.execCommand('insertParagraph')) return fail('The editor would not make a new line.');
+        await nextFrame();
+        block = place.before.previousElementSibling;
+        if (!block || tidy(block.textContent)) block = blockOf(doc.getSelection().anchorNode, root);
+      } else {
+        const last = place.last;
+        const at = edgeOf(last, true);
+        caretAt(doc, at.node, at.offset);
+        await nextFrame();
+        if (!doc.execCommand('insertParagraph')) return fail('The editor would not make a new line.');
+        await nextFrame();
+        block = blockOf(doc.getSelection().anchorNode, root);
+        if (block?.tagName === 'LI') {
+          doc.execCommand('insertParagraph');
+          await nextFrame();
+          block = blockOf(doc.getSelection().anchorNode, root);
+        }
+      }
+      if (!block || tidy(block.textContent)) return fail('The new line is not where it should be.');
+
+      // Into the empty block, then its level from the toolbar's own button.
+      const inside = edgeOf(block, false);
+      caretAt(doc, inside.node, inside.offset);
+      await nextFrame();
+      if (block.tagName !== tag) {
+        const levelButton = headingControl(row.level);
+        if (levelButton) {
+          levelButton.click();
+          await nextFrame();
+        } else {
+          doc.execCommand('formatBlock', false, tag.toLowerCase());
+          await nextFrame();
+        }
+      }
+      doc.execCommand('insertText', false, row.title);
+      await nextFrame();
+
+      const made = [...root.querySelectorAll('h1, h2, h3, h4, h5, h6')]
+        .some((h) => normaliseHeading(h.textContent) === normaliseHeading(row.title));
+      if (!made) return fail('The heading did not come out as a heading.');
+      say(`Added “${row.title}”. Ctrl + Z undoes it, a step at a time.`);
+    } catch {
+      fail('The editor refused the change.');
+    }
+  }
+
+  /* The toolbar's own button for a heading level: H1 for level one, as the
+   * toolbar names them. */
+  function headingControl(level) {
+    const editor = editorRoots()[0];
+    const host = editor && (editor.frame || editor.root);
+    const members = host && toolbarRow(host);
+    return members?.find((el) => controlNamed(el, `h${level}`)) || null;
+  }
+
+  /* The rail's chip, for when writing it in did not work. */
+  function fallbackCopy(row, scan) {
+    const memo = {
+      slug: currentSlug(), text: row.title, level: row.level, modality: false,
+      anchor: row.anchor ? tidy(row.anchor.textContent) : null,
+      inside: !!row.inside, at: Date.now(),
+    };
+    copyAsHeading(memo.text, memo.level);
+    rememberPaste(memo);
+    openPasteMark(memo, findPasteSpot(memo, scan.body), scan.body);
+  }
+
+  function sectionEmpty(box, scan) {
+    line(box, 'rlx-in-msg').textContent = 'Every section Radiopaedia requires is there.';
+    sectionControls(box, scan);
+  }
+
+  // ———————————————————————————————————— the old citations
+
+  const STALE_TITLE = `Old citations: mark the sections whose newest citation is more than ` +
+    `${STALE_AFTER} years old. Press again to close.`;
+
+  /* The references as the form holds them, one box each: {number: {year, text}}.
+   * The number is the one written at the start of the box, or its place in the
+   * list when it has none. Links go before the year is read, as on the page,
+   * since a DOI can hold anything that looks like a year. */
+  function referencesInForm() {
+    const refs = new Map();
+    for (const row of referenceFields()) {
+      const doc = new DOMParser().parseFromString(String(row.input.value || ''), 'text/html');
+      doc.querySelectorAll('a').forEach((a) => a.remove());
+      const text = tidy(doc.body.textContent || '').replace(CITE_NUM, '');
+      refs.set(row.n ?? row.pos, { year: referenceYear(text), text });
+    }
+    return refs;
+  }
+
+  /* `staleSections`, with the editor's headings in place of the page's. */
+  async function staleItems() {
+    const body = editorBody();
+    if (!body) return { trouble: 'Cannot find the editor text.' };
+    const refs = referencesInForm();
+    if (!refs.size) return { trouble: 'No references found in the form to date the citations by.' };
+    const { found } = sectionsInEditor(body.root);
+    const heads = new Set(found.map((s) => s.el));
+    const level = new Map(found.map((s) => [s.el, s.level]));
+    const thisYear = new Date().getFullYear();
+
+    const sections = [];
+    let section = null;
+    for (const el of body.root.querySelectorAll('h1, h2, h3, h4, h5, h6, sup')) {
+      if (el.tagName !== 'SUP') {
+        if (!heads.has(el)) continue;
+        section = { heading: el, cited: new Set() };
+        sections.push(section);
+        continue;
+      }
+      const marker = tidy(el.textContent || '');
+      if (!section || !CITATION_NUMBERS.test(marker) || unitExponent(el)) continue;
+      citedNumbers(marker).forEach((n) => section.cited.add(n));
+    }
+
+    const hushed = new Set(hushedHere());
+    const items = [];
+    for (const { heading, cited } of sections) {
+      const name = normaliseHeading(heading.textContent);
+      const entry = `stale:${name}`;
+      if (!cited.size || TIMELESS_HEADINGS.has(name) || hushed.has(entry)) continue;
+      const refsHere = [...cited].map((n) => ({ n, ...refs.get(n) }));
+      if (refsHere.some((r) => !r.year)) continue;
+      const newest = Math.max(...refsHere.map((r) => r.year));
+      const age = thisYear - newest;
+      if (age <= STALE_AFTER) continue;
+      refsHere.sort((a, b) => b.year - a.year || a.n - b.n);
+      const range = heading.ownerDocument.createRange();
+      range.selectNodeContents(heading);
+      items.push({ key: entry, kind: 'words', range, frame: body.frame, root: body.root,
+                   entry, heading: tidy(heading.textContent), newest, age, refs: refsHere,
+                   level: level.get(heading) });
+    }
+    return { items, count: items.length, body };
+  }
+
+  function staleTip(it, box) {
+    head(box, 'old citations', `newest ${it.newest}`, '');
+    line(box, 'rlx-in-msg').textContent =
+      `The newest citation under “${it.heading}” is from ${it.newest}, ${it.age} years ago.`;
+    const list = line(box, 'rlx-in-refs');
+    for (const r of it.refs.slice(0, 6)) {
+      const li = document.createElement('div');
+      li.textContent = `${r.n}. ${r.text.length > 140 ? r.text.slice(0, 139) + '…' : r.text}`;
+      list.appendChild(li);
+    }
+    if (it.refs.length > 6) list.lastChild.after(`… and ${it.refs.length - 6} more`);
+    const acts = actions(box);
+    acts.appendChild(tipButton('Search PubMed', 'Papers on this from the last five years, in a new tab', () => {
+      const from = new Date().getFullYear() - STALE_AFTER;
+      const term = `${editorTitle()} ${/^(radiographic features|imaging)$/i.test(it.heading) ? 'imaging' : it.heading}`;
+      window.open(`https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(term)}` +
+                  `&filter=years.${from}-${new Date().getFullYear()}&sort=date`, '_blank', 'noopener');
+    }, true));
+    acts.appendChild(tipButton('Leave', 'This section can keep its older citations', () => {
+      hush(it.entry);
+      say(`“${it.heading}” can keep its older citations.`);
+    }));
+  }
+
+  // ———————————————————————————————————— the tools, in one list
+
+  const TOOLS = {
+    links:    { title: () => LINKS_TITLE, scan: linkItems, tip: linkTip,
+                none: 'Every article this text names is linked already, or left alone.' },
+    sections: { title: () => SECTIONS_TITLE, scan: sectionItems, tip: sectionTip,
+                none: 'Every section Radiopaedia requires is there.',
+                // Nothing to mark, but the optional ones and the kind are still worth a box.
+                empty: (scan) => (scan.optional || scan.aside || showOptional() ? sectionEmpty : null) },
+    stale:    { title: () => STALE_TITLE, scan: staleItems, tip: staleTip,
+                none: `No section's newest citation is more than ${STALE_AFTER} years old.` },
+  };
+
+  const toggleTool = (key) => (review.tool === key ? closeTool() : openTool(key));
+
+  async function openTool(key) {
+    if (!inEditor()) return;
+    closeTool();
+    review.tool = key;
+    review.said = null;
+    const scan = await lookAgain(true);
+    if (!scan || review.tool !== key) return;
+    if (!review.items.length) {
+      if (!scan.trouble && TOOLS[key].empty?.(scan)) return;   // the box says it, with its controls
+      const why = scan.trouble || TOOLS[key].none;
+      closeTool();
+      if (scan.trouble) alert(why); else showBanner(why);
+      return;
+    }
+    setItem(review.items.findIndex((it) => !it.faint) >= 0
+      ? review.items.findIndex((it) => !it.faint) : 0, true);
+  }
+
+  function closeTool() {
+    const was = review.tool;
+    review.tool = null;
+    review.run++;
+    review.items = [];
+    review.hits = [];
+    review.i = -1;
+    review.scan = null;
+    review.layer?.remove();
+    review.tip?.remove();
+    review.layer = review.tip = null;
+    review.observer?.disconnect();
+    review.observer = null;
+    removeEventListener('scroll', drawSoon, true);
+    removeEventListener('resize', drawSoon);
+    document.removeEventListener('mousemove', onToolMove, true);
+    document.removeEventListener('keydown', onToolKey, true);
+    if (was) paintTools();
+  }
+
+  /* Ask the open tool again and draw what it says, keeping the box on the
+   * item it was on when that item is still there. */
+  async function lookAgain(first) {
+    const key = review.tool;
+    if (!key) return null;
+    const run = ++review.run;
+    review.busy = key;
+    paintTools();
+    let scan;
+    try { scan = await TOOLS[key].scan(); } catch (err) { scan = { trouble: err.message }; }
+    review.busy = null;
+    if (run !== review.run || review.tool !== key) { paintTools(); return null; }
+
+    const was = review.items[review.i]?.key;
+    review.scan = scan;
+    review.items = scan.items || [];
+    review.counts[key] = scan.trouble ? null : scan.count;
+    if (first) mountStage();
+    /* The item the box was on, if it is still there; if it has just gone —
+       linked, added, left alone — the one that took its place in the list, so
+       the box moves on to the next thing to look at rather than closing. */
+    let k = review.items.findIndex((it) => it.key === was);
+    if (k < 0 && was && review.i >= 0 && review.items.length) k = Math.min(review.i, review.items.length - 1);
+    // Nothing was current — the box was saying there was nothing — and now there is.
+    if (k < 0 && !was && !first && review.items.length) k = 0;
+    review.i = k;
+    paintTools();
+    renderTip();
+    drawTool();
+    return scan;
+  }
+
+  function mountStage() {
+    review.layer = document.createElement('div');
+    review.layer.id = 'rlx-in-layer';
+    document.body.appendChild(review.layer);
+    review.tip = document.createElement('div');
+    review.tip.id = 'rlx-in-tip';
+    review.tip.hidden = true;
+    document.body.appendChild(review.tip);
+
+    addEventListener('scroll', drawSoon, true);
+    addEventListener('resize', drawSoon);
+    document.addEventListener('mousemove', onToolMove, true);
+    document.addEventListener('keydown', onToolKey, true);
+
+    // Scrolling and the pointer inside an iframe do not reach the page above.
+    // Changes to the text are watched as mutations rather than `input`, which
+    // undo and the toolbar's buttons do not fire in every editor.
+    review.observer = new MutationObserver(changedSoon);
+    for (const { frame, root } of editorRoots()) {
+      review.observer.observe(root, { childList: true, subtree: true, characterData: true });
+      const w = frame?.contentWindow;
+      if (w && !w.__rlxInListening) {
+        w.__rlxInListening = true;
+        w.addEventListener('scroll', drawSoon, true);
+        w.document.addEventListener('mousemove', (e) => onToolHover(e, frame), true);
+      }
+    }
+  }
+
+  let changedPending = null;
+  function changedSoon() {
+    clearTimeout(changedPending);
+    changedPending = setTimeout(() => { if (review.tool) lookAgain(false); }, 600);
+  }
+
+  /* After an action: the sentence for the box, and a fresh look. The look is
+   * what takes the mark away — the text has changed under it, or the thing it
+   * was about has been set aside. */
+  function say(text) {
+    review.said = text;
+    if (review.tool) lookAgain(false);
+  }
+
+  // ———————————————————————————————————— drawing
+
+  let toolDrawPending = null;
+  function drawSoon() {
+    if (toolDrawPending) return;
+    toolDrawPending = requestAnimationFrame(() => { toolDrawPending = null; drawTool(); });
+  }
+
+  function itemBox(it) {
+    it.clips = it.clips || clipChain(it.frame || it.root);
+    return clipOf(it);
+  }
+
+  /* The rectangles of one item, in page coordinates and cut to what the text
+   * is scrolled inside. Words are one box per line, as the lint marks are; a
+   * missing section is a line across the block it goes against. */
+  function itemRects(it) {
+    const off = it.frame?.isConnected ? it.frame.getBoundingClientRect() : { left: 0, top: 0 };
+    const box = itemBox(it);
+    const cut = (r) => {
+      if (!box) return r;
+      const x1 = Math.max(r.x, box.left), y1 = Math.max(r.y, box.top);
+      const x2 = Math.min(r.x + r.w, box.right), y2 = Math.min(r.y + r.h, box.bottom);
+      return x2 > x1 && y2 > y1 ? { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } : null;
+    };
+    if (it.kind === 'line') {
+      if (!it.el?.isConnected) return [];
+      const r = it.el.getBoundingClientRect();
+      const y = (it.edge === 'top' ? r.top - 4 : r.bottom + 2) + off.top;
+      const line = cut({ x: r.left + off.left, y, w: Math.max(80, r.width), h: 3 });
+      return line ? [line] : [];
+    }
+    let rects;
+    try { rects = it.range.getClientRects(); } catch { return []; }
+    const spans = [];
+    for (const r of rects) {
+      if (!r.width || !r.height) continue;
+      const c = cut({ x: r.left + off.left, y: r.top + off.top, w: r.width, h: r.height });
+      if (c) spans.push(c);
+    }
+    return mergeLines(spans);
+  }
+
+  function drawTool() {
+    const { layer } = review;
+    if (!layer) return;
+    layer.textContent = '';
+    review.hits = [];
+    const c = IN_INK[review.tool] || IN_INK.links;
+    review.items.forEach((it, k) => {
+      const rects = itemRects(it);
+      const size = rects.reduce((s, r) => s + r.w * r.h, 0);
+      for (const r of rects) {
+        const mark = document.createElement('div');
+        if (it.kind === 'line') {
+          mark.className = 'rlx-in-line' + (k === review.i ? ' rlx-in-current' : '');
+          mark.style.cssText = `left:${r.x}px; top:${r.y}px; width:${r.w}px; background:${c.ink};` +
+            (it.faint ? 'opacity:.45;' : '');
+          const tag = document.createElement('span');
+          tag.className = 'rlx-in-tag';
+          tag.textContent = `+ ${it.label}`;
+          tag.style.background = c.ink;
+          if (it.faint) tag.style.opacity = '.6';
+          mark.appendChild(tag);
+          // The line and the tag above it are what the pointer can find.
+          review.hits.push({ k, size: 1, x: r.x, y: r.y - 20, w: r.w, h: 26 });
+        } else {
+          mark.className = 'rlx-in-mark' + (k === review.i ? ' rlx-in-current' : '');
+          mark.style.cssText = `left:${r.x - PAD_X}px; top:${r.y - PAD_Y}px; ` +
+            `width:${r.w + PAD_X * 2}px; height:${r.h + PAD_Y * 2}px; ` +
+            `background:${it.faint ? c.faint || c.wash : c.wash}; outline-color:${c.ink};`;
+          review.hits.push({ k, size, ...r });
+        }
+        layer.appendChild(mark);
+      }
+    });
+    placeTip();
+  }
+
+  // ———————————————————————————————————— the box
+
+  function head(box, what, aside, asideTitle) {
+    const h = document.createElement('div');
+    h.className = 'rlx-in-head';
+    const name = document.createElement('span');
+    name.className = 'rlx-in-what';
+    name.style.color = (IN_INK[review.tool] || IN_INK.links).ink;
+    name.textContent = what;
+    const right = document.createElement('span');
+    right.textContent = aside || '';
+    if (asideTitle) right.title = asideTitle;
+    const nav = document.createElement('span');
+    nav.className = 'rlx-in-nav';
+    const n = review.items.length;
+    const prev = document.createElement('button');
+    prev.textContent = '‹';
+    prev.title = 'Previous';
+    prev.addEventListener('mousedown', (e) => e.preventDefault());
+    prev.addEventListener('click', () => step(-1));
+    const at = document.createElement('span');
+    at.textContent = `${review.i + 1}/${n}`;
+    const next = document.createElement('button');
+    next.textContent = '›';
+    next.title = 'Next';
+    next.addEventListener('mousedown', (e) => e.preventDefault());
+    next.addEventListener('click', () => step(1));
+    nav.append(prev, at, next);
+    h.append(name, right, nav);
+    box.appendChild(h);
+  }
+
+  function line(box, cls) {
+    const el = document.createElement('div');
+    el.className = cls;
+    box.appendChild(el);
+    return el;
+  }
+
+  function actions(box) { return line(box, 'rlx-in-acts'); }
+  function foot(box) { return box.querySelector('.rlx-in-foot') || line(box, 'rlx-in-foot'); }
+
+  function tipButton(label, title, what, primary) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.title = title;
+    if (primary) b.className = 'rlx-in-go';
+    b.addEventListener('mousedown', (e) => e.preventDefault());   // the caret stays in the text
+    b.addEventListener('click', what);
+    return b;
+  }
+
+  function tipLink(label, what) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'rlx-in-link';
+    b.textContent = label;
+    b.addEventListener('click', what);
+    return b;
+  }
+
+  function renderTip() {
+    const { tip } = review;
+    if (!tip) return;
+    tip.textContent = '';
+    const it = review.items[review.i];
+    const empty = !it && review.scan && !review.scan.trouble && TOOLS[review.tool]?.empty?.(review.scan);
+    tip.hidden = !it && !review.said && !empty;
+    if (!it) {
+      tip.style.borderLeftColor = (IN_INK[review.tool] || IN_INK.links).ink;
+      if (review.said) line(tip, 'rlx-in-said').textContent = review.said;
+      if (empty) empty(tip, review.scan);
+      placeTip();
+      return;
+    }
+    tip.style.borderLeftColor = (IN_INK[review.tool] || IN_INK.links).ink;
+    TOOLS[review.tool].tip(it, tip);
+    if (review.said) {
+      const said = document.createElement('div');
+      said.className = 'rlx-in-said';
+      said.textContent = review.said;
+      tip.insertBefore(said, tip.children[1] || null);
+    }
+    const f = tip.querySelector('.rlx-in-foot');
+    if (f) tip.appendChild(f);   // the footer last, whichever tool wrote it
+  }
+
+  /* Under the marks, as RadioUpdater's note is, or above them when there is
+   * no room below; hidden while they are scrolled out of view. A message with
+   * no item stays where it was. */
+  function placeTip() {
+    const { tip } = review;
+    if (!tip || tip.hidden) return;
+    const it = review.items[review.i];
+    if (!it) {
+      // Nothing to stand under: under the tool's own button, or the top right.
+      const b = toolbarButtons[review.tool]?.isConnected ? toolbarButtons[review.tool]
+        : boxTools[review.tool];
+      const r = b?.getBoundingClientRect();
+      const w = tip.offsetWidth;
+      tip.style.visibility = '';
+      tip.style.top = `${r && r.height ? r.bottom + 8 : 18}px`;
+      tip.style.left = `${Math.max(12, Math.min((r && r.width ? r.left : innerWidth) , innerWidth - w - 12))}px`;
+      return;
+    }
+    const rects = review.hits.filter((h) => h.k === review.i);
+    if (!rects.length) { tip.style.visibility = 'hidden'; return; }
+    tip.style.visibility = '';
+    const spot = {
+      left: Math.min(...rects.map((r) => r.x)), top: Math.min(...rects.map((r) => r.y)),
+      right: Math.max(...rects.map((r) => r.x + r.w)), bottom: Math.max(...rects.map((r) => r.y + r.h)),
+    };
+    // A line above a heading: the box goes under the heading, not over it.
+    if (it.kind === 'line' && it.edge === 'top' && it.el?.isConnected) {
+      const off = it.frame?.isConnected ? it.frame.getBoundingClientRect() : { top: 0 };
+      spot.bottom = Math.max(spot.bottom, it.el.getBoundingClientRect().bottom + off.top);
+    }
+    const w = tip.offsetWidth, h = tip.offsetHeight, gap = 6, edge = 12;
+    let top = spot.bottom + gap;
+    if (top + h > innerHeight - edge && spot.top - h - gap > edge) top = spot.top - h - gap;
+    const left = Math.min(Math.max(spot.left, edge), Math.max(edge, innerWidth - w - edge));
+    tip.style.left = `${left}px`;
+    tip.style.top = `${Math.min(Math.max(top, edge), Math.max(edge, innerHeight - h - edge))}px`;
+  }
+
+  function setItem(k, scroll) {
+    review.i = k;
+    const it = review.items[k];
+    if (it && scroll) {
+      const el = it.kind === 'line' ? it.el
+        : (it.range.startContainer.nodeType === 1 ? it.range.startContainer : it.range.startContainer.parentElement);
+      try { el?.scrollIntoView({ block: 'center' }); it.frame?.scrollIntoView({ block: 'nearest' }); } catch { /* stale */ }
+    }
+    renderTip();
+    drawTool();
+  }
+
+  function step(dir) {
+    const n = review.items.length;
+    if (!n) return;
+    setItem(((review.i < 0 ? (dir > 0 ? -1 : 0) : review.i) + dir + n) % n, true);
+  }
+
+  /* Pointing at a mark opens its box, and the pointer can cross to the box to
+   * press something: a short wait before moving off one, so crossing another
+   * mark on the way does not swap it. */
+  let toolHoverTimer = null, toolHoverWanted = -1;
+
+  function itemAt(x, y) {
+    let best = null;
+    for (const h of review.hits) {
+      const inside = x >= h.x - PAD_X && x <= h.x + h.w + PAD_X && y >= h.y - PAD_Y && y <= h.y + h.h + PAD_Y;
+      if (inside && (!best || h.size < best.size)) best = h;
+    }
+    return best ? best.k : -1;
+  }
+
+  function onToolHover(e, frame) {
+    if (!review.tool) return;
+    if (e.target?.closest?.('#rlx-in-tip')) { clearTimeout(toolHoverTimer); toolHoverWanted = review.i; return; }
+    const off = frame ? frame.getBoundingClientRect() : { left: 0, top: 0 };
+    const want = itemAt(e.clientX + off.left, e.clientY + off.top);
+    if (want < 0 || want === toolHoverWanted) return;   // off every mark: the box stays
+    toolHoverWanted = want;
+    clearTimeout(toolHoverTimer);
+    if (want !== review.i) toolHoverTimer = setTimeout(() => setItem(want, false), 200);
+  }
+
+  const onToolMove = (e) => onToolHover(e, null);
+
+  function onToolKey(e) {
+    if (e.key === 'Escape' && review.tool && !isTyping(e.target)) { e.preventDefault(); closeTool(); }
+  }
+
+  // ———————————————————————————————————— the buttons
+
+  /* A red count on the toolbar button, as RadioUpdater's Lint has: how many
+   * there are to look at, while the tool is open. Grey while looking. The box
+   * by the title keeps the last count as a word, since it has no badge. */
+  function paintTools() {
+    for (const key of Object.keys(TOOLS)) {
+      const open = review.tool === key, busy = review.busy === key;
+      const count = review.counts[key];
+      const b = toolbarButtons[key];
+      const inToolbar = !!b?.isConnected;
+      if (inToolbar) {
+        b.classList.toggle('rlx-open', open);
+        b.setAttribute('aria-pressed', String(open));
+        b.title = TOOLS[key].title();
+        b.querySelector('.rlx-tb-badge')?.remove();
+        if (busy || (open && count)) {
+          const n = document.createElement('span');
+          n.className = 'rlx-tb-badge' + (busy ? ' rlx-tb-busy' : '');
+          n.textContent = busy ? '…' : String(count);
+          b.appendChild(n);
+        }
+      }
+      const box = boxTools[key];
+      if (box) {
+        box.style.display = inToolbar ? 'none' : '';
+        box.classList.toggle('rlx-on', open);
+        box.disabled = busy;
+        box.textContent = `${BOX_WORD[key]}${busy ? ' …' : count == null ? '' : ` ${count}`}`;
+        box.title = TOOLS[key].title();
+      }
+    }
+  }
+
+  const BOX_WORD = { links: 'link', sections: 'sections', stale: 'dates' };
+  const boxTools = { links: null, sections: null, stale: null };
+
+  /* The same buttons in the editor's own toolbar, beside the controls for the
    * text, where somebody editing it already looks.
    *
    * Found the way RadioUpdater finds its citation button, and for the reason
@@ -9009,14 +9847,11 @@
    * row with a heading control in it — "P H1 H2 H3" is one group of several,
    * and not the biggest.
    *
-   * Inside that row it stands after RadioUpdater's two buttons, the quotation
-   * mark and the Ω, when they are there, so the three tools of ours sit
-   * together; after H3 (or H2, or H1) when they are not; at the end of the row
-   * when no heading can be recognised. RadioUpdater mounting later puts its
-   * pair straight after H3, which is in front of this one: same order.
-   *
-   * The sections button comes straight after it: the two questions this
-   * script asks of the text, side by side.
+   * Inside that row they stand after RadioUpdater's two buttons, the quotation
+   * mark and the Ω, when they are there; after H3 (or H2, or H1) when they are
+   * not; at the end of the row when no heading can be recognised.
+   * RadioUpdater mounting later puts its buttons straight after H3, in front
+   * of these: same order.
    *
    * Each button is a clone of the control it stands beside, emptied: same tag
    * and classes, so it has the toolbar's size and hover, and none of the
@@ -9024,12 +9859,12 @@
    * press is caught before the editor sees it, and the mousedown is swallowed
    * so the caret in the text stays where it was.
    *
-   * The editor draws its toolbar again when it likes and takes the button
+   * The editor draws its toolbar again when it likes and takes the buttons
    * away when it does. The page's MutationObserver calls this on every
-   * change, so it comes back on the next one. Looking costs a walk over the
+   * change, so they come back on the next one. Looking costs a walk over the
    * form, so while there is no toolbar to be found it is done twice a second
-   * at most. A page with no toolbar keeps `link` in the box by the title. */
-  const toolbarButtons = { links: null, sections: null };
+   * at most. A page with no toolbar keeps them in the box by the title. */
+  const toolbarButtons = { links: null, sections: null, stale: null };
   let toolbarTried = 0;
   const TOOLBAR_CONTROL = 'button, a, [role="button"], input[type="button"], input[type="submit"]';
   const TOOLBAR_HEADINGS = ['h3', 'h2', 'h1'];
@@ -9047,7 +9882,7 @@
       scope = scope.parentElement;
       const rows = new Map();
       for (const el of scope.querySelectorAll(TOOLBAR_CONTROL)) {
-        if (el.closest('.rlx-panel, .rcx-panel') || host.contains(el) || el.contains(host)) continue;
+        if (el.closest('#rlx-in-tip, .rcx-panel') || host.contains(el) || el.contains(host)) continue;
         if (!(host.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) continue;
         const bar = el.parentElement;
         if (!bar) continue;
@@ -9077,29 +9912,33 @@
     return members[members.length - 1];
   }
 
-  const LINKS_ICON = `<svg class="rlx-tb-icon" viewBox="0 0 24 24" aria-hidden="true">
+  const ICONS = {
+    // A link with a magnifying glass: the toolbar's own link button is the link alone.
+    links: `
       <path stroke="currentColor" d="M7.2 10.8l3.6-3.6"/>
       <path stroke="currentColor" d="M9.4 5.6l1.1-1.1a2.7 2.7 0 0 1 3.8 3.8l-1.1 1.1"/>
       <path stroke="currentColor" d="M8.6 12.4l-1.1 1.1a2.7 2.7 0 0 1-3.8-3.8l1.1-1.1"/>
       <path stroke="currentColor" d="M19.6 16.3a3.3 3.3 0 1 1-6.6 0a3.3 3.3 0 1 1 6.6 0"/>
-      <path stroke="currentColor" d="M18.7 18.7l2.6 2.6"/>
-    </svg><span class="rlx-tb-count"></span>`;
-
-  /* A list of lines with an empty one in the middle and a plus beside it: a
-   * section that is not there yet. */
-  const SECTIONS_ICON = `<svg class="rlx-tb-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke="currentColor" d="M18.7 18.7l2.6 2.6"/>`,
+    // Lines with an empty one in the middle and a plus: a section not there yet.
+    sections: `
       <path stroke="currentColor" d="M3.5 6.5h10"/>
       <path stroke="currentColor" stroke-dasharray="2 2.2" d="M3.5 12h10"/>
       <path stroke="currentColor" d="M3.5 17.5h10"/>
       <path stroke="currentColor" d="M18.5 9v6"/>
-      <path stroke="currentColor" d="M15.5 12h6"/>
-    </svg><span class="rlx-tb-count"></span>`;
+      <path stroke="currentColor" d="M15.5 12h6"/>`,
+    // A calendar page: how old the citations are.
+    stale: `
+      <path stroke="currentColor" d="M5 6.5h14v13H5z"/>
+      <path stroke="currentColor" d="M5 10.5h14"/>
+      <path stroke="currentColor" d="M9 4.5v4M15 4.5v4"/>
+      <path stroke="currentColor" d="M12 13v3l2 1.5"/>`,
+  };
 
   const TOOLBAR_TOOLS = [
-    { key: 'links', label: 'Links to other articles', title: () => LINKS_TITLE,
-      icon: LINKS_ICON, press: () => toggleLinks() },
-    { key: 'sections', label: 'Missing sections', title: () => SECTIONS_TITLE,
-      icon: SECTIONS_ICON, press: () => toggleSections() },
+    { key: 'links', label: 'Links to other articles' },
+    { key: 'sections', label: 'Missing sections' },
+    { key: 'stale', label: 'Old citations' },
   ];
 
   function toolbarClone(anchor, tool) {
@@ -9109,29 +9948,22 @@
         if (name !== 'class' && name !== 'style') el.removeAttribute(name);
       }
     }
-    b.classList.remove('rcx-btn', 'rcx-btn-cite', 'rcx-btn-chars', 'rcx-open',
-                       'rlx-tb-links', 'rlx-tb-sections');
+    b.classList.remove('rcx-btn', 'rcx-btn-cite', 'rcx-btn-chars', 'rcx-open', 'rlx-tool',
+                       'rlx-tb-links', 'rlx-tb-sections', 'rlx-tb-stale', 'rlx-open');
     b.classList.add('rlx-tb-tool', `rlx-tb-${tool.key}`);
-    b.innerHTML = tool.icon;
+    b.innerHTML = `<svg class="rlx-tb-icon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[tool.key]}</svg>`;
     if (b.tagName === 'BUTTON') b.type = 'button';
     b.setAttribute('role', 'button');
     b.setAttribute('tabindex', '0');
-    b.setAttribute('title', tool.title());
+    b.setAttribute('title', TOOLS[tool.key].title());
     b.setAttribute('aria-label', tool.label);
     b.addEventListener('mousedown', (e) => e.preventDefault(), true);
     b.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopImmediatePropagation();
-      tool.press();
+      toggleTool(tool.key);
     }, true);
     return b;
-  }
-
-  function paintToolbarButton(b, open, busy, count) {
-    b.classList.toggle('rlx-open', open);
-    b.setAttribute('aria-pressed', String(open));
-    b.setAttribute('aria-disabled', String(busy));
-    b.querySelector('.rlx-tb-count').textContent = busy ? '…' : count == null ? '' : String(count);
   }
 
   function mountToolbarTools() {
@@ -9159,659 +9991,82 @@
       toolbarButtons[tool.key] = b;
       after = b;
     }
-    paintLinksToggle();
-    paintSectionsToggle();
+    paintTools();
   }
 
-  /* Everything the panel does goes through here: scan again, find the
-   * candidate for that target in the text as it is NOW, act on it, draw the
-   * panel again. A candidate is named by its target, not by where it was —
-   * the first unlinked occurrence is the one to link, wherever it has moved. */
-  async function linkAct(what, slug, to) {
-    const scan = await scanLinks();
-    if (scan.trouble) return renderLinks(scan);
-    const c = scan.found.find((x) => x.entry.slug === slug);
-    const self = currentSlug();
-    let said = null;
-    if (what === 'show') {
-      said = c ? showLink(c) : 'already linked, or no longer in the text';
-      if (!said) return;      // the selection says it; no redraw to take the focus away
-    } else if (what === 'link') {
-      if (!c) said = 'already linked, or no longer in the text';
-      else {
-        const target = scan.index.entries.get(to || slug) || c.entry;
-        said = writeLink(c, target.slug) || `Linked “${c.words}” to ${target.title}. Ctrl + Z undoes it.`;
-      }
-    } else if (what === 'skip') {
-      const map = readMap(LINKS_SKIP_KEY);
-      map[self] = [...new Set([...(map[self] || []), slug])];
-      writeMap(LINKS_SKIP_KEY, map);
-      said = `${c?.entry.title || slug} will not be offered in this article again.`;
-    } else if (what === 'never') {
-      const map = readMap(LINKS_NEVER_KEY);
-      map[slug] = new Date().toISOString().slice(0, 10);
-      writeMap(LINKS_NEVER_KEY, map);
-      said = `${c?.entry.title || slug} will not be offered in any article again.`;
-    } else if (what === 'forget') {
-      const map = readMap(LINKS_SKIP_KEY);
-      delete map[self];
-      writeMap(LINKS_SKIP_KEY, map);
-      writeMap(LINKS_NEVER_KEY, {});
-      said = 'Everything you set aside is offered again.';
-    }
-    links.said = said;
-    renderLinks(await scanLinks());
-  }
-
-  function linkRow(c) {
-    const e = c.entry;
-    const row = document.createElement('div');
-    row.className = 'rlx-l-row';
-
-    const what = document.createElement('div');
-    what.className = 'rlx-l-what';
-    const words = document.createElement('button');
-    words.className = 'rlx-l-words';
-    words.textContent = c.words;
-    words.title = 'Select these words in the editor';
-    words.addEventListener('click', () => linkAct('show', e.slug));
-    const arrow = document.createElement('span');
-    arrow.className = 'rlx-l-arrow';
-    arrow.textContent = '→';
-    const title = document.createElement('a');
-    title.href = LINK_BASE + e.slug;
-    title.target = '_blank';
-    title.rel = 'noopener';
-    title.textContent = e.title;
-    title.title = 'Open that article in a new tab';
-    const rate = document.createElement('span');
-    rate.className = 'rlx-l-rate';
-    rate.textContent = e.mentioned == null ? '' : `${e.linked}/${e.mentioned}`;
-    rate.title = rateTitle(e);
-    what.append(words, arrow, title, rate);
-
-    // Where it is: the words with a few on either side, as the editor has them.
-    const ctx = document.createElement('div');
-    ctx.className = 'rlx-l-ctx';
-    const text = c.at.text;
-    const a = Math.max(0, c.from - 60), b = Math.min(text.length, c.to + 60);
-    const lit = document.createElement('mark');
-    lit.textContent = text.slice(c.from, c.to);
-    const spaced = (s) => s.replace(/\s+/g, ' ');
-    ctx.append((a ? '…' : '') + spaced(text.slice(a, c.from)).trimStart(), lit,
-               spaced(text.slice(c.to, b)).trimEnd() + (b < text.length ? '…' : ''));
-
-    const acts = document.createElement('div');
-    acts.className = 'rlx-l-acts';
-    const btn = (label, title, fn) => {
-      const el = document.createElement('button');
-      el.textContent = label;
-      el.title = title;
-      el.addEventListener('click', fn);
-      acts.appendChild(el);
-      return el;
-    };
-    btn('Link', `Link these words to ${e.title}`, () => linkAct('link', e.slug)).className = 'rlx-l-go';
-    // The same name, another article: "Fornix (brain)" or the other fornix.
-    for (const o of c.others.slice(0, 3)) {
-      btn(`Link to ${o.title}`, rateTitle(o), () => linkAct('link', e.slug, o.slug));
-    }
-    btn('Not here', 'Do not offer this one in this article again', () => linkAct('skip', e.slug));
-    btn('Never', 'Do not offer this one in any article again', () => linkAct('never', e.slug));
-
-    row.append(what, ctx, acts);
-    return row;
-  }
-
-  function renderLinks(scan) {
-    const panel = links.panel || document.createElement('div');
-    panel.id = 'rlx-links';
-    panel.classList.add('rlx-panel');
-    panel.replaceChildren();
-
-    const head = document.createElement('div');
-    head.className = 'rlx-l-head';
-    const name = document.createElement('strong');
-    name.textContent = 'Links';
-    const sum = document.createElement('span');
-    const shut = document.createElement('button');
-    shut.className = 'rlx-l-close';
-    shut.textContent = '×';
-    shut.title = 'Close (Esc)';
-    shut.addEventListener('click', closeLinks);
-    const again = document.createElement('button');
-    again.className = 'rlx-l-again';
-    again.textContent = '↻';
-    again.title = 'Look again';
-    again.addEventListener('click', () => { links.said = null; openLinks(); });
-    head.append(name, sum, again, shut);
-    panel.appendChild(head);
-
-    if (links.said) {
-      const said = document.createElement('div');
-      said.className = 'rlx-l-said';
-      said.textContent = links.said;
-      panel.appendChild(said);
-    }
-
-    let usual = [], rare = [];
-    if (scan.trouble) {
-      sum.textContent = '';
-      const why = document.createElement('div');
-      why.className = 'rlx-l-empty';
-      why.textContent = scan.trouble;
-      panel.appendChild(why);
-    } else {
-      usual = scan.found.filter((c) => !rarelyLinked(c.entry));
-      rare = scan.found.filter((c) => rarelyLinked(c.entry));
-      sum.textContent = usual.length || rare.length
-        ? `${usual.length} to add` + (rare.length ? ` · ${rare.length} rarely linked` : '')
-        : 'nothing to add';
-
-      const list = document.createElement('div');
-      list.className = 'rlx-l-list';
-      for (const c of usual) list.appendChild(linkRow(c));
-      if (rare.length) {
-        const fold = document.createElement('details');
-        fold.className = 'rlx-l-rare';
-        const label = document.createElement('summary');
-        label.textContent = `Rarely linked elsewhere (${rare.length})`;
-        label.title = 'Fewer than one in seven of the articles that mention these link to them';
-        fold.appendChild(label);
-        for (const c of rare) fold.appendChild(linkRow(c));
-        list.appendChild(fold);
-      }
-      if (!scan.found.length) {
-        const none = document.createElement('div');
-        none.className = 'rlx-l-empty';
-        none.textContent = 'Every article this text names, of the ' +
-          `${scan.index.size} in ${LINKS.file}, is linked already or set aside.`;
-        list.appendChild(none);
-      }
-      panel.appendChild(list);
-
-      const foot = document.createElement('div');
-      foot.className = 'rlx-l-foot';
-      const skipped = (readMap(LINKS_SKIP_KEY)[currentSlug()] || []).length
-        + Object.keys(readMap(LINKS_NEVER_KEY)).length;
-      foot.textContent = `${scan.linked.size} already linked · ${scan.index.size} articles known`;
-      if (skipped) {
-        const forget = document.createElement('button');
-        forget.textContent = `offer the ${skipped} set aside again`;
-        forget.addEventListener('click', () => linkAct('forget'));
-        foot.append(' · ', forget);
-      }
-      panel.appendChild(foot);
-    }
-
-    if (!links.panel) {
-      document.body.appendChild(panel);
-      links.panel = panel;
-      document.addEventListener('keydown', onLinksKey, true);
-      addEventListener('resize', placeLinks);
-    }
-    paintLinksToggle(scan.trouble ? null : usual.length);
-    placeLinks();
-  }
-
-  /* Down the right-hand side, clear of the two things of ours that may
-   * already be there: the box by the title, when it has had to go to the
-   * corner, and the bar, when it runs along the top or the bottom. */
-  function placeLinks() { placePanel(links.panel); }
-
-  function placePanel(p) {
-    if (!p) return;
-    const span = p.getBoundingClientRect();
-    let top = 18, bottom = innerHeight - 18;
-    for (const el of [group, stage.bar]) {
-      if (!el?.isConnected) continue;
-      const b = el.getBoundingClientRect();
-      if (!b.width || b.right < span.left || b.left > span.right) continue;
-      if (b.top < innerHeight / 2) top = Math.max(top, b.bottom + 8);
-      else bottom = Math.min(bottom, b.top - 8);
-    }
-    p.style.top = `${top}px`;
-    p.style.maxHeight = `${Math.max(160, bottom - top)}px`;
-  }
-
-  /* The panel: down the right-hand side, out of the way of the bar on the
-   * left, the same face as the citation note. Its own stylesheet, so that
-   * everything about the links is in this one stretch of the file. */
   GM_addStyle(`
-    /* The button in the editor's toolbar. Its classes are the toolbar's, and
-       were written to draw somebody else's icon — a sprite, a glyph in
+    /* The buttons in the editor's toolbar. Their classes are the toolbar's,
+       and were written to draw somebody else's icon — a sprite, a glyph in
        ::before, a text-indent — so all of that is taken back here, the way
-       RadioUpdater does for its own two. Stroked paths hollow, whatever the
+       RadioUpdater does for its own. Stroked paths hollow, whatever the
        toolbar's icon CSS says about fill. */
     .rlx-tb-tool {
+      position:relative !important;
       color:#333 !important; background-image:none !important; text-indent:0 !important;
       font-size:14px !important; line-height:1 !important; letter-spacing:normal !important;
       overflow:visible !important; visibility:visible !important; opacity:1 !important;
-      display:inline-flex !important; align-items:center; justify-content:center; gap:2px;
+      display:inline-flex !important; align-items:center; justify-content:center;
       min-width:0 !important; min-height:0 !important;
       padding-left:6px !important; padding-right:6px !important; cursor:pointer;
     }
     .rlx-tb-tool::before, .rlx-tb-tool::after,
     .rlx-tb-tool *::before, .rlx-tb-tool *::after { content:none !important; display:none !important; }
-    .rlx-tb-tool * { background-image:none !important; text-indent:0 !important; color:inherit !important; }
+    .rlx-tb-tool * { background-image:none !important; text-indent:0 !important; }
     .rlx-tb-tool .rlx-tb-icon { width:1.35em !important; height:1.35em !important;
-      display:block !important; flex:0 0 auto; }
-    .rlx-tb-tool .rlx-tb-icon path { fill:none !important; stroke-width:1.8; stroke-linecap:round; }
-    .rlx-tb-tool .rlx-tb-count { font:600 11px/1 system-ui,-apple-system,sans-serif !important; }
-    .rlx-tb-tool .rlx-tb-count:empty { display:none !important; }
+      display:block !important; flex:0 0 auto; color:inherit; }
+    .rlx-tb-tool .rlx-tb-icon path { fill:none !important; stroke-width:1.8; stroke-linecap:round;
+      stroke-linejoin:round; }
     .rlx-tb-tool.rlx-open { background:#ddd !important; }
-    .rlx-panel {
-      position:fixed; z-index:99998; top:18px; right:18px; width:min(26em, 92vw);
-      max-height:calc(100vh - 36px); display:flex; flex-direction:column;
-      border-radius:2px; border:1px solid var(--rlx-edge); border-left:4px solid #41699b;
-      background:var(--rlx-face); color:var(--rlx-text); box-shadow:var(--rlx-float);
-      font:var(--rlx-size)/var(--rlx-line) var(--rlx-type);
+    /* RadioUpdater's count: a red pill on the corner of the button. */
+    .rlx-tb-tool .rlx-tb-badge { position:absolute; top:-5px; right:-5px; min-width:15px;
+      padding:0 3px; border-radius:8px; background:#dc2626; color:#fff !important;
+      font:700 10px/15px system-ui,-apple-system,sans-serif !important; text-align:center;
+      white-space:nowrap; pointer-events:none; }
+    .rlx-tb-tool .rlx-tb-badge.rlx-tb-busy { background:#9ca3af; }
+
+    #rlx-in-layer { position:fixed; inset:0; pointer-events:none; z-index:99996; }
+    .rlx-in-mark { position:fixed; border-radius:2px; }
+    .rlx-in-mark.rlx-in-current { outline:2px solid; outline-offset:1px; }
+    .rlx-in-line { position:fixed; height:3px; border-radius:2px; }
+    .rlx-in-line.rlx-in-current { box-shadow:0 0 0 2px rgba(217,119,6,.25); }
+    .rlx-in-tag { position:absolute; right:0; bottom:5px; padding:0 6px; border-radius:2px;
+      color:#fff; font:600 11px/16px system-ui,-apple-system,sans-serif; white-space:nowrap; }
+
+    /* RadioUpdater's note, so that the two read as one way of showing things. */
+    #rlx-in-tip {
+      position:fixed; z-index:99999; max-width:min(30em, 78vw);
+      padding:.6em .8em; border-radius:8px; border-left:4px solid;
+      background:#fff; color:#111; box-shadow:0 6px 24px rgba(0,0,0,.22);
+      font:14px/1.45 system-ui,-apple-system,sans-serif;
     }
-    .rlx-panel button { font:inherit; cursor:pointer; }
-    .rlx-panel .rlx-l-head { display:flex; align-items:baseline; gap:.5em;
-      padding:.55em .5em .45em .8em; border-bottom:1px solid rgba(0,0,0,.08); }
-    .rlx-panel .rlx-l-head strong { color:var(--rlx-head); }
-    .rlx-panel .rlx-l-head span { flex:1 1 auto; font-size:12px; opacity:.75; }
-    .rlx-panel .rlx-l-close, .rlx-panel .rlx-l-again { border:none; background:transparent;
-      color:#666; font-size:16px; line-height:1; padding:0 .3em; }
-    .rlx-panel .rlx-l-close:hover, .rlx-panel .rlx-l-again:hover { color:#111; }
-    .rlx-panel .rlx-l-said { padding:.4em .8em; background:rgba(5,150,105,.10); color:#047857;
-      font-size:12px; }
-    .rlx-panel .rlx-l-list { overflow:auto; padding:.2em 0; }
-    .rlx-panel .rlx-l-row { padding:.5em .8em; border-bottom:1px solid rgba(0,0,0,.06); }
-    .rlx-panel .rlx-l-what { display:flex; flex-wrap:wrap; align-items:baseline; gap:.35em; }
-    .rlx-panel .rlx-l-words { border:none; background:transparent; padding:0;
-      color:var(--rlx-text); font-weight:600; text-align:left; }
-    .rlx-panel .rlx-l-words:hover { text-decoration:underline; }
-    .rlx-panel .rlx-l-arrow { opacity:.5; }
-    .rlx-panel .rlx-l-what a { color:#41699b; }
-    .rlx-panel .rlx-l-rate { margin-left:auto; font-size:11px; opacity:.55;
-      font-variant-numeric:tabular-nums; }
-    .rlx-panel .rlx-l-ctx { margin-top:.2em; font-size:12px; line-height:17px; opacity:.8; }
-    .rlx-panel .rlx-l-ctx mark { background:rgba(65,105,155,.16); color:inherit; padding:0 1px; }
-    .rlx-panel .rlx-l-acts { display:flex; flex-wrap:wrap; gap:4px; margin-top:.35em; }
-    .rlx-panel .rlx-l-acts button { padding:2px 8px; border-radius:1px; font-size:12px;
-      border:1px solid rgba(0,0,0,.15); background:#fff; color:#444; }
-    .rlx-panel .rlx-l-acts button:hover { background:#f2f2f2; color:#111; }
-    .rlx-panel .rlx-l-acts .rlx-l-go { background:var(--rlx-btn); color:#fff; border-color:transparent; }
-    .rlx-panel .rlx-l-acts .rlx-l-go:hover { background:var(--rlx-btn-lit); color:#fff; }
-    .rlx-panel .rlx-l-rare > summary { padding:.5em .8em; cursor:pointer; font-size:12px;
-      opacity:.75; }
-    .rlx-panel .rlx-l-rare .rlx-l-row { opacity:.8; }
-    .rlx-panel .rlx-l-empty { padding:.8em; opacity:.75; }
-    .rlx-panel .rlx-l-foot { padding:.4em .8em; border-top:1px solid rgba(0,0,0,.08);
-      font-size:11px; opacity:.65; }
-    .rlx-panel .rlx-l-ctl { display:flex; flex-wrap:wrap; gap:4px; padding:.45em .8em;
-      border-bottom:1px solid rgba(0,0,0,.06); }
-    .rlx-panel .rlx-l-ctl select, .rlx-panel .rlx-l-ctl button { font-size:12px; padding:2px 6px;
-      border:1px solid rgba(0,0,0,.15); border-radius:1px; background:#fff; color:#444; }
-    .rlx-panel .rlx-l-ctl select { max-width:100%; min-width:0; }
-    .rlx-panel .rlx-s-name { font-weight:600; }
-    .rlx-panel .rlx-s-opt .rlx-s-name { font-weight:400; opacity:.8; }
-    .rlx-panel .rlx-s-warn { background:rgba(217,119,6,.10); color:#b45309; }
-    #rlx-sections { border-left-color:var(--rlx-miss, #d97706); }
-    .rlx-panel .rlx-l-foot button { border:none; background:transparent; padding:0;
-      color:#41699b; text-decoration:underline; font-size:11px; }
+    #rlx-in-tip .rlx-in-head { display:flex; gap:.5em; align-items:baseline;
+      font-size:12px; text-transform:uppercase; letter-spacing:.04em; opacity:.8; }
+    #rlx-in-tip .rlx-in-what { font-weight:700; }
+    #rlx-in-tip .rlx-in-nav { margin-left:auto; display:flex; align-items:baseline; gap:.2em;
+      text-transform:none; letter-spacing:0; }
+    #rlx-in-tip .rlx-in-nav button { border:none; background:transparent; padding:0 .3em;
+      font:700 15px/1 system-ui,-apple-system,sans-serif; color:inherit; cursor:pointer; }
+    #rlx-in-tip .rlx-in-msg { margin-top:.35em; }
+    #rlx-in-tip .rlx-in-msg a { color:#0369a1; }
+    #rlx-in-tip .rlx-in-hint { margin-top:.4em; font-size:12px; opacity:.62; }
+    #rlx-in-tip .rlx-in-said { margin-top:.4em; padding:.25em .5em; border-radius:6px;
+      background:rgba(5,150,105,.10); color:#047857; font-size:13px; }
+    #rlx-in-tip .rlx-in-refs { margin-top:.4em; font-size:12px; opacity:.75;
+      max-height:9em; overflow:auto; }
+    #rlx-in-tip .rlx-in-acts { display:flex; gap:.4em; margin-top:.6em; flex-wrap:wrap; }
+    #rlx-in-tip .rlx-in-acts button { padding:.25em .7em; border:1px solid rgba(127,127,127,.35);
+      border-radius:6px; background:transparent; color:inherit;
+      font:600 13px/1.4 system-ui,-apple-system,sans-serif; cursor:pointer; }
+    #rlx-in-tip .rlx-in-acts button:hover { background:rgba(127,127,127,.18); }
+    #rlx-in-tip .rlx-in-acts button.rlx-in-go { background:#059669; border-color:transparent; color:#fff; }
+    #rlx-in-tip .rlx-in-acts button.rlx-in-go:hover { background:#047857; }
+    #rlx-in-tip .rlx-in-foot { display:flex; flex-wrap:wrap; align-items:center; gap:.6em;
+      margin-top:.55em; padding-top:.45em; border-top:1px solid rgba(0,0,0,.08); font-size:12px; }
+    #rlx-in-tip .rlx-in-foot select { max-width:100%; font-size:12px; }
+    #rlx-in-tip .rlx-in-link { border:none; background:transparent; padding:0; color:#41699b;
+      text-decoration:underline; font:inherit; font-size:12px; cursor:pointer; }
   `);
 
-
-
-  // ————————————————————————————————————————— the sections, in the editor
-
-  /* The rail's question, asked of the text in the editor rather than of the
-   * published page: which sections this kind of article should have and has
-   * not got, and where each would go.
-   *
-   * Everything that decides the answer is the rail's own — the canon, the
-   * profile, `whatIsMissing`, `anchorFor`, the sections you said an article
-   * does not need — so the two cannot disagree about an article. What changes
-   * is where the headings are read from: the editor holds them as h4, h5 and
-   * h6, which its toolbar calls H1, H2 and H3 (see `LEVEL_TAG`), and a
-   * heading you typed a minute ago counts here before it has been published.
-   *
-   * Copy is the chip's click: the heading on the clipboard at its level, and
-   * the amber line drawn on the text where it goes. Nothing is written into
-   * the editor from here, for the reason the rail gives — a heading is a block,
-   * and where a block lands when it is pasted is the editor's business. */
-  const sections = { panel: null, said: null, run: 0, count: null, scan: null, watching: null };
-  let sectionsToggle = null;
-  const SECTIONS_TITLE = 'Sections: the headings this kind of article should have and this one ' +
-    'has not got yet';
-
-  /* The editor's headings in order, each with the one it sits under — the
-   * same shape `sectionsOnPage` makes out of the published page. h4–h6 are
-   * levels one to three; an editor that writes h1–h3 instead is read the same
-   * way, so that a change of toolbar does not leave every section missing. */
-  function sectionsInEditor(root) {
-    const all = [...root.querySelectorAll('h1, h2, h3, h4, h5, h6')];
-    const deep = all.some((el) => /^H[456]$/.test(el.tagName));
-    const found = [], stack = [];
-    for (const el of all) {
-      const level = +el.tagName[1] - (deep ? 3 : 0);
-      if (level < 1) continue;
-      const title = tidy(el.textContent);
-      if (!title) continue;
-      while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
-      const parent = stack.length ? stack[stack.length - 1].title : null;
-      stack.push({ level, title });
-      found.push({ el, level, title, parent });
-    }
-    return found;
-  }
-
-  /* The article body is the longest of the editor's fields, as the paste
-   * marker already decides. */
-  function editorBody() {
-    const roots = editorRoots().filter((r) => (r.root.textContent || '').trim().length > 40);
-    if (!roots.length) return null;
-    return roots.reduce((a, b) =>
-      (b.root.textContent || '').length > (a.root.textContent || '').length ? b : a);
-  }
-
-  /* The title, for the profile rules that read it ("… sign", "… fracture").
-   * The form's own field when it can be found, the slug otherwise. */
-  function editorTitle() {
-    const field = document.querySelector(
-      'input[name="article[title]"], input#article_title, input[name$="[title]"]');
-    return tidy(field?.value) ||
-      tidy(String(currentSlug() || '').replace(/-\d+$/, '').replace(/-/g, ' '));
-  }
-
-  /* The kind of article travels in the lint answer, as it does for the rail.
-   * That answer is kept for the session, so it is usually here already; when
-   * it is not, this press is what asks for it, and a linter that cannot be
-   * reached leaves the title to decide, which is what `profileFor` does with
-   * no type. */
-  async function scanSections() {
-    if (!await canon()) return { trouble: 'article-structure.json could not be read from GitHub.' };
-    const body = editorBody();
-    if (!body) return { trouble: 'Cannot find the editor text.' };
-    let type = null;
-    try { type = (await lintResult(currentSlug()))?.article_type ?? null; } catch { type = null; }
-    const found = sectionsInEditor(body.root);
-    const profileName = profileFor(editorTitle(), type);
-    const measured = whatIsMissing(profileName, found);
-    const canonName = measured.canonName || CANON.profiles[profileName]?.canon;
-    for (const row of measured.rows) {
-      const where = anchorFor(row, measured.seen, canonName);
-      row.anchor = where.el;
-      row.inside = where.inside;
-    }
-    return { rows: measured.rows, seen: measured.seen, jumbled: !!measured.jumbled,
-             profileName, canonName, body, type, found };
-  }
-
-  function whereItGoes(row) {
-    const beside = row.anchor ? tidy(row.anchor.textContent) : null;
-    if (!beside) return '↓ at the end of the article';
-    return row.inside ? `↳ inside “${beside}”` : `↑ above “${beside}”`;
-  }
-
-  function closeSections() {
-    sections.panel?.remove();
-    sections.panel = null;
-    sections.said = null;
-    sections.scan = null;
-    document.removeEventListener('keydown', onSectionsKey, true);
-    removeEventListener('resize', placeSections);
-    watchSections(null);
-    paintSectionsToggle();
-  }
-
-  function onSectionsKey(e) {
-    if (e.key === 'Escape' && sections.panel) { e.preventDefault(); closeSections(); }
-  }
-
-  function paintSectionsToggle(count = sections.count, busy = false) {
-    sections.count = count;
-    const inToolbar = !!toolbarButtons.sections?.isConnected;
-    if (sectionsToggle) {
-      sectionsToggle.style.display = inToolbar ? 'none' : '';
-      sectionsToggle.classList.toggle('rlx-on', !!sections.panel);
-      sectionsToggle.disabled = busy;
-      sectionsToggle.textContent = busy ? 'sections …'
-        : count == null ? 'sections' : `sections ${count}`;
-      sectionsToggle.title = SECTIONS_TITLE;
-    }
-    if (inToolbar) paintToolbarButton(toolbarButtons.sections, !!sections.panel, busy, count);
-  }
-
-  async function openSections() {
-    if (!inEditor()) return;
-    closeLinks();
-    const run = ++sections.run;
-    paintSectionsToggle(sections.count, true);
-    const scan = await scanSections();
-    paintSectionsToggle(sections.count, false);
-    if (run !== sections.run) return;
-    renderSections(scan);
-  }
-
-  const toggleSections = () => (sections.panel ? closeSections() : openSections());
-
-  /* While the panel is open, a heading typed or pasted into the text changes
-   * the answer, so the list follows the text — half a second after the last
-   * keystroke, and only while the panel is there to be redrawn. */
-  let sectionsPending = null;
-  function sectionsChanged() {
-    clearTimeout(sectionsPending);
-    sectionsPending = setTimeout(async () => {
-      if (!sections.panel) return;
-      const run = ++sections.run;
-      const scan = await scanSections();
-      if (run === sections.run && sections.panel) renderSections(scan);
-    }, 600);
-  }
-
-  function watchSections(body) {
-    const was = sections.watching;
-    if (was && was !== body) {
-      try {
-        (was.frame?.contentWindow?.document || was.root).removeEventListener('input', sectionsChanged, true);
-      } catch { /* the frame went with the page */ }
-    }
-    sections.watching = body;
-    if (body && body !== was) {
-      (body.frame?.contentWindow?.document || body.root).addEventListener('input', sectionsChanged, true);
-    }
-  }
-
-  /* Copy: the chip's click, from here. The memo and the line are the paste
-   * marker's own, so the line goes when you paste and the list, which is
-   * listening, loses the row. The clipboard is written before anything that
-   * waits, because a browser lets a page write to it only straight after a
-   * press. */
-  function copySection(row, scan) {
-    const memo = {
-      slug: currentSlug(), text: row.title, level: row.level, modality: false,
-      anchor: row.anchor ? tidy(row.anchor.textContent) : null,
-      inside: !!row.inside, at: Date.now(),
-    };
-    const copied = copyAsHeading(memo.text, memo.level);
-    rememberPaste(memo);
-    openPasteMark(memo, findPasteSpot(memo, scan.body), scan.body);
-    (row.anchor || scan.body.root.lastElementChild)?.scrollIntoView?.({ block: 'center' });
-    copied.then((ok) => {
-      sections.said = ok
-        ? `“${memo.text}” is on the clipboard as a heading. Click on the amber line and paste.`
-        : `The clipboard refused it: type “${memo.text}” on the amber line.`;
-      renderSections(sections.scan || scan);
-    });
-  }
-
-  function showSection(row, scan) {
-    const el = row.anchor || scan.body.root.lastElementChild;
-    el?.scrollIntoView?.({ block: 'center' });
-  }
-
-  async function redoSections(said) {
-    sections.said = said;
-    const run = ++sections.run;
-    const scan = await scanSections();
-    if (run === sections.run && sections.panel) renderSections(scan);
-  }
-
-  function sectionRow(row, scan) {
-    const el = document.createElement('div');
-    el.className = 'rlx-l-row' + (row.required ? '' : ' rlx-s-opt');
-
-    const what = document.createElement('div');
-    what.className = 'rlx-l-what';
-    const name = document.createElement('span');
-    name.className = 'rlx-s-name';
-    name.textContent = (row.level > 1 ? '› '.repeat(row.level - 1) : '') + row.title;
-    const kind = document.createElement('span');
-    kind.className = 'rlx-l-rate';
-    kind.textContent = row.required ? 'required' : 'offered';
-    kind.title = row.modality ? 'Radiographic features has no modality under it'
-      : `${row.required ? 'Required' : 'Offered'} by the ${scan.canonName} structure: ${row.entry}`;
-    what.append(name, kind);
-
-    const where = document.createElement('div');
-    where.className = 'rlx-l-ctx';
-    where.textContent = row.modality
-      ? `${whereItGoes(row)} — one subheading for a modality the article has images of (CT, MRI, …)`
-      : whereItGoes(row);
-
-    const acts = document.createElement('div');
-    acts.className = 'rlx-l-acts';
-    const btn = (label, title, fn, cls) => {
-      const b = document.createElement('button');
-      b.textContent = label;
-      b.title = title;
-      if (cls) b.className = cls;
-      b.addEventListener('click', fn);
-      acts.appendChild(b);
-    };
-    // The modality row has no name to copy: which one is a question about the images.
-    if (!row.modality) {
-      btn('Copy', `Copy “${row.title}” as a heading and mark where it goes`,
-          () => copySection(row, scan), 'rlx-l-go');
-    }
-    btn('Show', 'Scroll to where it goes', () => showSection(row, scan));
-    btn('Not needed', 'This article does not need it', () => {
-      hush(row.entry);
-      redoSections(`${row.title} will not be asked for in this article again.`);
-    });
-
-    el.append(what, where, acts);
-    return el;
-  }
-
-  function renderSections(scan) {
-    sections.scan = scan;
-    const panel = sections.panel || document.createElement('div');
-    panel.id = 'rlx-sections';
-    panel.classList.add('rlx-panel');
-    panel.replaceChildren();
-
-    const head = document.createElement('div');
-    head.className = 'rlx-l-head';
-    const title = document.createElement('strong');
-    title.textContent = 'Sections';
-    const sum = document.createElement('span');
-    const again = document.createElement('button');
-    again.className = 'rlx-l-again';
-    again.textContent = '↻';
-    again.title = 'Look again';
-    again.addEventListener('click', () => redoSections(null));
-    const shut = document.createElement('button');
-    shut.className = 'rlx-l-close';
-    shut.textContent = '×';
-    shut.title = 'Close (Esc)';
-    shut.addEventListener('click', closeSections);
-    head.append(title, sum, again, shut);
-    panel.appendChild(head);
-
-    if (sections.said) {
-      const said = document.createElement('div');
-      said.className = 'rlx-l-said';
-      said.textContent = sections.said;
-      panel.appendChild(said);
-    }
-
-    let need = null;
-    if (scan.trouble) {
-      const why = document.createElement('div');
-      why.className = 'rlx-l-empty';
-      why.textContent = scan.trouble;
-      panel.appendChild(why);
-    } else {
-      const aside = hushedHere().filter((entry) => !entry.startsWith('stale:')).length;
-      const content = railContent(scan.rows, aside, showOptional());
-      need = content.need;
-      sum.textContent = need ? `${need} required missing` : 'nothing required missing';
-
-      // The rail header's controls: the kind, the optional ones, what you set aside.
-      const ctl = document.createElement('div');
-      ctl.className = 'rlx-l-ctl';
-      const kind = document.createElement('select');
-      kind.title = 'What kind of article this is. The canon follows from it.';
-      for (const [name, p] of Object.entries(CANON.profiles)) {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = p.label || name;
-        opt.selected = name === scan.profileName;
-        kind.appendChild(opt);
-      }
-      kind.addEventListener('change', () => { chooseProfile(kind.value); redoSections(null); });
-      ctl.appendChild(kind);
-      if (content.optional.length || showOptional()) {
-        const more = document.createElement('button');
-        more.textContent = `${showOptional() ? '− hide' : '+ show'} ${content.optional.length} optional`;
-        more.addEventListener('click', () => { setShowOptional(!showOptional()); redoSections(null); });
-        ctl.appendChild(more);
-      }
-      if (aside) {
-        const undo = document.createElement('button');
-        undo.textContent = `↺ ${aside} set aside`;
-        undo.title = `Ask for the ${aside} you said this article does not need`;
-        undo.addEventListener('click', () => { unhushAll(); redoSections(null); });
-        ctl.appendChild(undo);
-      }
-      panel.appendChild(ctl);
-
-      if (scan.jumbled) {
-        const note = document.createElement('div');
-        note.className = 'rlx-l-said rlx-s-warn';
-        note.textContent = 'Some sections are not in the order the structure puts them in, ' +
-          'so where these go is approximate on this article.';
-        panel.appendChild(note);
-      }
-
-      const list = document.createElement('div');
-      list.className = 'rlx-l-list';
-      for (const row of content.shown) list.appendChild(sectionRow(row, scan));
-      if (!content.shown.length) {
-        const none = document.createElement('div');
-        none.className = 'rlx-l-empty';
-        const p = CANON.profiles[scan.profileName];
-        none.textContent = !p?.required?.length
-          ? `Radiopaedia asks for no particular sections in a ${p?.label || scan.profileName} article.`
-          : 'Every section Radiopaedia requires is there.';
-        list.appendChild(none);
-      }
-      panel.appendChild(list);
-
-      const foot = document.createElement('div');
-      foot.className = 'rlx-l-foot';
-      foot.textContent = `${scan.found.length} headings in the text · ` +
-        `${scan.canonName} structure · kind from ${scan.type ? `the linter (${scan.type})` : 'the title'}`;
-      panel.appendChild(foot);
-      watchSections(scan.body);
-    }
-
-    if (!sections.panel) {
-      document.body.appendChild(panel);
-      sections.panel = panel;
-      document.addEventListener('keydown', onSectionsKey, true);
-      addEventListener('resize', placeSections);
-    }
-    paintSectionsToggle(need);
-    placeSections();
-  }
-
-  function placeSections() { placePanel(sections.panel); }
 
   // ————————————————————————————————————————————————————————————— wiring
 

@@ -1077,28 +1077,40 @@ not retried: it will be served again.
 
 ## Links to other articles
 
-A button in the editor's own toolbar (a link with a magnifying glass) lists the words in the text
-that are the title of another Radiopaedia article and are not linked to it. Nothing is looked at
-until you press it. Once it has looked, the button carries the number it found. The list opens
-down the right-hand side of the page, one row per article, with the words as the text has them,
-the article they name, the sentence around them and two numbers explained below.
+Three buttons in the editor's toolbar answer three questions about the text: which words could be
+links ([this section](#links-to-other-articles)), which sections are missing ([In the
+editor](#in-the-editor)), and which sections cite nothing recent ([Sections with only old
+citations](#sections-with-only-old-citations)). They work the way
+[RadioUpdater](https://github.com/drjermy/radioUpdater)'s Lint button works in the same editor, so
+that the editor has one way of showing things:
 
-The button stands in the row with the headings, with the [sections button](#in-the-editor) right after it. With
-[RadioUpdater](https://github.com/drjermy/radioUpdater) installed it comes after that
-extension's citation button (the quotation mark) and its Ω, whichever of the two is mounted
-first; without it, after H3. The toolbar is found the way RadioUpdater finds it, by walking up
-from the text to the row of controls above it, rather than by class names that nothing promises.
-The button is a copy of the control beside it with that control's attributes taken off, so it has
-the toolbar's size and hover, and the click is handled by the script, not by the editor. When the
-editor redraws its toolbar the script puts the button back. On a page where no toolbar is found it
-appears as `link` in the box by the title, beside the `⊘`.
+- press a button and what it found is marked on the text, and a red count appears on the button;
+- point at a mark and a box opens under it, with a green button that does the thing and a grey one
+  that leaves it as it is; `‹ ›` in the box go to the previous and next;
+- press the button again, or Esc, to close it. One of the three is open at a time.
+
+While one is open it follows the text: after every change it looks again, so a mark follows its
+words, and what you have just done takes its mark away. The box then moves on to the next one.
+Nothing is looked at until you press a button. The marks are drawn over the page, like the lint
+highlights, and nothing is put inside the editor except what a green button writes.
+
+The buttons stand in the row with the headings. With RadioUpdater installed they come after that
+extension's citation button (the quotation mark) and its Ω; without it, after H3. The toolbar is
+found the way RadioUpdater finds it, by walking up from the text to the row of controls above it,
+rather than by class names that nothing promises. Each button is a copy of the control beside it
+with that control's attributes taken off, so it has the toolbar's size and hover, and the click is
+handled by the script, not by the editor. When the editor redraws its toolbar the script puts the
+buttons back. On a page where no toolbar is found they appear as `link`, `sections` and `dates` in
+the box by the title.
+
+The links button is a link with a magnifying glass. It marks, in light blue, the words that are
+the title of another Radiopaedia article and are not linked to it.
 
 | | |
 | :-- | :-- |
-| the words | selects them in the editor and scrolls to them |
-| **Link** | puts a link to that article on exactly those words |
+| **Link** (green) | puts a link to that article on exactly those words |
 | **Link to …** | the same words, a different article with the same name ("trident sign" is three) |
-| **Not here** | not offered again in this article |
+| **Leave** | leaves the words as they are: not offered again in this article |
 | **Never** | not offered again in any article |
 
 The rules are the house rule: one link per target article, at the first place its name occurs.
@@ -1115,21 +1127,20 @@ The rules are the house rule: one link per target article, at the first place it
   ("oedema", "edema"), a hyphen and a space ("T2-weighted"), and a name with or without its
   possessive ("Wernicke's"). An abbreviation keeps its case: "CSF" is offered, "csf" is not.
 
-**Link** writes through the editor's own `createLink` command, so TinyMCE marks the form as
+**Link** writes through the editor's own `createLink` command, so the editor marks the form as
 changed and Ctrl + Z takes the link out again. The address is the full one,
 `https://radiopaedia.org/articles/<slug>`, which Radiopaedia renders as a link to its own article.
 Where the words cross other markup — half of them in italics, say — it refuses and says so rather
-than decide how to wrap a link round the tag. The list is worked out again before every press, so
-a row always acts on the text as it is now.
+than decide how to wrap a link round the tag.
 
-The two numbers are `linked/mentioned`: of the articles that name this one, how many link to it,
-counted on a copy of Radiopaedia (see below). "Meningioma" is 196/219; "brain" is 72/1020 and
-"white matter" 40/428. Names linked less than one time in seven, out of at least five, go under
-a fold called **Rarely linked elsewhere**. They are not hidden, because whether an article should
-link "brain" is an editorial decision and not a threshold.
+The box shows `linked/mentioned`: of the articles that name this one, how many link to it, counted
+on a copy of Radiopaedia (see below). "Meningioma" is 196/219; "brain" is 72/1020 and "white
+matter" 40/428. Names linked less than one time in seven, out of at least five, are marked in a
+paler blue and left out of the count. They are not hidden, because whether an article should link
+"brain" is an editorial decision and not a threshold.
 
-**Not here** and **Never** are kept in this browser's `localStorage`. The foot of the list says how
-many you have set aside and offers them all again.
+**Leave** and **Never** are kept in this browser's `localStorage`. The foot of the box says how
+many you have left alone and offers them all again.
 
 > [!NOTE]
 > It knows the articles in its list and no others. The list today is the Central Nervous System
@@ -1235,33 +1246,31 @@ header brings them all back.
 
 The same question has a button in the editor's toolbar, right after the links button (lines with an
 empty one in the middle and a plus). It reads the headings from the text in the editor rather than
-from the published page, so a section you typed a minute ago already counts. The list opens down the
-right-hand side, one row per missing section, with where it goes — `↑ above "Clinical
-presentation"`, `↳ inside "Epidemiology"`, `↓ at the end of the article` — and the button carries
-the number of required ones missing.
+from the published page, so a section you typed a minute ago already counts. Each missing section is
+an amber line across the text where it goes, labelled with its name: above the heading it comes
+before, at the end of the section it belongs under for a subsection, or at the end of the article.
+The red count is the number of required ones missing.
 
 | | |
 | :-- | :-- |
-| **Copy** | the heading on the clipboard at its level, and the amber line drawn where it goes |
-| **Show** | scrolls the editor to that place |
+| **Add heading** (green) | writes the heading into the text there, at its level |
 | **Not needed** | the chip's `×`: not asked for in this article again |
 
-Above the list are the rail header's controls: the kind of article, `+ show N optional`, and `↺`
-for the ones you set aside. All of it is the rail's own state, so a section set aside in the editor
-is set aside on the article page too, and the other way round.
+**Add heading** uses the editor's own means: Enter to make a new line (at the start of the heading
+it goes above, or at the end of the text), the toolbar's own H1, H2 or H3 for the level, and the
+words typed in. So it is the editor's change, the form counts as changed, and Ctrl + Z takes it out
+a step at a time. Then it checks: if the heading is not there afterwards, the words go on the
+clipboard as a heading and the amber line marks where to paste them, which is what the chips on the
+article page have always done.
+
+Under every box are the rail header's controls: the kind of article, `show N optional`, and the
+ones you set aside. When nothing required is missing the box stays open under the button with those
+controls, because the optional ones are then the only thing left to ask for. All of it is the
+rail's own state, so a section set aside in the editor is set aside on the article page too.
 
 The kind of article comes from the lint answer, as it does for the rail. That answer is kept for the
 session, so it is usually there already; when it is not, pressing the button is what asks the
-linter for it, and if the linter cannot be reached the title decides. The foot of the list says
-which it was.
-
-While the list is open it follows the text: paste the heading and, half a second later, the row is
-gone and the amber line with it. Nothing is written into the editor from here. A heading is a
-block, and where a pasted block lands is the editor's business, so the click puts it on the
-clipboard and the line says where; you paste it.
-
-On a page where no toolbar is found the button appears as `sections` in the box by the title,
-beside `link`.
+linter for it, and if the linter cannot be reached the title decides.
 
 ### What the clipboard carries
 
@@ -1432,6 +1441,21 @@ No chip appears in these cases:
 A year is read from the reference text with its links removed. It looks for `2018;38(7)` first, then
 `(2012)`, then any other year, and takes the last match of the first form it finds, so a year in a
 title does not count.
+
+#### In the editor
+
+The third button in the toolbar, a calendar, asks the same question of the text in the editor and
+the reference boxes under it, so a citation you added a minute ago already counts. Each section
+whose newest citation is more than five years old has its heading marked in blue, and the box lists
+that section's references, newest first. The red count is the number of such sections.
+
+| | |
+| :-- | :-- |
+| **Search PubMed** (green) | opens PubMed in a new tab: the article's title and the section, last five years, newest first |
+| **Leave** | this section can keep its older citations, here and on the article page |
+
+The reference numbers are the ones at the start of each box, or a box's place in the list when it
+has none. The years are read the same way as on the article page, with the links taken out first.
 
 ---
 
