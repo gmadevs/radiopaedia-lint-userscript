@@ -6,7 +6,7 @@
 // @downloadURL  https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @updateURL    https://raw.githubusercontent.com/gmadevs/radiopaedia-lint-userscript/main/radiopaedia-lint.user.js
 // @license      MIT
-// @version      3.21.0
+// @version      3.21.1
 // @description  A Lint button next to the article title, coloured by what the radiopaedia.work linter found: red for errors, amber for warnings, blue for suggestions, grey for nothing to fix. Click it and the findings light up on the text in the editor, one at a time. In the margin, the sections this kind of article should have and has not got. Beside any heading whose newest citation is more than five years old, a chip with the year. And beside every reference, a Lint citation chip: it checks that one against radiopaedia.work/cite and shows, word by word, what differs. One more button asks the Retraction Watch index and PubMed whether any of the references has since been retracted. Where a finding has one right answer — a missing Oxford comma, a hyphen that should not be there, italics on a word that should not have them, an acronym the shared file knows the expansion of, and where it knows two it asks which — a Fix button writes it into the editor, the smallest change that does it and nothing else — and pointing at it shows the words that would go and the words that would arrive, lit red and green. Five checks ask for the sentence to be written again instead, and on those a Prompt button puts the question on the clipboard — the paragraph with its links and references replaced by markers, the check, and what a Radiopaedia sentence has to hold on to — for you to take wherever you like, and a box to paste the answer back into, which puts the markup where the markers came back. A link button lists the words in the text that are the title of another Radiopaedia article and are not linked to it anywhere, and links the first occurrence of one when you press Link. And where a rule is simply wrong on the case in front of you, a Log button writes down which rule, which words and why, so that a month of those can go to the editorial team as one document.
 // @match        https://radiopaedia.org/*
 // @connect      radiopaedia.work
@@ -8972,11 +8972,10 @@
     }
     if (inToolbar) {
       const b = toolbarLinks;
-      b.classList.toggle('tox-tbtn--enabled', !!links.panel);
+      b.classList.toggle('rlx-open', !!links.panel);
       b.setAttribute('aria-pressed', String(!!links.panel));
-      b.classList.toggle('tox-tbtn--disabled', busy);
       b.setAttribute('aria-disabled', String(busy));
-      b.querySelector('.rlx-tox-count').textContent = busy ? '…' : count == null ? '' : String(count);
+      b.querySelector('.rlx-tb-count').textContent = busy ? '…' : count == null ? '' : String(count);
     }
   }
 
@@ -8992,55 +8991,126 @@
 
   const toggleLinks = () => (links.panel ? closeLinks() : openLinks());
 
-  /* The same button in the editor's own toolbar, right after the blockquote
-   * one, where somebody editing the text already looks. It is a TinyMCE
-   * toolbar button in looks only — its classes, its size, its pressed state —
-   * and it does nothing through TinyMCE: the click is ours.
+  /* The same button in the editor's own toolbar, beside the controls for the
+   * text, where somebody editing it already looks.
    *
-   * TinyMCE draws its toolbar again when it likes (a window narrow enough to
-   * fold it, for one), and takes this button away when it does. The page's
-   * MutationObserver calls this on every change, so it is put back on the next
-   * one; while it is there, this returns at the first line.
+   * Found the way RadioUpdater finds its citation button, and for the reason
+   * its code gives: the toolbar is not looked for by its classes, because
+   * nothing promises what it is built out of. The search starts from the text
+   * instead. Walk up from the editor until an ancestor holds a row of controls
+   * standing BEFORE the text (the form's Save comes after it), and take the
+   * row with a heading control in it — "P H1 H2 H3" is one group of several,
+   * and not the biggest.
    *
-   * The blockquote button is found by what it is called, in English or in
-   * Italian. A toolbar with no such button gets this one at the end of its
-   * last group; a page with no TinyMCE toolbar keeps it in the box by the
-   * title, which is where it was before. */
+   * Inside that row it stands after RadioUpdater's two buttons, the quotation
+   * mark and the Ω, when they are there, so the three tools of ours sit
+   * together; after H3 (or H2, or H1) when they are not; at the end of the row
+   * when no heading can be recognised. RadioUpdater mounting later puts its
+   * pair straight after H3, which is in front of this one: same order.
+   *
+   * The button is a clone of the control it stands beside, emptied: same tag
+   * and classes, so it has the toolbar's size and hover, and none of the
+   * attributes by which an editor knows which command a press belongs to. The
+   * press is caught before the editor sees it, and the mousedown is swallowed
+   * so the caret in the text stays where it was.
+   *
+   * The editor draws its toolbar again when it likes and takes the button
+   * away when it does. The page's MutationObserver calls this on every
+   * change, so it comes back on the next one. Looking costs a walk over the
+   * form, so while there is no toolbar to be found it is done twice a second
+   * at most. A page with no toolbar keeps `link` in the box by the title. */
   let toolbarLinks = null;
-  const QUOTE_BUTTON = /block\s*quote|blockquote|citazione/i;
+  let toolbarTried = 0;
+  const TOOLBAR_CONTROL = 'button, a, [role="button"], input[type="button"], input[type="submit"]';
+  const TOOLBAR_HEADINGS = ['h3', 'h2', 'h1'];
+
+  function controlNamed(el, want) {
+    if (tidy(el.textContent).toLowerCase() === want) return true;
+    const label = tidy(el.getAttribute('aria-label') || el.getAttribute('title') ||
+                       el.getAttribute('data-mce-name') || '').toLowerCase();
+    return label === want || label === `heading ${want.slice(1)}`;
+  }
+
+  function toolbarRow(host) {
+    let scope = host;
+    for (let up = 0; up < 6 && scope?.parentElement; up++) {
+      scope = scope.parentElement;
+      const rows = new Map();
+      for (const el of scope.querySelectorAll(TOOLBAR_CONTROL)) {
+        if (el.closest('#rlx-links, .rcx-panel') || host.contains(el) || el.contains(host)) continue;
+        if (!(host.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) continue;
+        const bar = el.parentElement;
+        if (!bar) continue;
+        if (!rows.has(bar)) rows.set(bar, []);
+        rows.get(bar).push(el);
+      }
+      for (const want of TOOLBAR_HEADINGS) {
+        for (const members of rows.values()) {
+          if (members.length >= 2 && members.some((el) => controlNamed(el, want))) return members;
+        }
+      }
+      let best = null;
+      for (const members of rows.values()) if (!best || members.length >= best.length) best = members;
+      if (best && best.length >= 3) return best;
+    }
+    return null;
+  }
+
+  function toolbarAnchor(members) {
+    const ours = members.filter((el) => el.matches('.rcx-btn-cite, .rcx-btn-chars'));
+    if (ours.length) return ours[ours.length - 1];
+    for (const want of TOOLBAR_HEADINGS) {
+      const hit = [...members].reverse().find((el) => controlNamed(el, want));
+      if (hit) return hit;
+    }
+    return members[members.length - 1];
+  }
+
+  const LINKS_ICON = `<svg class="rlx-tb-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke="currentColor" d="M7.2 10.8l3.6-3.6"/>
+      <path stroke="currentColor" d="M9.4 5.6l1.1-1.1a2.7 2.7 0 0 1 3.8 3.8l-1.1 1.1"/>
+      <path stroke="currentColor" d="M8.6 12.4l-1.1 1.1a2.7 2.7 0 0 1-3.8-3.8l1.1-1.1"/>
+      <path stroke="currentColor" d="M19.6 16.3a3.3 3.3 0 1 1-6.6 0a3.3 3.3 0 1 1 6.6 0"/>
+      <path stroke="currentColor" d="M18.7 18.7l2.6 2.6"/>
+    </svg><span class="rlx-tb-count"></span>`;
 
   function mountToolbarLinks() {
     if (toolbarLinks?.isConnected || !inEditor()) return;
-    const frame = editorRoots().find((r) => r.frame)?.frame;
-    const box = frame?.closest('.tox-tinymce');
-    if (!box) return;
-    const buttons = [...box.querySelectorAll('.tox-toolbar__group .tox-tbtn')];
-    if (!buttons.length) return;
-    const quote = buttons.find((b) =>
-      QUOTE_BUTTON.test(`${b.getAttribute('aria-label') || ''} ${b.title || ''}`));
-    const after = quote || buttons[buttons.length - 1];
+    const now = Date.now();
+    if (now - toolbarTried < 500) return;
+    toolbarTried = now;
 
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'tox-tbtn rlx-tox-links';
+    const editor = editorRoots()[0];
+    const host = editor && (editor.frame || editor.root);
+    const members = host && toolbarRow(host);
+    if (!members) return;
+    const anchor = toolbarAnchor(members);
+
+    const b = anchor.cloneNode(true);
+    for (const el of [b, ...b.querySelectorAll('*')]) {
+      for (const name of el.getAttributeNames()) {
+        if (name !== 'class' && name !== 'style') el.removeAttribute(name);
+      }
+    }
+    b.classList.remove('rcx-btn', 'rcx-btn-cite', 'rcx-btn-chars', 'rcx-open');
+    b.classList.add('rlx-tb-links');
+    b.innerHTML = LINKS_ICON;
+    if (b.tagName === 'BUTTON') b.type = 'button';
+    b.setAttribute('role', 'button');
+    b.setAttribute('tabindex', '0');
+    b.setAttribute('title', LINKS_TITLE);
     b.setAttribute('aria-label', 'Links to other articles');
-    b.title = LINKS_TITLE;
-    b.tabIndex = -1;
-    // A link with a magnifying glass on it: the toolbar's own link button is
-    // the link alone, two places to the left.
-    const ink = getComputedStyle(after.querySelector('svg') || after).fill || 'currentColor';
-    b.innerHTML = `
-      <span class="tox-icon tox-tbtn__icon-wrap"><svg width="24" height="24" viewBox="0 0 24 24"
-        fill="none" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-        <path fill="none" d="M7.2 10.8l3.6-3.6"/>
-        <path fill="none" d="M9.4 5.6l1.1-1.1a2.7 2.7 0 0 1 3.8 3.8l-1.1 1.1"/>
-        <path fill="none" d="M8.6 12.4l-1.1 1.1a2.7 2.7 0 0 1-3.8-3.8l1.1-1.1"/>
-        <circle fill="none" cx="16.3" cy="16.3" r="3.3"/>
-        <path fill="none" d="M18.7 18.7l2.6 2.6"/>
-      </svg></span><span class="rlx-tox-count"></span>`;
-    b.querySelector('svg').style.stroke = ink === 'none' ? 'currentColor' : ink;
-    b.addEventListener('click', toggleLinks);
-    after.after(b);
+    b.addEventListener('mousedown', (e) => e.preventDefault(), true);
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      toggleLinks();
+    }, true);
+    anchor.insertAdjacentElement('afterend', b);
+
+    // A clone of a control nobody can see is a button nobody can press.
+    const box = b.getBoundingClientRect();
+    if (!box.width || !box.height) { b.remove(); return; }
     toolbarLinks = b;
     paintLinksToggle();
   }
@@ -9258,12 +9328,28 @@
    * left, the same face as the citation note. Its own stylesheet, so that
    * everything about the links is in this one stretch of the file. */
   GM_addStyle(`
-    /* The button in the editor's toolbar: TinyMCE's own classes give it the
-       size and the hover, this gives it room for the number beside the icon. */
-    .tox .tox-tbtn.rlx-tox-links { width:auto; min-width:34px; padding:0 4px; }
-    .tox .tox-tbtn.rlx-tox-links .rlx-tox-count { font:600 11px/1 system-ui,-apple-system,sans-serif;
-      margin-left:1px; }
-    .tox .tox-tbtn.rlx-tox-links .rlx-tox-count:empty { display:none; }
+    /* The button in the editor's toolbar. Its classes are the toolbar's, and
+       were written to draw somebody else's icon — a sprite, a glyph in
+       ::before, a text-indent — so all of that is taken back here, the way
+       RadioUpdater does for its own two. Stroked paths hollow, whatever the
+       toolbar's icon CSS says about fill. */
+    .rlx-tb-links {
+      color:#333 !important; background-image:none !important; text-indent:0 !important;
+      font-size:14px !important; line-height:1 !important; letter-spacing:normal !important;
+      overflow:visible !important; visibility:visible !important; opacity:1 !important;
+      display:inline-flex !important; align-items:center; justify-content:center; gap:2px;
+      min-width:0 !important; min-height:0 !important;
+      padding-left:6px !important; padding-right:6px !important; cursor:pointer;
+    }
+    .rlx-tb-links::before, .rlx-tb-links::after,
+    .rlx-tb-links *::before, .rlx-tb-links *::after { content:none !important; display:none !important; }
+    .rlx-tb-links * { background-image:none !important; text-indent:0 !important; color:inherit !important; }
+    .rlx-tb-links .rlx-tb-icon { width:1.35em !important; height:1.35em !important;
+      display:block !important; flex:0 0 auto; }
+    .rlx-tb-links .rlx-tb-icon path { fill:none !important; stroke-width:1.8; stroke-linecap:round; }
+    .rlx-tb-links .rlx-tb-count { font:600 11px/1 system-ui,-apple-system,sans-serif !important; }
+    .rlx-tb-links .rlx-tb-count:empty { display:none !important; }
+    .rlx-tb-links.rlx-open { background:#ddd !important; }
     #rlx-links {
       position:fixed; z-index:99998; top:18px; right:18px; width:min(26em, 92vw);
       max-height:calc(100vh - 36px); display:flex; flex-direction:column;

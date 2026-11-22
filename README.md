@@ -1076,17 +1076,21 @@ not retried: it will be served again.
 
 ## Links to other articles
 
-A button in the editor's own toolbar, right after the blockquote button (a link with a magnifying
-glass), lists the words in the text that are the title of another Radiopaedia article and are not
-linked to it. Nothing is looked at until you press it. Once it has looked, the button carries the
-number it found. The list opens down the right-hand side of the page, one row per article, with
-the words as the text has them, the article they name, the sentence around them and two numbers
-explained below.
+A button in the editor's own toolbar (a link with a magnifying glass) lists the words in the text
+that are the title of another Radiopaedia article and are not linked to it. Nothing is looked at
+until you press it. Once it has looked, the button carries the number it found. The list opens
+down the right-hand side of the page, one row per article, with the words as the text has them,
+the article they name, the sentence around them and two numbers explained below.
 
-The button wears TinyMCE's classes so that it looks like the buttons around it, but the click is
-handled by the script, not by TinyMCE. When TinyMCE redraws its toolbar and the button goes with
-it, the script puts it back. On a page where no TinyMCE toolbar is found it appears as `link` in
-the box by the title, beside the `⊘`.
+The button stands in the row with the headings. With
+[RadioUpdater](https://github.com/drjermy/radioUpdater) installed it comes after that
+extension's citation button (the quotation mark) and its Ω, whichever of the two is mounted
+first; without it, after H3. The toolbar is found the way RadioUpdater finds it, by walking up
+from the text to the row of controls above it, rather than by class names that nothing promises.
+The button is a copy of the control beside it with that control's attributes taken off, so it has
+the toolbar's size and hover, and the click is handled by the script, not by the editor. When the
+editor redraws its toolbar the script puts the button back. On a page where no toolbar is found it
+appears as `link` in the box by the title, beside the `⊘`.
 
 | | |
 | :-- | :-- |
