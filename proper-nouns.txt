@@ -20,6 +20,10 @@
 
 # ——— Proper nouns: eponyms, people, places, organisations ———
 
+Harvard
+Lund-Mackay
+Haller
+Rasmussen
 Klumpke
 Delphian
 Kniest
